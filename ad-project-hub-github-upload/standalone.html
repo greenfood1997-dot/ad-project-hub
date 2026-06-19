@@ -90,6 +90,10 @@
       .detail-head h2 { margin: 5px 0; }
       .detail-head p { color: #66758a; }
       .summary { display: flex; gap: 10px; background: #eef6ff; border: 1px solid #cfe3ff; border-radius: 8px; padding: 12px; margin: 16px 0; color: #24415f; line-height: 1.6; }
+      .connection-status { border-radius: 8px; border: 1px solid #d7dee8; background: #f8fafc; padding: 11px 12px; color: #526070; line-height: 1.5; font-size: 13px; }
+      .connection-status.success { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+      .connection-status.error { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+      .connection-status.pending { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
       .detail-metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
       .mini { background: #f8fafc; border: 1px solid #e5ebf3; border-radius: 8px; padding: 12px; }
       .mini strong { display: block; font-size: 20px; margin-top: 8px; }
@@ -501,6 +505,12 @@
         clearTimeout(window.toastTimer);
         window.toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
       }
+      function setConnectionStatus(text, type = "") {
+        const status = document.getElementById("aiConnectionStatus");
+        if (!status) return;
+        status.className = `connection-status ${type}`.trim();
+        status.textContent = text;
+      }
       async function apiPost(path, payload, admin = false) {
         if (!isApiMode) return { ok: true, offline: true };
         const res = await fetch(`${apiBase}${path}`, {
@@ -545,6 +555,25 @@
           const control = field.querySelector("input, textarea, select");
           if (label && control && values[label] !== undefined) control.value = values[label];
         });
+      }
+      function normalizeAiForm(values) {
+        const normalized = { ...values };
+        const providerText = `${normalized["服务商"] || ""}${normalized["Base URL"] || ""}${normalized["模型名称"] || ""}`.toLowerCase();
+        const looksDeepSeek = providerText.includes("deepseek") || (normalized["API Key"] && !normalized["Base URL"] && !providerText.includes("openai"));
+        if (looksDeepSeek) {
+          normalized["服务商"] = "DeepSeek";
+          normalized["Base URL"] = normalized["Base URL"] || "https://api.deepseek.com";
+          normalized["模型名称"] = normalized["模型名称"] || "deepseek-chat";
+        }
+        if ((normalized["服务商"] || "").includes("GPT") && !normalized["Base URL"]) {
+          normalized["Base URL"] = "https://api.openai.com/v1";
+          normalized["模型名称"] = normalized["模型名称"] || "gpt-4.1";
+        }
+        return normalized;
+      }
+      function applyAiDefaults() {
+        const values = normalizeAiForm(collectDrawerValues());
+        fillDrawerValues(values);
       }
       async function openDrawer(type) {
         await loadState();
@@ -597,6 +626,7 @@
               <div class="field"><label>模型名称</label><input placeholder="例如 gpt-4.1、kimi-k2.6、deepseek-v4-pro" /></div>
               <div class="field"><label>启用能力</label><select><option>合同解析 + Excel 解析 + 风险判断</option><option>仅合同解析</option><option>仅项目问数</option><option>仅风险预警</option></select></div>
               <div class="summary"><span>AI</span><p>保存后，系统会在新建项目上传文件时调用该接口，返回结构化字段并进入人工确认。</p></div>
+              <div id="aiConnectionStatus" class="connection-status">尚未校验连接。请点击“校验配置”，确认真实连通后再保存。</div>
             </div><div class="drawer-actions"><button class="ghost" data-test-ai data-submit="AI 配置校验通过">校验配置</button><button class="primary" data-setting="aiService" data-submit="AI 服务配置已保存">保存配置</button></div>`
           },
           baseSettings: {
@@ -647,6 +677,17 @@
         document.getElementById("drawerBody").innerHTML = panel.body;
         document.getElementById("drawerMask").classList.add("show");
         if (appState.settings?.[type]) fillDrawerValues(appState.settings[type]);
+        if (type === "aiService") {
+          applyAiDefaults();
+          const provider = document.querySelector("#drawerBody .field select");
+          const apiKey = Array.from(document.querySelectorAll("#drawerBody .field input")).find(input => input.type === "password");
+          provider?.addEventListener("change", applyAiDefaults);
+          apiKey?.addEventListener("input", applyAiDefaults);
+          const connection = appState.settings?.aiService?.connection;
+          if (connection?.checkedAt) {
+            setConnectionStatus(`已连接 ${connection.provider || "AI 服务"}，模型：${connection.model || "未指定"}，校验时间：${new Date(connection.checkedAt).toLocaleString()}`, "success");
+          }
+        }
         bindDrawerButtons();
       }
       function closeDrawer() {
@@ -659,11 +700,17 @@
           input.type = input.type === "password" ? "text" : "password";
         }));
         document.querySelectorAll("[data-submit]").forEach(btn => btn.addEventListener("click", async () => {
+          const originalText = btn.textContent;
           try {
             if (btn.dataset.testAi !== undefined) {
-              const values = collectDrawerValues();
-              await apiPost("/api/settings/ai/test", { values }, true);
-              showToast(btn.dataset.submit);
+              const values = normalizeAiForm(collectDrawerValues());
+              fillDrawerValues(values);
+              btn.disabled = true;
+              btn.textContent = "校验中...";
+              setConnectionStatus("正在连接 AI 服务，请稍候...", "pending");
+              const result = await apiPost("/api/settings/ai/test", { values }, true);
+              setConnectionStatus(`连接成功：${result.data.provider || values["服务商"]} / ${result.data.model || values["模型名称"] || "默认模型"}`, "success");
+              showToast("AI 配置校验成功，已真实连接到服务");
               return;
             }
             if (btn.dataset.uploadProject !== undefined) {
@@ -681,18 +728,36 @@
               renderRows();
             }
             if (btn.dataset.setting) {
-              await apiPost("/api/settings", { type: btn.dataset.setting, values: collectDrawerValues() }, true);
+              const values = btn.dataset.setting === "aiService" ? normalizeAiForm(collectDrawerValues()) : collectDrawerValues();
+              fillDrawerValues(values);
+              if (btn.dataset.setting === "aiService") {
+                btn.disabled = true;
+                btn.textContent = "连接并保存中...";
+                setConnectionStatus("正在真实连接 AI 服务，连接成功后才会保存...", "pending");
+              }
+              const result = await apiPost("/api/settings", { type: btn.dataset.setting, values }, true);
               await loadState();
+              if (btn.dataset.setting === "aiService") {
+                const connection = result.data.connection;
+                setConnectionStatus(`已保存并连接成功：${connection?.provider || values["服务商"]} / ${connection?.model || values["模型名称"]}`, "success");
+                showToast("AI 服务已真实连接并保存成功");
+                return;
+              }
             }
             showToast(btn.dataset.submit);
             closeDrawer();
           } catch (error) {
+            setConnectionStatus(error.message, "error");
             showToast(error.message);
+          } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
           }
         }));
         bindFileDropzone();
       }
       let selectedFiles = [];
+      let selectedFilePayloads = [];
       function updateDropzoneLabel() {
         const dropzone = document.getElementById("projectDropzone");
         if (!dropzone) return;
@@ -711,6 +776,7 @@
         dropzone.addEventListener("click", () => input.click());
         input.addEventListener("change", () => {
           selectedFiles = Array.from(input.files || []);
+          selectedFilePayloads = [];
           updateDropzoneLabel();
         });
         dropzone.addEventListener("dragover", (event) => {
@@ -724,22 +790,55 @@
           event.preventDefault();
           dropzone.style.background = "#f4f8ff";
           selectedFiles = Array.from(event.dataTransfer.files || []);
+          selectedFilePayloads = [];
           updateDropzoneLabel();
         });
+      }
+      async function buildSelectedFilePayloads() {
+        if (selectedFilePayloads.length === selectedFiles.length) return selectedFilePayloads;
+        selectedFilePayloads = await Promise.all(selectedFiles.map(async (file) => ({
+          name: file.name,
+          size: file.size,
+          type: file.type || "unknown",
+          text: await readFileText(file)
+        })));
+        updateParsePreview(selectedFilePayloads);
+        return selectedFilePayloads;
+      }
+      async function readFileText(file) {
+        const readable = /\.(txt|csv|json|md|html|xml|tsv)$/i.test(file.name) || /^text\//.test(file.type || "");
+        if (!readable) return `文件名：${file.name}\n文件类型：${file.type || "unknown"}\n文件大小：${file.size} bytes`;
+        return await file.text();
+      }
+      function updateParsePreview(files) {
+        const preview = document.querySelector(".parse-preview");
+        if (!preview) return;
+        const text = files.map(file => `${file.name}\n${file.text}`).join("\n");
+        const amounts = Array.from(text.matchAll(/(?:￥|¥)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(万元|万|元)?/g))
+          .map(match => `${match[1]}${match[2] || ""}`)
+          .slice(0, 3);
+        const dates = Array.from(text.matchAll(/\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?|\d{1,2}月\d{1,2}日/g)).map(match => match[0]).slice(0, 3);
+        preview.innerHTML = `
+          <div class="parse-row"><span>已读取文件</span><strong>${files.length} 个</strong></div>
+          <div class="parse-row"><span>疑似金额</span><strong>${amounts.join("、") || "等待 AI 解析"}</strong></div>
+          <div class="parse-row"><span>疑似日期</span><strong>${dates.join("、") || "等待 AI 解析"}</strong></div>
+          <div class="parse-row"><span>解析状态</span><strong>创建后自动同步到台账</strong></div>`;
       }
       async function recordSelectedFiles() {
         if (!selectedFiles.length) throw new Error("请先上传合同或执行表");
         const values = collectDrawerValues();
+        const files = await buildSelectedFilePayloads();
         await apiPost("/api/files/record", {
           projectName: values["项目名称"],
-          files: selectedFiles.map(file => ({ name: file.name, size: file.size, type: file.type || "unknown" })),
+          files,
         });
       }
       async function createProjectFromDrawer() {
         const values = collectDrawerValues();
+        const files = await buildSelectedFilePayloads();
         await apiPost("/api/projects", {
           values,
-          files: selectedFiles.map(file => ({ name: file.name, size: file.size, type: file.type || "unknown" })),
+          files,
         });
       }
       function bindGlobalActions() {
