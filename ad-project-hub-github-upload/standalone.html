@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>广告项目经营中台 MVP</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { height: 100%; overflow: hidden; }
+      body { margin: 0; background: #f7f8fa; color: #172033; font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif; letter-spacing: 0; }
+      button, input, select { font: inherit; }
+      button { cursor: pointer; }
+      .app { display: grid; grid-template-columns: 248px minmax(0, 1fr); height: 100vh; overflow: hidden; transition: grid-template-columns .2s ease; }
+      .app.sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
+      .sidebar { background: #ffffff; color: #172033; border-right: 1px solid #e5e8ee; padding: 24px 18px; display: flex; flex-direction: column; gap: 28px; }
+      .sidebar-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .logo { display: flex; gap: 12px; align-items: center; min-width: 0; }
+      .logo-mark { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 8px; background: #2f6fed; font-weight: 800; }
+      .logo strong, .logo span { display: block; }
+      .logo span { color: #7b8798; font-size: 12px; margin-top: 3px; }
+      .logo-text { min-width: 0; }
+      .collapse-btn { width: 34px; height: 34px; border: 1px solid #e1e6ef; background: #fff; border-radius: 8px; color: #526070; }
+      nav { display: grid; gap: 7px; }
+      .nav-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; border: 0; border-radius: 8px; color: #526070; background: transparent; text-align: left; padding: 0 12px; }
+      .nav-item.active { background: #eef4ff; color: #1f5fd4; font-weight: 700; }
+      .bottom-nav { margin-top: auto; border-top: 1px solid #edf0f4; padding-top: 14px; }
+      .sidebar-collapsed .sidebar { padding: 24px 12px; align-items: center; }
+      .sidebar-collapsed .logo-text, .sidebar-collapsed .nav-item span { display: none; }
+      .sidebar-collapsed .sidebar-top { flex-direction: column; }
+      .sidebar-collapsed .nav-item { justify-content: center; width: 44px; padding: 0; }
+      main { padding: 24px; min-width: 0; height: 100vh; overflow: hidden; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+      .topbar, .actions, .metrics, .workspace, .charts, .section-head, .detail-head, .row-right, .timeline { display: flex; }
+      .topbar { justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 18px; }
+      h1, h2, h3, p { margin: 0; }
+      h1 { font-size: 28px; line-height: 1.2; }
+      .topbar p { color: #66758a; margin-top: 6px; }
+      .actions { gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+      .search { display: flex; align-items: center; gap: 8px; min-width: 260px; height: 40px; border: 1px solid #d7dee8; background: #fff; border-radius: 8px; padding: 0 12px; }
+      .search input { min-width: 0; width: 100%; border: 0; outline: 0; }
+      .primary, .ghost, .section-head button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border-radius: 8px; border: 1px solid #d7dee8; padding: 0 14px; background: #fff; color: #172033; }
+      .primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+      .metrics { display: grid; grid-template-columns: repeat(4, minmax(150px,1fr)); gap: 12px; }
+      .metric, .panel, .project-list, .detail, .focus-card { background: #fff; border: 1px solid #e3e7ee; border-radius: 8px; box-shadow: none; }
+      .metric { padding: 16px; min-height: 116px; }
+      .metric .icon { color: #2563eb; font-size: 20px; }
+      .metric span, .mini span, .timeline span, .project-row span { color: #66758a; font-size: 13px; }
+      .metric strong { display: block; font-size: 28px; margin: 10px 0 6px; }
+      .metric p { color: #66758a; font-size: 13px; }
+      .charts { display: grid; grid-template-columns: 1.15fr .85fr 1fr; gap: 14px; margin-top: 14px; }
+      .panel { padding: 16px; min-height: 260px; }
+      .panel.wide { grid-column: span 2; }
+      .panel-title { display: flex; align-items: center; gap: 8px; }
+      .panel-title h2, .section-head h2, .detail h2 { font-size: 18px; }
+      .bar-chart { display: grid; gap: 14px; margin-top: 22px; }
+      .bar-row { display: grid; grid-template-columns: 80px 1fr 74px; align-items: center; gap: 10px; font-size: 13px; }
+      .bar-track { height: 18px; background: #e8eef6; border-radius: 999px; overflow: hidden; display: flex; }
+      .bar-paid { background: #2563eb; }
+      .bar-due { background: #f59e0b; }
+      .donut-wrap { display: grid; place-items: center; height: 210px; }
+      .donut { width: 152px; height: 152px; border-radius: 50%; background: conic-gradient(#2563eb 0 42%, #16a34a 42% 64%, #eab308 64% 82%, #ef4444 82% 100%); position: relative; }
+      .donut::after { content: "项目"; position: absolute; inset: 34px; border-radius: 50%; background: #fff; display: grid; place-items: center; color: #66758a; font-weight: 700; }
+      .legend { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; font-size: 13px; color: #66758a; }
+      .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+      .cost-pressure { display: grid; gap: 13px; margin-top: 22px; }
+      .pressure-row { display: grid; grid-template-columns: 52px 1fr 42px; gap: 10px; align-items: center; font-size: 13px; }
+      .pressure-row div { height: 12px; background: #e8eef6; border-radius: 999px; overflow: hidden; }
+      .pressure-row i { display: block; height: 100%; background: #0f766e; }
+      .panel-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+      select { height: 34px; border: 1px solid #d7dee8; border-radius: 8px; background: #fff; padding: 0 8px; }
+      .alert-list { display: grid; gap: 12px; margin-top: 14px; overflow: auto; min-height: 0; padding-right: 4px; }
+      .alerts-workbench { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+      .alert-item { border-left: 3px solid #ef4444; background: #fff7ed; padding: 14px; border-radius: 6px; }
+      .alert-item strong, .alert-item span { display: block; }
+      .alert-item span { color: #8a5a20; font-size: 12px; margin: 3px 0 6px; }
+      .alert-item p { color: #3f2a15; font-size: 13px; line-height: 1.5; }
+      .workspace { display: grid; grid-template-columns: minmax(360px,.95fr) minmax(460px,1.2fr); gap: 14px; margin-top: 14px; align-items: stretch; height: 100%; min-height: 0; }
+      .project-list, .detail { padding: 16px; overflow: auto; min-height: 0; }
+      .section-head { justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+      .project-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 76px; border: 1px solid #e3e9f1; background: #fff; border-radius: 8px; padding: 12px; text-align: left; margin-top: 10px; }
+      .project-row.selected { border-color: #2563eb; background: #f4f8ff; }
+      .project-row strong, .project-row span { display: block; }
+      .project-row strong { margin-bottom: 6px; }
+      .row-right { align-items: center; gap: 10px; flex-shrink: 0; }
+      .risk { display: inline-flex; min-width: 58px; justify-content: center; border-radius: 999px; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
+      .risk-high { color: #b91c1c; background: #fee2e2; }
+      .risk-mid { color: #a16207; background: #fef3c7; }
+      .risk-low { color: #047857; background: #d1fae5; }
+      .detail-head { justify-content: space-between; align-items: center; gap: 14px; }
+      .id { color: #66758a; font-size: 13px; }
+      .detail-head h2 { margin: 5px 0; }
+      .detail-head p { color: #66758a; }
+      .summary { display: flex; gap: 10px; background: #eef6ff; border: 1px solid #cfe3ff; border-radius: 8px; padding: 12px; margin: 16px 0; color: #24415f; line-height: 1.6; }
+      .detail-metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+      .mini { background: #f8fafc; border: 1px solid #e5ebf3; border-radius: 8px; padding: 12px; }
+      .mini strong { display: block; font-size: 20px; margin-top: 8px; }
+      .split { display: grid; grid-template-columns: 1fr .82fr; gap: 18px; margin-top: 18px; }
+      .split h3 { font-size: 15px; margin-bottom: 12px; }
+      .progress-row { display: grid; grid-template-columns: 70px minmax(100px,1fr) 42px; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 13px; }
+      .progress-row div { height: 8px; border-radius: 999px; background: #e8eef6; overflow: hidden; }
+      .progress-row i { display: block; height: 100%; border-radius: inherit; background: #2563eb; }
+      .cost-row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #edf1f6; padding: 9px 0; font-size: 13px; }
+      .timeline { justify-content: space-between; gap: 12px; border-top: 1px solid #edf1f6; margin-top: 18px; padding-top: 16px; }
+      .timeline div { display: grid; gap: 6px; }
+      .toast { position: fixed; right: 22px; top: 18px; z-index: 20; background: #172033; color: #fff; border-radius: 8px; padding: 12px 14px; box-shadow: 0 12px 28px rgba(23,32,51,.2); opacity: 0; transform: translateY(-8px); pointer-events: none; transition: .2s ease; }
+      .toast.show { opacity: 1; transform: translateY(0); }
+      .drawer-mask { position: fixed; inset: 0; z-index: 30; display: none; background: rgba(15,23,42,.36); }
+      .drawer-mask.show { display: block; }
+      .drawer { position: absolute; right: 0; top: 0; height: 100%; width: min(520px, 100vw); background: #fff; padding: 22px; box-shadow: -18px 0 40px rgba(15,23,42,.22); overflow: auto; }
+      .drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
+      .drawer-head h2 { font-size: 20px; }
+      .drawer-head p { color: #66758a; margin-top: 6px; line-height: 1.5; }
+      .close-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid #d7dee8; background: #fff; }
+      .form-grid { display: grid; gap: 12px; }
+      .field { display: grid; gap: 6px; }
+      .field label { color: #344256; font-size: 13px; font-weight: 700; }
+      .field input, .field textarea, .field select { width: 100%; border: 1px solid #d7dee8; border-radius: 8px; padding: 10px 11px; min-height: 40px; }
+      .password-wrap { display: grid; grid-template-columns: minmax(0,1fr) 40px; gap: 8px; }
+      .eye-btn { border: 1px solid #d7dee8; background: #fff; border-radius: 8px; min-height: 40px; }
+      .field textarea { min-height: 86px; resize: vertical; }
+      .dropzone { border: 1px dashed #8db3f7; background: #f4f8ff; border-radius: 8px; padding: 22px; text-align: center; color: #24415f; }
+      .drawer-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+      .module-banner { display: none; margin-bottom: 14px; background: #fff; border: 1px solid #dce3ed; border-radius: 8px; padding: 13px 16px; color: #344256; }
+      .module-banner.show { display: block; }
+      .view { display: none; min-height: 0; overflow: hidden; }
+      .view.active { display: block; height: 100%; overflow: auto; padding-right: 4px; }
+      #projectsView.view.active, #alertsView.view.active { overflow: hidden; }
+      .focus-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(320px, .8fr); gap: 12px; margin-top: 12px; }
+      .insight-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr); gap: 12px; }
+      .focus-card { padding: 18px; }
+      .focus-card h2 { font-size: 17px; margin-bottom: 12px; }
+      .cash-line { display: grid; gap: 10px; margin: 18px 0; }
+      .cash-track { height: 14px; background: #edf1f6; border-radius: 999px; display: flex; overflow: hidden; }
+      .cash-track i:first-child { background: #2563eb; }
+      .cash-track i:last-child { background: #e8a321; }
+      .focus-note { color: #66758a; line-height: 1.6; font-size: 14px; }
+      .todo-list { display: grid; gap: 10px; }
+      .todo-item { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #edf1f6; }
+      .todo-item:last-child { border-bottom: 0; }
+      .todo-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; }
+      .todo-item strong { font-size: 14px; }
+      .todo-item span { color: #66758a; font-size: 13px; }
+      .simple-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+      .empty-state { padding: 34px; text-align: center; color: #66758a; }
+      .summary-pie { display: grid; grid-template-columns: 150px 1fr; gap: 18px; align-items: center; min-height: 210px; }
+      .pie { width: 150px; height: 150px; border-radius: 50%; background: conic-gradient(#2563eb 0 36%, #e8a321 36% 100%); position: relative; }
+      .pie::after { content: "0"; position: absolute; inset: 34px; border-radius: 50%; background: #fff; display: grid; place-items: center; font-weight: 800; color: #172033; }
+      .pie-list { display: grid; gap: 12px; }
+      .pie-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #edf1f6; padding-bottom: 10px; }
+      .pie-item:last-child { border-bottom: 0; padding-bottom: 0; }
+      .pie-item span { color: #66758a; font-size: 13px; }
+      .dashboard-alerts { margin-top: 12px; }
+      .dashboard-alert-grid { display: grid; gap: 10px; }
+      .dashboard-alert { border: 1px solid #f1d4c6; background: #fffaf7; border-radius: 8px; padding: 12px; }
+      .dashboard-alert strong { display: block; font-size: 14px; margin-bottom: 6px; }
+      .dashboard-alert span { color: #8a5a20; font-size: 12px; }
+      .dashboard-alert p { color: #3f2a15; font-size: 13px; line-height: 1.5; margin-top: 8px; }
+      .data-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+      .data-table th, .data-table td { border-bottom: 1px solid #edf1f6; padding: 12px 10px; text-align: left; }
+      .data-table th { color: #66758a; font-weight: 700; background: #fafbfc; }
+      .data-table td:last-child, .data-table th:last-child { text-align: right; }
+      .settle-status { display: inline-flex; border-radius: 999px; padding: 3px 8px; font-size: 12px; }
+      .settle-pending { color: #a16207; background: #fef3c7; }
+      .settle-done { color: #047857; background: #d1fae5; }
+      .table-scroll { overflow: auto; max-height: calc(100vh - 300px); }
+      .parse-preview { border: 1px solid #dbeafe; background: #f8fbff; border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
+      .parse-row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #e7eef9; padding-bottom: 7px; font-size: 13px; }
+      .parse-row:last-child { border-bottom: 0; padding-bottom: 0; }
+      .parse-row span { color: #66758a; }
+      .alert-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+      .alert-edit { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(260px, 1fr); gap: 10px; margin-top: 12px; }
+      .alert-edit input { border: 1px solid #e5cfc4; background: #fff; border-radius: 8px; padding: 9px 10px; min-width: 0; }
+      .tiny-btn { height: 28px; border-radius: 7px; border: 1px solid #d7dee8; background: #fff; padding: 0 9px; font-size: 12px; }
+      .status-pill { display: inline-flex; border-radius: 999px; padding: 3px 8px; background: #eef4ff; color: #1f5fd4; font-size: 12px; margin-left: 6px; }
+      .job-box { margin-top: 16px; }
+      .job-progress { height: 8px; border-radius: 999px; background: #e8eef6; overflow: hidden; margin: 10px 0 12px; }
+      .job-progress i { display: block; height: 100%; background: #2563eb; }
+      .job-steps { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+      .job-step { border: 1px solid #e5ebf3; border-radius: 8px; padding: 8px; font-size: 12px; color: #66758a; }
+      .job-step strong { display: block; color: #172033; margin-bottom: 4px; }
+      @media (max-width: 1180px) {
+        html, body { overflow: auto; height: auto; }
+        .app, .app.sidebar-collapsed { grid-template-columns: 1fr; }
+        .app, main { height: auto; overflow: visible; }
+        main { display: block; }
+        .view.active, #projectsView.view.active, #alertsView.view.active { height: auto; overflow: visible; }
+        .project-list, .detail, .table-scroll, .alert-list { overflow: visible; max-height: none; }
+        .sidebar { position: static; padding: 14px; }
+        nav { display: none; }
+        .collapse-btn { display: none; }
+        .metrics { grid-template-columns: repeat(2,1fr); }
+        .charts, .workspace, .focus-grid, .insight-grid, .simple-grid, .dashboard-alert-grid, .alert-edit { grid-template-columns: 1fr; }
+        .panel.wide { grid-column: auto; }
+      }
+      @media (max-width: 720px) {
+        main { padding: 14px; }
+        .topbar { align-items: flex-start; flex-direction: column; }
+        .actions, .search, .primary, .ghost { width: 100%; }
+        .metrics, .detail-metrics, .split { grid-template-columns: 1fr; }
+        .workspace { grid-template-columns: minmax(0,1fr); }
+        .project-row, .timeline { align-items: flex-start; flex-direction: column; }
+        .row-right { width: 100%; justify-content: space-between; }
+        .summary-pie { grid-template-columns: 1fr; justify-items: center; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <div class="logo">
+            <div class="logo-mark">A</div>
+            <div class="logo-text"><strong>广告项目中台</strong><span>经营 / 执行 / 回款</span></div>
+          </div>
+          <button class="collapse-btn" id="collapseBtn" title="收缩侧边栏">‹</button>
+        </div>
+        <nav>
+          <button class="nav-item active" data-view="dashboardView">▦ <span>经营大屏</span></button>
+          <button class="nav-item" data-view="projectsView">▤ <span>项目台账</span></button>
+          <button class="nav-item" data-view="alertsView">◉ <span>预警中心</span></button>
+          <button class="nav-item" data-view="suppliersView">▥ <span>供应商结算</span></button>
+        </nav>
+        <nav class="bottom-nav">
+          <button class="nav-item" data-view="settingsView">⚙ <span>设置</span></button>
+        </nav>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div><h1>项目经营驾驶舱</h1><p>合同、执行、成本、回款与风险预警集中管理</p></div>
+          <div class="actions">
+            <div class="search">⌕ <input placeholder="搜索项目、客户、负责人" /></div>
+            <button class="ghost" data-action="filter">筛选</button>
+            <button class="primary" data-panel="newProject">新建项目</button>
+          </div>
+        </header>
+        <div class="module-banner" id="moduleBanner"></div>
+
+        <section class="view active" id="dashboardView">
+          <div class="metrics" id="dashboardMetrics">
+            <div class="metric"><span>合同总额</span><strong>0</strong><p>暂无项目</p></div>
+            <div class="metric"><span>回款率</span><strong>0%</strong><p>暂无回款</p></div>
+            <div class="metric"><span>待回款</span><strong>0</strong><p>暂无待回款</p></div>
+            <div class="metric"><span>高风险</span><strong>0</strong><p>暂无预警</p></div>
+          </div>
+          <div class="focus-grid">
+            <div class="focus-card">
+              <h2>所有项目汇总</h2>
+              <div class="summary-pie">
+                <div class="pie"></div>
+                <div class="pie-list" id="dashboardPieList">
+                  <div class="pie-item"><span><i class="dot" style="background:#2563eb"></i>已回款</span><strong>0</strong></div>
+                  <div class="pie-item"><span><i class="dot" style="background:#e8a321"></i>待回款</span><strong>0</strong></div>
+                  <div class="pie-item"><span>成本消耗</span><strong>0</strong></div>
+                  <div class="pie-item"><span>当前毛利估算</span><strong>0%</strong></div>
+                </div>
+              </div>
+            </div>
+            <div class="focus-card">
+              <h2>现金与成本概览</h2>
+              <div class="cash-line">
+                <div class="cash-track"><i style="width:36%"></i><i style="width:64%"></i></div>
+                <p class="focus-note" id="dashboardCashNote">暂无项目数据。新建项目并上传合同 / 执行表后，这里会自动统计回款、成本和供应商待结算费用。</p>
+              </div>
+              <div class="bar-chart" id="cashChart"></div>
+            </div>
+          </div>
+          <div class="focus-grid">
+            <div class="dashboard-alerts focus-card">
+              <div class="panel-row">
+                <h2>风险预警</h2>
+                <button class="ghost" data-action="goAlerts">查看全部</button>
+              </div>
+              <div class="dashboard-alert-grid" id="dashboardAlerts">
+                <div class="dashboard-alert"><strong>暂无风险预警</strong><span>系统</span><p>项目产生成本、回款或进度风险后会显示在这里。</p></div>
+              </div>
+            </div>
+            <div class="focus-card">
+              <h2>今日重点</h2>
+              <div class="todo-list" id="dashboardTodos">
+                <div class="todo-item"><i class="todo-dot" style="background:#cbd5e1"></i><div><strong>暂无待办</strong><br><span>新建项目后会生成回款、成本和执行待办。</span></div><b>0</b></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="projectsView">
+          <div class="workspace">
+            <div class="project-list">
+              <div class="section-head"><h2>项目台账</h2><button data-panel="newProject">新建 / 上传解析</button></div>
+              <div id="projectRows"></div>
+            </div>
+            <div class="detail" id="detail"></div>
+          </div>
+        </section>
+
+        <section class="view" id="alertsView">
+          <div class="panel alerts-workbench">
+            <div class="panel-row">
+              <div class="panel-title"><span>◉</span><h2>预警中心</h2></div>
+              <select id="roleFilter">
+                <option>全部角色</option><option>PM</option><option>销售</option><option>管理层</option>
+              </select>
+            </div>
+            <div class="alert-list" id="alertList"></div>
+          </div>
+        </section>
+
+        <section class="view" id="suppliersView">
+          <div class="metrics" id="supplierMetrics"></div>
+          <div class="focus-card" style="margin-top:12px">
+            <div class="panel-row">
+              <h2>供应商结算明细</h2>
+              <button class="ghost" data-export-suppliers data-submit="已导出供应商结算表">导出</button>
+            </div>
+            <p class="focus-note">以下费用会同步计入对应项目成本，待结算金额也会进入成本消耗和毛利估算。</p>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead><tr><th>供应商</th><th>归属项目</th><th>费用类型</th><th>应结金额</th><th>状态</th></tr></thead>
+                <tbody id="supplierRows"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="settingsView">
+          <div class="summary" style="margin:0 0 12px"><span>权限</span><p>以下为高级设置，仅中台管理人员可编辑；普通成员只可查看与自己项目相关的协作记录。</p></div>
+          <div class="simple-grid" style="margin-bottom:12px">
+            <div class="focus-card"><h2>基础设置</h2><p class="focus-note">公司主体、项目编号规则、币种、成本科目、回款阶段。</p><br><button class="ghost" data-panel="baseSettings">配置</button></div>
+            <div class="focus-card"><h2>协作与权限</h2><p class="focus-note">项目评论、@成员、操作日志、角色权限和项目可见范围。</p><br><button class="ghost" data-panel="collabSettings">配置</button></div>
+            <div class="focus-card"><h2>预警规则</h2><p class="focus-note">成本阈值、回款逾期、毛利率、项目延期和推送策略。</p><br><button class="ghost" data-panel="alertSettings">配置</button></div>
+          </div>
+          <div class="simple-grid">
+            <div class="focus-card"><h2>飞书通知</h2><p class="focus-note">推送成本、回款、节点预警到项目群。</p><br><button class="ghost" data-panel="feishu">配置</button></div>
+            <div class="focus-card"><h2>企业微信</h2><p class="focus-note">支持机器人 Webhook 和消息卡片。</p><br><button class="ghost" data-panel="wechat">配置</button></div>
+            <div class="focus-card"><h2>AI 服务</h2><p class="focus-note">配置 API Key 后，用于合同 OCR、Excel 解析和项目问数。</p><br><button class="ghost" data-panel="aiService">配置</button></div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <div class="toast" id="toast"></div>
+    <div class="drawer-mask" id="drawerMask">
+      <aside class="drawer" role="dialog" aria-modal="true">
+        <div class="drawer-head">
+          <div><h2 id="drawerTitle"></h2><p id="drawerDesc"></p></div>
+          <button class="close-btn" id="drawerClose">×</button>
+        </div>
+        <div id="drawerBody"></div>
+      </aside>
+    </div>
+    <script>
+      let projects = [];
+      let supplierSettlements = [];
+      let selectedId = projects[0]?.id || null;
+      let projectFilters = {};
+      const apiBase = location.protocol.startsWith("http") ? "" : "http://127.0.0.1:4173";
+      const isApiMode = true;
+      const currentUser = { id: "u-admin", name: "中台管理员", role: "admin" };
+      let appState = { settings: {}, uploads: [], parseJobs: [] };
+      const money = value => value >= 10000 ? `${Math.round(value / 10000)}万` : value.toLocaleString("zh-CN");
+      const riskClass = risk => risk === "高" ? "risk-high" : risk === "中" ? "risk-mid" : "risk-low";
+      function renderDashboard() {
+        const contract = projects.reduce((sum, item) => sum + Number(item.contract || 0), 0);
+        const paid = projects.reduce((sum, item) => sum + Number(item.paid || 0), 0);
+        const receivable = projects.reduce((sum, item) => sum + Number(item.receivable || 0), 0);
+        const supplierCost = supplierSettlements.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+        const highRisk = projects.filter(item => item.risk === "高").length;
+        const rate = contract ? Math.round((paid / contract) * 100) : 0;
+        document.getElementById("dashboardMetrics").innerHTML = `
+          <div class="metric"><span>合同总额</span><strong>${money(contract)}</strong><p>${projects.length ? `${projects.length} 个项目` : "暂无项目"}</p></div>
+          <div class="metric"><span>回款率</span><strong>${rate}%</strong><p>已回款 ${money(paid)}</p></div>
+          <div class="metric"><span>待回款</span><strong>${money(receivable)}</strong><p>按项目汇总</p></div>
+          <div class="metric"><span>高风险</span><strong>${highRisk}</strong><p>${highRisk ? "需处理" : "暂无预警"}</p></div>`;
+        document.getElementById("dashboardPieList").innerHTML = `
+          <div class="pie-item"><span><i class="dot" style="background:#2563eb"></i>已回款</span><strong>${money(paid)}</strong></div>
+          <div class="pie-item"><span><i class="dot" style="background:#e8a321"></i>待回款</span><strong>${money(receivable)}</strong></div>
+          <div class="pie-item"><span>供应商成本</span><strong>${money(supplierCost)}</strong></div>
+          <div class="pie-item"><span>当前毛利估算</span><strong>${contract ? `${Math.round(((contract - supplierCost) / contract) * 100)}%` : "0%"}</strong></div>`;
+        document.getElementById("dashboardCashNote").textContent = projects.length
+          ? `当前合同总额 ${money(contract)}，已回款 ${money(paid)}，待回款 ${money(receivable)}；供应商成本 ${money(supplierCost)}。`
+          : "暂无项目数据。新建项目并上传合同 / 执行表后，这里会自动统计回款、成本和供应商待结算费用。";
+        document.getElementById("dashboardAlerts").innerHTML = highRisk
+          ? projects.filter(item => item.risk === "高").map(item => `<div class="dashboard-alert"><strong>${item.name}</strong><span>高风险</span><p>请进入预警中心处理。</p></div>`).join("")
+          : `<div class="dashboard-alert"><strong>暂无风险预警</strong><span>系统</span><p>项目产生成本、回款或进度风险后会显示在这里。</p></div>`;
+        document.getElementById("dashboardTodos").innerHTML = projects.length
+          ? projects.slice(0, 3).map(item => `<div class="todo-item"><i class="todo-dot" style="background:#2563eb"></i><div><strong>${item.name}</strong><br><span>${item.status}</span></div><b>${money(item.contract || 0)}</b></div>`).join("")
+          : `<div class="todo-item"><i class="todo-dot" style="background:#cbd5e1"></i><div><strong>暂无待办</strong><br><span>新建项目后会生成回款、成本和执行待办。</span></div><b>0</b></div>`;
+      }
+      function renderCash() {
+        if (!projects.length) {
+          document.getElementById("cashChart").innerHTML = `<p class="focus-note">暂无回款分布数据。</p>`;
+          return;
+        }
+        document.getElementById("cashChart").innerHTML = projects.map(p => {
+          const paid = Number(p.paid || 0);
+          const receivable = Number(p.receivable || 0);
+          const total = paid + receivable;
+          const paidWidth = total ? (paid / total * 100) : 0;
+          const dueWidth = total ? (receivable / total * 100) : 0;
+          return `<div class="bar-row"><span>${p.client || "未填写客户"}</span><div class="bar-track"><i class="bar-paid" style="width:${paidWidth}%"></i><i class="bar-due" style="width:${dueWidth}%"></i></div><b>${money(total)}</b></div>`;
+        }).join("");
+      }
+      function renderCost() {
+        const costChart = document.getElementById("costChart");
+        if (!costChart) return;
+        costChart.innerHTML = projects.map(p => {
+          const rate = Math.round(p.costUsed / p.costBudget * 100);
+          return `<div class="pressure-row"><span>${p.pm}</span><div><i style="width:${Math.min(rate,100)}%"></i></div><b>${rate}%</b></div>`;
+        }).join("");
+      }
+      function renderAlerts() {
+        const role = document.getElementById("roleFilter").value;
+        const alerts = projects.flatMap(p => (p.alerts || []).map(a => ({...a, project:p.name}))).filter(a => role === "全部角色" || a.role === role);
+        document.getElementById("alertList").innerHTML = alerts.length ? alerts.map((a, index) => `<div class="alert-item" data-project="${a.project}" data-type="${a.type}"><strong>${a.type}<em class="status-pill">${index === 0 ? "待处理" : "已分派"}</em></strong><span>${a.role} · ${a.project}</span><p>${a.text}</p><div class="alert-edit"><input data-mentions placeholder="@成员，例如 @何佳 @林泽" /><input data-note placeholder="处理备注或手动修改预警内容" /></div><div class="alert-actions"><button class="tiny-btn" data-alert-action="resolve">标记处理</button><button class="tiny-btn" data-alert-action="assign">分派负责人</button><button class="tiny-btn" data-alert-action="save">保存修改</button></div></div>`).join("") : `<div class="alert-item"><strong>暂无预警</strong><span>${role}</span><p>当前角色没有待处理风险。</p></div>`;
+        document.querySelectorAll("[data-alert-action]").forEach(btn => btn.addEventListener("click", async () => {
+          const item = btn.closest(".alert-item");
+          const copy = { resolve: "预警已标记处理", assign: "已分派给相关成员", save: "预警修改已保存" };
+          try {
+            await apiPost("/api/alerts/update", {
+              action: btn.dataset.alertAction,
+              project: item.dataset.project,
+              type: item.dataset.type,
+              mentions: item.querySelector("[data-mentions]").value,
+              note: item.querySelector("[data-note]").value,
+              user: currentUser.name,
+            });
+            showToast(copy[btn.dataset.alertAction]);
+          } catch (error) {
+            showToast(error.message);
+          }
+        }));
+      }
+      function renderRows() {
+        const projectRows = document.getElementById("projectRows");
+        if (!projectRows) return;
+        const visibleProjects = projects.filter((p) => {
+          if (projectFilters.risk && projectFilters.risk !== "全部" && `${p.risk}风险` !== projectFilters.risk) return false;
+          if (projectFilters.status && projectFilters.status !== "全部" && p.status !== projectFilters.status) return false;
+          if (projectFilters.owner && !`${p.owner || ""}${p.sales || ""}${p.pm || ""}`.includes(projectFilters.owner)) return false;
+          return true;
+        });
+        if (!visibleProjects.length) {
+          projectRows.innerHTML = `<div class="empty-state">暂无项目。点击右上角“新建项目”开始录入。</div>`;
+          return;
+        }
+        projectRows.innerHTML = visibleProjects.map(p => `<button class="project-row ${p.id === selectedId ? "selected" : ""}" data-id="${p.id}"><div><strong>${p.name}</strong><span>${p.client || "未填写客户"} · ${p.owner || "未分配负责人"}</span></div><div class="row-right"><b class="risk ${riskClass(p.risk)}">${p.risk}风险</b><span>${p.status}</span><span>›</span></div></button>`).join("");
+        document.querySelectorAll(".project-row").forEach(row => row.addEventListener("click", () => { selectedId = row.dataset.id; renderRows(); renderDetail(); }));
+      }
+      function renderDetail() {
+        const p = projects.find(item => item.id === selectedId);
+        const detail = document.getElementById("detail");
+        if (!detail) return;
+        if (!p) {
+          detail.innerHTML = `<div class="empty-state">暂无项目详情。新建项目后会在这里显示合同、成本、回款和供应商费用。</div>`;
+          return;
+        }
+        const usedRate = p.costBudget ? Math.round((p.costUsed || 0) / p.costBudget * 100) : 0;
+        const relatedSuppliers = supplierSettlements.filter(item => item.project === p.name);
+        const supplierCost = relatedSuppliers.reduce((sum, item) => sum + item.amount, 0);
+        const parseJob = (appState.parseJobs || []).find((job) => job.projectId === p.id);
+        detail.innerHTML = `
+          <div class="detail-head"><div><span class="id">${p.id}</span><h2>${p.name}</h2><p>${p.client || "未填写客户"} · ${p.status}</p></div><b class="risk ${riskClass(p.risk)}">${p.risk}风险</b></div>
+          <div class="summary"><span>AI</span><p>${p.aiSummary || "文件已记录，等待 AI 解析任务生成结构化字段。"}</p></div>
+          <div class="detail-metrics"><div class="mini"><span>合同金额</span><strong>${money(p.contract || 0)}</strong></div><div class="mini"><span>成本使用</span><strong>${usedRate || 0}%</strong></div><div class="mini"><span>已回款</span><strong>${money(p.paid || 0)}</strong></div><div class="mini"><span>毛利率</span><strong>${p.margin || 0}%</strong></div></div>
+          <div class="split"><div><h3>执行进度</h3>${(p.tasks || []).map(([name,value]) => `<div class="progress-row"><span>${name}</span><div><i style="width:${value}%"></i></div><b>${value}%</b></div>`).join("") || `<p class="focus-note">暂无执行进度。</p>`}</div><div><h3>成本构成</h3>${(p.costs || []).map(([name,value]) => `<div class="cost-row"><span>${name}</span><b>${money(value)}</b></div>`).join("") || `<p class="focus-note">暂无成本数据。</p>`}<div class="cost-row"><span>供应商计入成本</span><b>${money(supplierCost)}</b></div></div></div>
+          <div class="focus-card job-box"><div class="panel-row"><h3>AI 解析进度</h3>${parseJob ? `<button class="tiny-btn" data-refresh-job="${parseJob.id}">刷新进度</button>` : ""}</div>${parseJob ? `<p class="focus-note">${parseJob.status} · ${parseJob.progress}%</p><div class="job-progress"><i style="width:${parseJob.progress}%"></i></div><div class="job-steps">${parseJob.steps.map(step => `<div class="job-step"><strong>${step.name}</strong>${step.status}</div>`).join("")}</div>` : `<p class="focus-note">暂无解析任务。上传合同或执行表后会显示解析进度。</p>`}</div>
+          <div class="focus-card" style="margin-top:16px"><h3>供应商费用归属</h3>${relatedSuppliers.length ? relatedSuppliers.map(item => `<div class="cost-row"><span>${item.supplier} · ${item.type}</span><b>${money(item.amount)} / ${item.status}</b></div>`).join("") : `<p class="focus-note">暂无供应商费用。</p>`}</div>
+          <div class="timeline"><div><span>下一节点</span><strong>${p.nextMilestone || "暂无"}</strong></div><div><span>回款节点</span><strong>${p.paymentDue || "暂无"}</strong></div></div>`;
+        document.querySelectorAll("[data-refresh-job]").forEach(btn => btn.addEventListener("click", async () => {
+          try {
+            await apiPost("/api/parse-jobs/progress", { id: btn.dataset.refreshJob });
+            await loadState();
+            renderDetail();
+            showToast("解析进度已更新");
+          } catch (error) {
+            showToast(error.message);
+          }
+        }));
+      }
+      function renderSuppliers() {
+        const total = supplierSettlements.reduce((sum, item) => sum + item.amount, 0);
+        const pending = supplierSettlements.filter(item => item.status === "待结算").reduce((sum, item) => sum + item.amount, 0);
+        const done = total - pending;
+        const supplierCount = new Set(supplierSettlements.map(item => item.supplier)).size;
+        document.getElementById("supplierMetrics").innerHTML = `
+          <div class="metric"><span>应结总额</span><strong>${money(total)}</strong><p>${supplierSettlements.length} 笔结算</p></div>
+          <div class="metric"><span>待结算</span><strong>${money(pending)}</strong><p>需财务处理</p></div>
+          <div class="metric"><span>已结算</span><strong>${money(done)}</strong><p>已完成付款</p></div>
+          <div class="metric"><span>供应商数</span><strong>${supplierCount}</strong><p>按项目归属</p></div>`;
+        document.getElementById("supplierRows").innerHTML = supplierSettlements.map(item => `
+          <tr>
+            <td><strong>${item.supplier}</strong></td>
+            <td>${item.project}</td>
+            <td>${item.type}</td>
+            <td>${money(item.amount)}</td>
+            <td><span class="settle-status ${item.status === "待结算" ? "settle-pending" : "settle-done"}">${item.status}</span></td>
+          </tr>`).join("") || `<tr><td colspan="5" style="text-align:center;color:#66758a">暂无供应商结算数据。</td></tr>`;
+      }
+      function showToast(text) {
+        const toast = document.getElementById("toast");
+        toast.textContent = text;
+        toast.classList.add("show");
+        clearTimeout(window.toastTimer);
+        window.toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
+      }
+      async function apiPost(path, payload, admin = false) {
+        if (!isApiMode) return { ok: true, offline: true };
+        const res = await fetch(`${apiBase}${path}`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-user-role": admin ? "admin" : currentUser.role,
+          },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || "请求失败");
+        return data;
+      }
+      async function loadState() {
+        if (!isApiMode) return;
+        try {
+          const res = await fetch(`${apiBase}/api/state`);
+          const data = await res.json();
+          if (data.ok) {
+            appState = data.data;
+            projects = appState.projects || [];
+            supplierSettlements = appState.suppliers || [];
+            selectedId = projects[0]?.id || null;
+          }
+        } catch {
+          appState = { settings: {}, uploads: [], parseJobs: [] };
+        }
+      }
+      function collectDrawerValues() {
+        const values = {};
+        document.querySelectorAll("#drawerBody .field").forEach((field) => {
+          const label = field.querySelector("label")?.textContent?.trim();
+          const control = field.querySelector("input, textarea, select");
+          if (label && control) values[label] = control.value;
+        });
+        return values;
+      }
+      function fillDrawerValues(values = {}) {
+        document.querySelectorAll("#drawerBody .field").forEach((field) => {
+          const label = field.querySelector("label")?.textContent?.trim();
+          const control = field.querySelector("input, textarea, select");
+          if (label && control && values[label] !== undefined) control.value = values[label];
+        });
+      }
+      async function openDrawer(type) {
+        await loadState();
+        const panels = {
+          newProject: {
+            title: "新建项目",
+            desc: "可手动录入，也可上传合同和执行表，由 AI 自动补全金额、节点、成本和回款计划。",
+            body: `<div class="form-grid">
+              <div class="dropzone" id="projectDropzone">上传合同 / 执行表<br><small>支持拖拽或点击选择 PDF、Word、Excel、CSV</small><input id="projectFileInput" type="file" multiple hidden /></div>
+              <div class="field"><label>解析方式</label><select><option>合同 + 执行表联合解析</option><option>仅解析合同字段</option><option>仅解析执行表成本</option><option>先建项目，稍后上传</option></select></div>
+              <div class="field"><label>项目名称</label><input placeholder="例如：某品牌年度整合传播" /></div>
+              <div class="field"><label>客户 / 品牌</label><input placeholder="客户名称、品牌名称" /></div>
+              <div class="field"><label>负责人</label><select><option>周敏</option><option>何佳</option><option>王祎</option><option>林泽</option></select></div>
+              <div class="field"><label>合同金额</label><input placeholder="输入金额，支持后续由 AI 提取" /></div>
+              <div class="summary"><span>AI</span><p>解析后会自动填入合同金额、服务周期、回款节点、交付事项、成本科目，并标出需要人工确认的字段。</p></div>
+              <div class="parse-preview">
+                <div class="parse-row"><span>识别客户</span><strong>上传后生成</strong></div>
+                <div class="parse-row"><span>合同金额</span><strong>上传后生成</strong></div>
+                <div class="parse-row"><span>回款节点</span><strong>上传后生成</strong></div>
+                <div class="parse-row"><span>成本科目</span><strong>上传后生成</strong></div>
+              </div>
+              <div class="field"><label>项目备注</label><textarea placeholder="关键交付、客户要求、特殊审批等"></textarea></div>
+            </div><div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-upload-project data-submit="已创建项目草稿并进入 AI 解析">创建并解析</button></div>`
+          },
+          feishu: {
+            title: "飞书机器人配置",
+            desc: "用于把成本预警、逾期回款、项目节点提醒推送到指定群或个人。",
+            body: `<div class="form-grid">
+              <div class="field"><label>Webhook 地址</label><input placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." /></div>
+              <div class="field"><label>推送范围</label><select><option>高风险项目实时推送</option><option>每日 9 点汇总</option><option>仅逾期回款</option></select></div>
+              <div class="field"><label>提醒对象</label><input placeholder="@项目PM、@销售、@财务负责人" /></div>
+            </div><div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-setting="feishu" data-submit="飞书配置已保存">保存配置</button></div>`
+          },
+          wechat: {
+            title: "企业微信配置",
+            desc: "用于向项目群、销售群或财务群发送预警消息卡片。",
+            body: `<div class="form-grid">
+              <div class="field"><label>机器人 Webhook</label><input placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." /></div>
+              <div class="field"><label>消息类型</label><select><option>项目风险卡片</option><option>回款催办</option><option>成本日报</option></select></div>
+              <div class="field"><label>默认群组</label><input placeholder="项目管理群 / 销售回款群" /></div>
+            </div><div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-setting="wechat" data-submit="企业微信配置已保存">保存配置</button></div>`
+          },
+          aiService: {
+            title: "AI 服务配置",
+            desc: "粘贴 API Key 后即可用于合同解析、执行表结构化、风险判断和项目问数。",
+            body: `<div class="form-grid">
+              <div class="field"><label>服务商</label><select><option>GPT / OpenAI</option><option>Kimi / Moonshot</option><option>DeepSeek</option><option>OpenAI 兼容接口</option><option>私有化模型服务</option></select></div>
+              <div class="field"><label>Base URL</label><input placeholder="https://api.openai.com/v1 或你的私有网关地址" /></div>
+              <div class="field password-field"><label>API Key</label><div class="password-wrap"><input type="password" placeholder="粘贴 sk-... 或企业内部网关 Token" /><button type="button" class="eye-btn" data-toggle-password>👁</button></div></div>
+              <div class="field"><label>模型名称</label><input placeholder="例如 gpt-4.1、kimi-k2.6、deepseek-v4-pro" /></div>
+              <div class="field"><label>启用能力</label><select><option>合同解析 + Excel 解析 + 风险判断</option><option>仅合同解析</option><option>仅项目问数</option><option>仅风险预警</option></select></div>
+              <div class="summary"><span>AI</span><p>保存后，系统会在新建项目上传文件时调用该接口，返回结构化字段并进入人工确认。</p></div>
+            </div><div class="drawer-actions"><button class="ghost" data-test-ai data-submit="AI 配置校验通过">校验配置</button><button class="primary" data-setting="aiService" data-submit="AI 服务配置已保存">保存配置</button></div>`
+          },
+          baseSettings: {
+            title: "基础设置",
+            desc: "仅中台管理人员可编辑，用于定义项目中台的基础业务规则。",
+            body: `<div class="form-grid">
+              <div class="field"><label>公司主体</label><input placeholder="例如：上海某某广告有限公司" /></div>
+              <div class="field"><label>项目编号规则</label><input placeholder="例如 P-{YYYY}-{MM}{序号}" /></div>
+              <div class="field"><label>默认币种</label><select><option>人民币 CNY</option><option>美元 USD</option></select></div>
+              <div class="field"><label>成本科目</label><textarea placeholder="媒介采买、达人合作、场地搭建、设计制作、投流服务"></textarea></div>
+              <div class="field"><label>回款阶段</label><textarea placeholder="首款、中期款、尾款、质保款"></textarea></div>
+            </div><div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-setting="baseSettings" data-submit="基础设置已保存">保存配置</button></div>`
+          },
+          collabSettings: {
+            title: "协作与权限",
+            desc: "设置成员角色、项目可见范围、@通知和操作日志策略。",
+            body: `<div class="form-grid">
+              <div class="field"><label>默认项目角色</label><select><option>销售 / PM / 财务 / 管理层 / 执行成员</option><option>自定义角色</option></select></div>
+              <div class="field"><label>项目可见范围</label><select><option>仅项目成员可见</option><option>部门可见</option><option>全公司可见</option></select></div>
+              <div class="field"><label>@成员通知</label><select><option>站内 + 飞书/企业微信</option><option>仅站内</option><option>仅外部通知</option></select></div>
+              <div class="field"><label>操作日志保留</label><select><option>永久保留</option><option>保留 3 年</option><option>保留 1 年</option></select></div>
+            </div><div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-setting="collabSettings" data-submit="协作权限已保存">保存配置</button></div>`
+          },
+          alertSettings: {
+            title: "预警规则",
+            desc: "配置不同角色收到的成本、回款、毛利和进度预警。",
+            body: `<div class="form-grid">
+              <div class="field"><label>成本预警阈值</label><input placeholder="例如 80%，超过后提醒 PM" /></div>
+              <div class="field"><label>回款提前提醒</label><input placeholder="例如 到期前 7 天提醒销售" /></div>
+              <div class="field"><label>毛利率下限</label><input placeholder="例如 30%，低于后提醒管理层" /></div>
+              <div class="field"><label>逾期升级规则</label><select><option>逾期 7 天提醒销售负责人</option><option>逾期 3 天提醒管理层</option><option>自定义</option></select></div>
+            </div><div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-setting="alertSettings" data-submit="预警规则已保存">保存配置</button></div>`
+          },
+          filter: {
+            title: "筛选项目",
+            desc: "按项目状态、风险等级、负责人和回款情况快速缩小台账范围。",
+            body: `<div class="form-grid">
+              <div class="field"><label>风险等级</label><select><option>全部</option><option>高风险</option><option>中风险</option><option>低风险</option></select></div>
+              <div class="field"><label>项目状态</label><select><option>全部</option><option>筹备中</option><option>执行中</option><option>已完成</option></select></div>
+              <div class="field"><label>负责人</label><input placeholder="销售、PM 或项目负责人" /></div>
+            </div><div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-apply-filter data-submit="筛选条件已应用">应用筛选</button></div>`
+          }
+        };
+        const panel = panels[type];
+        if (!panel) return;
+        document.getElementById("drawerTitle").textContent = panel.title;
+        document.getElementById("drawerDesc").textContent = panel.desc;
+        document.getElementById("drawerBody").innerHTML = panel.body;
+        document.getElementById("drawerMask").classList.add("show");
+        if (appState.settings?.[type]) fillDrawerValues(appState.settings[type]);
+        bindDrawerButtons();
+      }
+      function closeDrawer() {
+        document.getElementById("drawerMask").classList.remove("show");
+      }
+      function bindDrawerButtons() {
+        document.querySelectorAll("[data-close]").forEach(btn => btn.addEventListener("click", closeDrawer));
+        document.querySelectorAll("[data-toggle-password]").forEach(btn => btn.addEventListener("click", () => {
+          const input = btn.closest(".password-wrap").querySelector("input");
+          input.type = input.type === "password" ? "text" : "password";
+        }));
+        document.querySelectorAll("[data-submit]").forEach(btn => btn.addEventListener("click", async () => {
+          try {
+            if (btn.dataset.testAi !== undefined) {
+              const values = collectDrawerValues();
+              await apiPost("/api/settings/ai/test", { values }, true);
+              showToast(btn.dataset.submit);
+              return;
+            }
+            if (btn.dataset.uploadProject !== undefined) {
+              await recordSelectedFiles();
+              await createProjectFromDrawer();
+              await loadState();
+              renderRows();
+              renderDetail();
+              renderDashboard();
+              renderCash();
+            }
+            if (btn.dataset.applyFilter !== undefined) {
+              const values = collectDrawerValues();
+              projectFilters = { risk: values["风险等级"], status: values["项目状态"], owner: values["负责人"] };
+              renderRows();
+            }
+            if (btn.dataset.setting) {
+              await apiPost("/api/settings", { type: btn.dataset.setting, values: collectDrawerValues() }, true);
+              await loadState();
+            }
+            showToast(btn.dataset.submit);
+            closeDrawer();
+          } catch (error) {
+            showToast(error.message);
+          }
+        }));
+        bindFileDropzone();
+      }
+      let selectedFiles = [];
+      function updateDropzoneLabel() {
+        const dropzone = document.getElementById("projectDropzone");
+        if (!dropzone) return;
+        const input = document.getElementById("projectFileInput");
+        const names = selectedFiles.map(file => file.name).join("、");
+        dropzone.innerHTML = selectedFiles.length
+          ? `已选择 ${selectedFiles.length} 个文件<br><small>${names}</small>`
+          : `上传合同 / 执行表<br><small>支持拖拽或点击选择 PDF、Word、Excel、CSV</small>`;
+        dropzone.appendChild(input);
+      }
+      function bindFileDropzone() {
+        const dropzone = document.getElementById("projectDropzone");
+        const input = document.getElementById("projectFileInput");
+        if (!dropzone || !input) return;
+        selectedFiles = [];
+        dropzone.addEventListener("click", () => input.click());
+        input.addEventListener("change", () => {
+          selectedFiles = Array.from(input.files || []);
+          updateDropzoneLabel();
+        });
+        dropzone.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          dropzone.style.background = "#eaf2ff";
+        });
+        dropzone.addEventListener("dragleave", () => {
+          dropzone.style.background = "#f4f8ff";
+        });
+        dropzone.addEventListener("drop", (event) => {
+          event.preventDefault();
+          dropzone.style.background = "#f4f8ff";
+          selectedFiles = Array.from(event.dataTransfer.files || []);
+          updateDropzoneLabel();
+        });
+      }
+      async function recordSelectedFiles() {
+        if (!selectedFiles.length) throw new Error("请先上传合同或执行表");
+        const values = collectDrawerValues();
+        await apiPost("/api/files/record", {
+          projectName: values["项目名称"],
+          files: selectedFiles.map(file => ({ name: file.name, size: file.size, type: file.type || "unknown" })),
+        });
+      }
+      async function createProjectFromDrawer() {
+        const values = collectDrawerValues();
+        await apiPost("/api/projects", {
+          values,
+          files: selectedFiles.map(file => ({ name: file.name, size: file.size, type: file.type || "unknown" })),
+        });
+      }
+      function bindGlobalActions() {
+        document.querySelectorAll("[data-panel]").forEach(btn => btn.addEventListener("click", () => openDrawer(btn.dataset.panel)));
+        document.querySelectorAll("main [data-submit]").forEach(btn => btn.addEventListener("click", async () => {
+          if (btn.dataset.exportSuppliers !== undefined) {
+            location.href = `${apiBase}/api/suppliers/export`;
+            return;
+          }
+          if (!btn.dataset.panel && !btn.dataset.action) showToast(btn.dataset.submit);
+        }));
+        document.querySelector("[data-action='filter']").addEventListener("click", () => openDrawer("filter"));
+        document.querySelector("[data-action='goAlerts']").addEventListener("click", () => switchView("alertsView"));
+        document.getElementById("collapseBtn").addEventListener("click", () => {
+          const app = document.querySelector(".app");
+          app.classList.toggle("sidebar-collapsed");
+          document.getElementById("collapseBtn").textContent = app.classList.contains("sidebar-collapsed") ? "›" : "‹";
+        });
+        document.getElementById("drawerClose").addEventListener("click", closeDrawer);
+        document.getElementById("drawerMask").addEventListener("click", event => {
+          if (event.target.id === "drawerMask") closeDrawer();
+        });
+        document.querySelectorAll(".nav-item").forEach(item => item.addEventListener("click", () => switchView(item.dataset.view)));
+      }
+      function switchView(viewId) {
+        const navItems = document.querySelectorAll(".nav-item");
+        navItems.forEach(nav => nav.classList.remove("active"));
+        document.querySelector(`.nav-item[data-view="${viewId}"]`).classList.add("active");
+        document.querySelectorAll(".view").forEach(view => {
+          view.classList.remove("active");
+          view.hidden = true;
+        });
+        const targetView = document.getElementById(viewId);
+        targetView.hidden = false;
+        targetView.classList.add("active");
+        document.getElementById("moduleBanner").classList.remove("show");
+      }
+      document.getElementById("roleFilter").addEventListener("change", renderAlerts);
+      (async function init() {
+        await loadState();
+        document.querySelectorAll(".view").forEach(view => {
+          view.hidden = !view.classList.contains("active");
+        });
+        renderDashboard();
+        renderCash();
+        renderCost();
+        renderAlerts();
+        renderRows();
+        renderDetail();
+        renderSuppliers();
+        bindGlobalActions();
+      })();
+    </script>
+  </body>
+</html>
