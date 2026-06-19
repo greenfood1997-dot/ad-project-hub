@@ -1,7 +1,7 @@
-export function createProject(db, values, files, user) {
+export async function createProject(db, values, files, user) {
   if (!values?.["项目名称"] && !files.length) throw new Error("请填写项目名称或先上传合同/执行表");
   const now = new Date().toISOString();
-  const contract = Number(values["合同金额"] || 0);
+  const contract = parseMoney(values["合同金额"]);
   const project = {
     id: `P-${Date.now()}`,
     name: values["项目名称"] || `待解析合同-${new Date().toLocaleString("zh-CN", { hour12: false })}`,
@@ -29,6 +29,11 @@ export function createProject(db, values, files, user) {
   db.projects.unshift(project);
   db.parseJobs.unshift(parseJob);
   db.auditLogs.unshift({ type: "project", target: project.name, action: "create", user: user.name, at: now });
+
+  if (files.length) {
+    await analyzeAndApplyProjectFiles(db, project, parseJob);
+  }
+
   return { project, parseJob };
 }
 
@@ -58,6 +63,9 @@ export function createParseJob(project, files, parsed = {}, sourceValues = {}) {
 export async function advanceParseJob(db, idOrProjectId) {
   const job = db.parseJobs.find((item) => item.id === idOrProjectId || item.projectId === idOrProjectId);
   if (!job) throw new Error("解析任务不存在");
+
+  if (job.status === "已完成" && job.extractedFields?.summary) return job;
+
   job.progress = Math.min(100, job.progress + 25);
   job.status = job.progress >= 100 ? "已完成" : "解析中";
   job.steps = job.steps.map((step, index) => {
@@ -69,12 +77,7 @@ export async function advanceParseJob(db, idOrProjectId) {
 
   if (job.progress >= 75 && !job.extractedFields?.summary) {
     const project = db.projects.find((item) => item.id === job.projectId);
-    if (project) {
-      job.status = "解析中";
-      job.steps = setStepStatus(job.steps, "字段识别", "进行中");
-      const parsed = await analyzeProjectFiles(db.settings?.aiService, job.sourceValues || {}, job.files || []);
-      applyParsedFields(db, project, job, parsed);
-    }
+    if (project) await analyzeAndApplyProjectFiles(db, project, job);
   }
 
   return job;
@@ -84,16 +87,30 @@ function setStepStatus(steps, name, status) {
   return steps.map((step) => step.name === name ? { ...step, status } : step);
 }
 
+async function analyzeAndApplyProjectFiles(db, project, job) {
+  job.status = "解析中";
+  job.progress = Math.max(job.progress || 0, 50);
+  job.steps = setStepStatus(job.steps, "字段识别", "进行中");
+  job.updatedAt = new Date().toISOString();
+
+  const parsed = await analyzeProjectFiles(db.settings?.aiService, job.sourceValues || {}, job.files || []);
+  applyParsedFields(db, project, job, parsed);
+}
+
 function applyParsedFields(db, project, job, parsed) {
-  const contract = Number(project.contract || parsed.contract || 0);
-  const costBudget = Number(parsed.costBudget || 0);
-  const costUsed = Number(parsed.costUsed || 0);
-  const paid = Number(parsed.paid || 0);
-  const receivable = Number(parsed.receivable || Math.max(contract - paid, 0));
+  const parsedContract = parseMoney(parsed.contract);
+  const existingContract = parseMoney(project.contract);
+  const contract = parsedContract || existingContract;
+  const costBudget = parseMoney(parsed.costBudget);
+  const costUsed = parseMoney(parsed.costUsed);
+  const paid = parseMoney(parsed.paid);
+  const receivable = parseMoney(parsed.receivable) || Math.max(contract - paid, 0);
   const oldName = project.name;
+  const parsedProjectName = parsed.projectName || parsed.name || "";
+  const shouldUseParsedName = (!project.name || project.name.startsWith("待解析合同-")) && parsedProjectName;
 
   Object.assign(project, {
-    name: project.name.startsWith("待解析合同-") && parsed.projectName ? parsed.projectName : project.name,
+    name: shouldUseParsedName ? parsedProjectName : project.name,
     client: project.client || parsed.client || "",
     contract,
     costBudget,
@@ -103,7 +120,7 @@ function applyParsedFields(db, project, job, parsed) {
     status: "解析完成",
     risk: parsed.risk || inferRisk({ contract, costBudget, costUsed, receivable }),
     aiSummary: parsed.summary || "文件已解析，结构化字段已同步到项目台账。",
-    nextMilestone: parsed.nextMilestone || parsed.servicePeriod || "",
+    nextMilestone: parsed.nextMilestone || parsed.servicePeriod || parsed.deliveryDate || "",
     paymentDue: parsed.paymentDue || "",
     margin: contract ? Math.max(0, Math.round(((contract - costUsed) / contract) * 100)) : 0,
     tasks: parsed.tasks || [],
@@ -232,6 +249,97 @@ export function normalizeAiSettings(values = {}) {
   return normalized;
 }
 
+function parseMoney(value) {
+  if (value === null || value === undefined || value === "") return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+
+  const text = String(value).trim();
+  if (!text) return 0;
+
+  const chineseAmount = parseChineseMoney(text);
+  if (chineseAmount) return chineseAmount;
+
+  const match = text.replaceAll(",", "").match(/-?\d+(?:\.\d+)?/);
+  if (!match) return 0;
+  const number = Number(match[0]);
+  if (!Number.isFinite(number)) return 0;
+
+  if (/万|w/i.test(text)) return number * 10000;
+  return number;
+}
+
+function parseChineseMoney(text) {
+  const source = String(text);
+  const chineseMatch = source.match(/[壹贰叁肆伍陆柒捌玖拾佰仟万亿零一二三四五六七八九十百千万两]+(?:元|圆|整|正|人民币|RMB|¥|￥)*/);
+  if (!chineseMatch && !/[壹贰叁肆伍陆柒捌玖拾佰仟万亿]/.test(source)) return 0;
+
+  const normalized = (chineseMatch?.[0] || source)
+    .replace(/[圆元整正]/g, "")
+    .replace(/零/g, "")
+    .replace(/两/g, "二")
+    .replace(/[壹一]/g, "1")
+    .replace(/[贰二]/g, "2")
+    .replace(/[叁三]/g, "3")
+    .replace(/[肆四]/g, "4")
+    .replace(/[伍五]/g, "5")
+    .replace(/[陆六]/g, "6")
+    .replace(/[柒七]/g, "7")
+    .replace(/[捌八]/g, "8")
+    .replace(/[玖九]/g, "9")
+    .replace(/拾/g, "十")
+    .replace(/佰/g, "百")
+    .replace(/仟/g, "千");
+
+  const han = normalized.match(/[1-9十百千万亿]+/);
+  const hasChineseDigits = /[壹贰叁肆伍陆柒捌玖拾佰仟零一二三四五六七八九十百两]/.test(source);
+  if (hasChineseDigits && han && /[十百千万亿]/.test(han[0])) return parseChineseNumber(han[0]);
+
+  const direct = normalized.match(/([1-9]\d*(?:\.\d+)?)\s*(亿|千万|百万|十万|万)/);
+  if (direct) return Number(direct[1]) * chineseUnitValue(direct[2]);
+
+  return 0;
+}
+
+function chineseUnitValue(unit) {
+  return {
+    十万: 100000,
+    百万: 1000000,
+    千万: 10000000,
+    万: 10000,
+    亿: 100000000
+  }[unit] || 1;
+}
+
+function parseChineseNumber(value) {
+  const digits = { "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9 };
+  const smallUnits = { 十: 10, 百: 100, 千: 1000 };
+  let total = 0;
+  let section = 0;
+  let number = 0;
+
+  for (const char of value) {
+    if (digits[char]) {
+      number = digits[char];
+      continue;
+    }
+
+    if (smallUnits[char]) {
+      section += (number || 1) * smallUnits[char];
+      number = 0;
+      continue;
+    }
+
+    if (char === "万" || char === "亿") {
+      section += number;
+      total += section * chineseUnitValue(char);
+      section = 0;
+      number = 0;
+    }
+  }
+
+  return total + section + number;
+}
+
 async function analyzeProjectFiles(aiSettings, values, files) {
   const extractedFiles = await Promise.all(files.map(extractFileContent));
   const text = extractedFiles
@@ -338,10 +446,12 @@ function parseJsonObject(content) {
 function inferFieldsFromText(values, text, files) {
   const amounts = extractAmounts(text);
   const dates = extractDates(text);
-  const contract = Number(values["合同金额"] || amounts[0] || 0);
+  const contract = parseMoney(values["合同金额"]) || extractContractAmount(text) || amounts[0] || 0;
   const paid = guessAmount(text, ["已回款", "已付款", "首付款", "预付款", "已收款"]) || 0;
   const costUsed = guessAmount(text, ["成本", "费用", "执行费用", "供应商", "应结"]) || 0;
-  const client = values["客户 / 品牌"] || guessText(text, ["客户", "品牌", "甲方"]) || "";
+  const parties = extractParties(text);
+  const servicePeriod = extractServicePeriod(text, dates);
+  const client = values["客户 / 品牌"] || parties.partyA || guessText(text, ["客户", "品牌"]) || "";
   const projectName = values["项目名称"] || guessText(text, ["项目名称", "项目", "合同名称"]) || "";
   const suppliers = extractSuppliers(text);
 
@@ -353,9 +463,11 @@ function inferFieldsFromText(values, text, files) {
     receivable: contract ? Math.max(contract - paid, 0) : 0,
     costBudget: costUsed,
     costUsed,
-    servicePeriod: dates.slice(0, 2).join(" 至 "),
-    nextMilestone: dates[0] || "",
-    paymentDue: dates[1] || dates[0] || "",
+    partyA: parties.partyA,
+    partyB: parties.partyB,
+    servicePeriod,
+    nextMilestone: servicePeriod || dates[0] || "",
+    paymentDue: guessDateByLabels(text, ["付款期限", "付款时间", "回款节点", "付款节点", "尾款", "余款"]) || dates[1] || dates[0] || "",
     risk: inferRisk({ contract, costBudget: costUsed, costUsed, receivable: contract - paid }),
     summary: files.length
       ? `已读取 ${files.length} 个文件，抽取到 ${amounts.length} 个金额字段、${dates.length} 个日期字段。`
@@ -367,17 +479,17 @@ function inferFieldsFromText(values, text, files) {
 }
 
 function normalizeParsedFields(parsed, values, files) {
-  const contract = Number(parsed.contract || values["合同金额"] || 0);
-  const paid = Number(parsed.paid || 0);
-  const costUsed = Number(parsed.costUsed || 0);
+  const contract = parseMoney(parsed.contract) || parseMoney(values["合同金额"]);
+  const paid = parseMoney(parsed.paid);
+  const costUsed = parseMoney(parsed.costUsed);
   return {
     ...parsed,
     projectName: parsed.projectName || values["项目名称"] || "",
     client: parsed.client || values["客户 / 品牌"] || "",
     contract,
     paid,
-    receivable: Number(parsed.receivable ?? Math.max(contract - paid, 0)),
-    costBudget: Number(parsed.costBudget || costUsed || 0),
+    receivable: parseMoney(parsed.receivable) || Math.max(contract - paid, 0),
+    costBudget: parseMoney(parsed.costBudget) || costUsed || 0,
     costUsed,
     risk: parsed.risk || inferRisk({ contract, costBudget: parsed.costBudget, costUsed, receivable: parsed.receivable }),
     summary: parsed.summary || `已完成 ${files.length} 个文件的结构化解析。`,
@@ -391,22 +503,113 @@ function normalizeParsedFields(parsed, values, files) {
 }
 
 function normalizePair(item) {
-  if (Array.isArray(item)) return [String(item[0] || "未命名"), Number(item[1] || 0)];
-  if (item && typeof item === "object") return [String(item.name || item.type || "未命名"), Number(item.value || item.amount || item.progress || 0)];
+  if (Array.isArray(item)) return [String(item[0] || "未命名"), parseMoney(item[1])];
+  if (item && typeof item === "object") return [String(item.name || item.type || "未命名"), parseMoney(item.value || item.amount || item.progress)];
   return null;
 }
 
 function extractAmounts(text) {
   const values = [];
-  const pattern = /(?:人民币|RMB|￥|¥)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(万元|万|元)?/g;
+  const pattern = /(?:人民币|RMB|￥|¥)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(亿元|亿|万元|万|元)?/g;
   for (const match of text.matchAll(pattern)) {
+    const rawText = match[0];
+    if (looksLikeDateOrIdentifier(text, match.index || 0, rawText)) continue;
     const raw = Number(match[1].replaceAll(",", ""));
     if (!Number.isFinite(raw)) continue;
     const unit = match[2] || "";
-    const amount = unit.includes("万") ? raw * 10000 : raw;
+    const amount = unit.includes("亿") ? raw * 100000000 : unit.includes("万") ? raw * 10000 : raw;
     if (amount >= 100) values.push(amount);
   }
   return values.sort((a, b) => b - a);
+}
+
+function extractContractAmount(text) {
+  const labels = [
+    "合同金额",
+    "合同总金额",
+    "合同总价",
+    "合同价款",
+    "合同价",
+    "项目金额",
+    "项目总价",
+    "服务费用总额",
+    "服务费总额",
+    "服务费用",
+    "费用总额",
+    "总金额",
+    "总价",
+    "价款",
+    "金额大写",
+    "人民币大写"
+  ];
+
+  const candidates = [];
+  for (const label of labels) {
+    for (const match of text.matchAll(new RegExp(label, "g"))) {
+      const start = Math.max(0, match.index - 20);
+      const snippet = text.slice(start, match.index + 180);
+      for (const amount of extractAmountCandidates(snippet)) {
+        candidates.push({ ...amount, score: amount.score + labelScore(label) });
+      }
+    }
+  }
+
+  if (!candidates.length) {
+    for (const amount of extractAmountCandidates(text.slice(0, 5000))) {
+      candidates.push(amount);
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score || b.value - a.value);
+  return candidates[0]?.value || 0;
+}
+
+function extractAmountCandidates(text) {
+  const candidates = [];
+  const pattern = /(?:人民币|RMB|￥|¥)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?|[壹贰叁肆伍陆柒捌玖拾佰仟万亿零一二三四五六七八九十百千万两]+)\s*(亿元|亿|万元|万|元|圆)?/g;
+  for (const match of text.matchAll(pattern)) {
+    const raw = match[0].trim();
+    if (!raw || looksLikeDateOrIdentifier(text, match.index || 0, raw)) continue;
+    const value = parseMoney(raw);
+    if (!value || value < 100) continue;
+
+    const unit = match[2] || "";
+    const context = text.slice(Math.max(0, (match.index || 0) - 30), (match.index || 0) + raw.length + 30);
+    const hasMoneyUnit = Boolean(unit || /人民币|RMB|￥|¥|元|圆|万|亿/.test(raw));
+    const hasContractContext = /(合同|价款|总价|总额|金额|费用|服务费|付款|回款|含税|不含税)/.test(context);
+    const noUnitLongNumber = /^\d{7,}$/.test(raw.replace(/[^\d]/g, "")) && !hasMoneyUnit;
+    if (noUnitLongNumber && !hasContractContext) continue;
+
+    candidates.push({
+      value,
+      raw,
+      score: (hasContractContext ? 60 : 0) + (hasMoneyUnit ? 80 : 0) + (value >= 10000 ? 20 : 0) - (noUnitLongNumber ? 120 : 0)
+    });
+  }
+  return candidates;
+}
+
+function labelScore(label) {
+  if (/合同总金额|合同金额|合同价款|合同总价/.test(label)) return 100;
+  if (/项目金额|项目总价|服务费总额|总金额|总价/.test(label)) return 80;
+  return 60;
+}
+
+function looksLikeDateOrIdentifier(text, index, raw) {
+  const compact = raw.replace(/\s/g, "");
+  const before = text.slice(Math.max(0, index - 12), index);
+  const after = text.slice(index + raw.length, index + raw.length + 12);
+  const around = `${before}${raw}${after}`;
+  const numeric = compact.replace(/[^\d]/g, "");
+
+  if (/^\d{4}$/.test(numeric) && (/^\s*年/.test(after) || /[-/.]\d{1,2}/.test(after) || /第.*$/.test(before) || /年度/.test(after))) return true;
+  if (!/万|亿|元|圆|人民币|RMB|￥|¥/.test(around) && /^\D*\d{4}\s*[-/.年]\s*\d{1,2}/.test(`${raw}${after}`)) return true;
+  if (/^\D*\d{1,2}\s*月\s*\d{1,2}/.test(`${raw}${after}`)) return true;
+  if (!/万|亿|元|圆|人民币|RMB|￥|¥/.test(around) && /^\D*\d{1,2}\s*[-/.]\s*\d{1,2}/.test(`${raw}${after}`)) return true;
+  if (/编号|合同编号|税号|电话|手机|传真|账号|开户行|统一社会信用代码|身份证|日期|签订|年月日/.test(around) && !/金额|价款|总价|费用|人民币|元|万|亿/.test(around)) return true;
+  if (/^\d{6,}$/.test(numeric) && !/金额|价款|总价|费用|人民币|元|万|亿/.test(around)) return true;
+  if (/^\d{11}$/.test(numeric) && /电话|手机|联系方式|联系人/.test(around)) return true;
+  return false;
 }
 
 function extractDates(text) {
@@ -422,6 +625,60 @@ function extractDates(text) {
   return Array.from(dates).slice(0, 8);
 }
 
+function extractServicePeriod(text, dates = extractDates(text)) {
+  const labels = ["服务期限", "服务期间", "服务周期", "合同期限", "合同有效期", "合作期限", "执行周期", "项目周期", "履行期限"];
+  for (const label of labels) {
+    for (const match of text.matchAll(new RegExp(label, "g"))) {
+      const snippet = text.slice(match.index, match.index + 180);
+      const period = findDateRange(snippet);
+      if (period) return period;
+    }
+  }
+
+  return findDateRange(text.slice(0, 5000)) || dates.slice(0, 2).join(" 至 ");
+}
+
+function findDateRange(text) {
+  const datePattern = "\\d{4}\\s*[-/.年]\\s*\\d{1,2}(?:\\s*[-/.月]\\s*\\d{1,2}\\s*日?)?|\\d{4}\\s*年\\s*\\d{1,2}\\s*月(?:\\s*\\d{1,2}\\s*日?)?|\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日";
+  const range = new RegExp(`(?:自|从)?\\s*(${datePattern})\\s*(?:起)?\\s*(?:至|到|—|-|~|起至|截至|截止至)\\s*(${datePattern})`);
+  const match = text.match(range);
+  if (!match) return "";
+  return `${cleanDateText(match[1])} 至 ${cleanDateText(match[2])}`;
+}
+
+function cleanDateText(value) {
+  return String(value).replace(/\s+/g, "");
+}
+
+function guessDateByLabels(text, labels) {
+  for (const label of labels) {
+    const index = text.indexOf(label);
+    if (index === -1) continue;
+    const dates = extractDates(text.slice(index, index + 160));
+    if (dates[0]) return dates[0];
+  }
+  return "";
+}
+
+function extractParties(text) {
+  const partyA = cleanPartyName(
+    guessText(text, ["甲方", "委托方", "采购方", "发包方", "客户名称", "客户"])
+  );
+  const partyB = cleanPartyName(
+    guessText(text, ["乙方", "受托方", "服务方", "承包方", "供应商名称", "服务商"])
+  );
+
+  return { partyA, partyB };
+}
+
+function cleanPartyName(value) {
+  return String(value || "")
+    .replace(/^(名称|单位|公司|联系人)\s*[:：]?/, "")
+    .replace(/[（(].*?[）)]/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
 function guessAmount(text, labels) {
   for (const label of labels) {
     const index = text.indexOf(label);
@@ -434,9 +691,9 @@ function guessAmount(text, labels) {
 
 function guessText(text, labels) {
   for (const label of labels) {
-    const pattern = new RegExp(`${label}\\s*[:：]?\\s*([^\\n，,。；;]{2,40})`);
+    const pattern = new RegExp(`${label}\\s*(?:名称|单位)?\\s*[:：]?\\s*([^\\n，,。；;]{2,60})`);
     const match = text.match(pattern);
-    if (match) return match[1].trim();
+    if (match) return match[1].replace(/^(为|是|系)/, "").trim();
   }
   return "";
 }

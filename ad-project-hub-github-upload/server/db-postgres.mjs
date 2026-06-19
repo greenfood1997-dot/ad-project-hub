@@ -35,7 +35,13 @@ export async function readPostgresDb() {
   ] = await Promise.all([
     db.query("select id, name, role, department from users order by created_at asc"),
     db.query("select type, values from settings"),
-    db.query("select id, name, client, owner, contract::float, status, risk, created_by as \"createdBy\", created_at as \"createdAt\" from projects order by created_at desc"),
+    db.query(`select id, name, client, owner, contract::float,
+      cost_budget::float as "costBudget", cost_used::float as "costUsed",
+      paid::float, receivable::float, status, risk, ai_summary as "aiSummary",
+      next_milestone as "nextMilestone", payment_due as "paymentDue",
+      margin::float, tasks, costs, extracted_fields as "extractedFields",
+      created_by as "createdBy", created_at as "createdAt"
+      from projects order by created_at desc`),
     db.query("select project_id as \"projectId\", project_name as \"projectName\", name, size, mime_type as type, storage_url as \"storageUrl\", uploaded_at as \"uploadedAt\" from project_files order by uploaded_at desc"),
     db.query("select id, project_id as \"projectId\", project_name as \"projectName\", status, progress, steps, files, created_at as \"createdAt\", updated_at as \"updatedAt\" from parse_jobs order by created_at desc"),
     db.query("select supplier, project, type, amount::float, status from suppliers order by created_at desc"),
@@ -90,8 +96,33 @@ export async function writePostgresDbFromSnapshot(snapshot) {
 
     for (const project of snapshot.projects || []) {
       await db.query(
-        "insert into projects (id, name, client, owner, contract, status, risk, created_by, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-        [project.id, project.name, project.client, project.owner, project.contract || 0, project.status, project.risk, project.createdBy || null, project.createdAt || new Date().toISOString()]
+        `insert into projects (
+          id, name, client, owner, contract, cost_budget, cost_used, paid,
+          receivable, status, risk, ai_summary, next_milestone, payment_due,
+          margin, tasks, costs, extracted_fields, created_by, created_at
+        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+        [
+          project.id,
+          project.name,
+          project.client,
+          project.owner,
+          project.contract || 0,
+          project.costBudget || 0,
+          project.costUsed || 0,
+          project.paid || 0,
+          project.receivable || 0,
+          project.status,
+          project.risk,
+          project.aiSummary || "",
+          project.nextMilestone || "",
+          project.paymentDue || "",
+          project.margin || 0,
+          JSON.stringify(project.tasks || []),
+          JSON.stringify(project.costs || []),
+          JSON.stringify(project.extractedFields || {}),
+          project.createdBy || null,
+          project.createdAt || new Date().toISOString()
+        ]
       );
       for (const file of project.files || []) {
         await db.query(

@@ -19,11 +19,34 @@ create table if not exists projects (
   client text,
   owner text,
   contract numeric not null default 0,
+  cost_budget numeric not null default 0,
+  cost_used numeric not null default 0,
+  paid numeric not null default 0,
+  receivable numeric not null default 0,
   status text not null default '草稿',
   risk text not null default '低',
+  ai_summary text,
+  next_milestone text,
+  payment_due text,
+  margin numeric not null default 0,
+  tasks jsonb not null default '[]'::jsonb,
+  costs jsonb not null default '[]'::jsonb,
+  extracted_fields jsonb not null default '{}'::jsonb,
   created_by text references users(id),
   created_at timestamptz not null default now()
 );
+
+alter table projects add column if not exists cost_budget numeric not null default 0;
+alter table projects add column if not exists cost_used numeric not null default 0;
+alter table projects add column if not exists paid numeric not null default 0;
+alter table projects add column if not exists receivable numeric not null default 0;
+alter table projects add column if not exists ai_summary text;
+alter table projects add column if not exists next_milestone text;
+alter table projects add column if not exists payment_due text;
+alter table projects add column if not exists margin numeric not null default 0;
+alter table projects add column if not exists tasks jsonb not null default '[]'::jsonb;
+alter table projects add column if not exists costs jsonb not null default '[]'::jsonb;
+alter table projects add column if not exists extracted_fields jsonb not null default '{}'::jsonb;
 
 create table if not exists project_files (
   id bigserial primary key,
