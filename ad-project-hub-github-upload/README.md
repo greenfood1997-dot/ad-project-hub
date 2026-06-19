@@ -11,7 +11,14 @@ node server.mjs
 打开：
 
 ```text
-http://127.0.0.1:4173
+http://127.0.0.1:10000
+```
+
+部署到 Render 时，Web Service 需要监听 `0.0.0.0`，并使用平台注入的 `PORT`。
+本项目默认已经兼容 Render：
+
+```bash
+npm start
 ```
 
 ## 已支持
