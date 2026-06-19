@@ -80,6 +80,7 @@
       .project-row.selected { border-color: #2563eb; background: #f4f8ff; }
       .project-row strong, .project-row span { display: block; }
       .project-row strong { margin-bottom: 6px; }
+      .parse-list-status { display: inline-flex; margin-top: 7px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; padding: 3px 8px; font-size: 12px; font-style: normal; }
       .row-right { align-items: center; gap: 10px; flex-shrink: 0; }
       .risk { display: inline-flex; min-width: 58px; justify-content: center; border-radius: 999px; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
       .risk-high { color: #b91c1c; background: #fee2e2; }
@@ -445,7 +446,14 @@
           projectRows.innerHTML = `<div class="empty-state">暂无项目。点击右上角“新建项目”开始录入。</div>`;
           return;
         }
-        projectRows.innerHTML = visibleProjects.map(p => `<button class="project-row ${p.id === selectedId ? "selected" : ""}" data-id="${p.id}"><div><strong>${p.name}</strong><span>${p.client || "未填写客户"} · ${p.owner || "未分配负责人"}</span></div><div class="row-right"><b class="risk ${riskClass(p.risk)}">${p.risk}风险</b><span>${p.status}</span><span>›</span></div></button>`).join("");
+        projectRows.innerHTML = visibleProjects.map(p => {
+          const job = (appState.parseJobs || []).find((item) => item.projectId === p.id);
+          const parsing = job && job.status !== "已完成";
+          return `<button class="project-row ${p.id === selectedId ? "selected" : ""}" data-id="${p.id}">
+            <div><strong>${p.name}</strong><span>${p.client || "未填写客户"} · ${p.owner || "未分配负责人"}</span>${job ? `<em class="parse-list-status">${job.status} · ${job.progress}%</em>` : ""}</div>
+            <div class="row-right"><b class="risk ${riskClass(p.risk)}">${p.risk}风险</b><span>${parsing ? "AI解析中" : p.status}</span><span>›</span></div>
+          </button>`;
+        }).join("");
         document.querySelectorAll(".project-row").forEach(row => row.addEventListener("click", () => { selectedId = row.dataset.id; renderRows(); renderDetail(); }));
       }
       function renderDetail() {
@@ -465,15 +473,20 @@
           <div class="summary"><span>AI</span><p>${p.aiSummary || "文件已记录，等待 AI 解析任务生成结构化字段。"}</p></div>
           <div class="detail-metrics"><div class="mini"><span>合同金额</span><strong>${money(p.contract || 0)}</strong></div><div class="mini"><span>成本使用</span><strong>${usedRate || 0}%</strong></div><div class="mini"><span>已回款</span><strong>${money(p.paid || 0)}</strong></div><div class="mini"><span>毛利率</span><strong>${p.margin || 0}%</strong></div></div>
           <div class="split"><div><h3>执行进度</h3>${(p.tasks || []).map(([name,value]) => `<div class="progress-row"><span>${name}</span><div><i style="width:${value}%"></i></div><b>${value}%</b></div>`).join("") || `<p class="focus-note">暂无执行进度。</p>`}</div><div><h3>成本构成</h3>${(p.costs || []).map(([name,value]) => `<div class="cost-row"><span>${name}</span><b>${money(value)}</b></div>`).join("") || `<p class="focus-note">暂无成本数据。</p>`}<div class="cost-row"><span>供应商计入成本</span><b>${money(supplierCost)}</b></div></div></div>
-          <div class="focus-card job-box"><div class="panel-row"><h3>AI 解析进度</h3>${parseJob ? `<button class="tiny-btn" data-refresh-job="${parseJob.id}">刷新进度</button>` : ""}</div>${parseJob ? `<p class="focus-note">${parseJob.status} · ${parseJob.progress}%</p><div class="job-progress"><i style="width:${parseJob.progress}%"></i></div><div class="job-steps">${parseJob.steps.map(step => `<div class="job-step"><strong>${step.name}</strong>${step.status}</div>`).join("")}</div>` : `<p class="focus-note">暂无解析任务。上传合同或执行表后会显示解析进度。</p>`}</div>
+          <div class="focus-card job-box"><div class="panel-row"><h3>AI 解析进度</h3>${parseJob && parseJob.status !== "已完成" ? `<button class="tiny-btn" data-refresh-job="${parseJob.id}">刷新解析进度</button>` : parseJob ? `<button class="tiny-btn" data-refresh-job="${parseJob.id}">查看最新结果</button>` : ""}</div>${parseJob ? `<p class="focus-note">${parseJob.status} · ${parseJob.progress}%${parseJob.status !== "已完成" ? "，关闭窗口后也可在项目台账继续查看。" : "，结构化字段已写入项目。"}</p><div class="job-progress"><i style="width:${parseJob.progress}%"></i></div><div class="job-steps">${parseJob.steps.map(step => `<div class="job-step"><strong>${step.name}</strong>${step.status}</div>`).join("")}</div>${parseJob.extractedFields?.summary ? `<div class="summary" style="margin-bottom:0"><span>结果</span><p>${parseJob.extractedFields.summary}</p></div>` : ""}` : `<p class="focus-note">暂无解析任务。上传合同或执行表后会显示解析进度。</p>`}</div>
           <div class="focus-card" style="margin-top:16px"><h3>供应商费用归属</h3>${relatedSuppliers.length ? relatedSuppliers.map(item => `<div class="cost-row"><span>${item.supplier} · ${item.type}</span><b>${money(item.amount)} / ${item.status}</b></div>`).join("") : `<p class="focus-note">暂无供应商费用。</p>`}</div>
           <div class="timeline"><div><span>下一节点</span><strong>${p.nextMilestone || "暂无"}</strong></div><div><span>回款节点</span><strong>${p.paymentDue || "暂无"}</strong></div></div>`;
         document.querySelectorAll("[data-refresh-job]").forEach(btn => btn.addEventListener("click", async () => {
           try {
+            btn.textContent = "更新中...";
             await apiPost("/api/parse-jobs/progress", { id: btn.dataset.refreshJob });
             await loadState();
             renderDetail();
-            showToast("解析进度已更新");
+            renderRows();
+            renderDashboard();
+            renderCash();
+            renderSuppliers();
+            showToast("解析进度已更新，可在台账继续查看");
           } catch (error) {
             showToast(error.message);
           }
@@ -715,12 +728,15 @@
             }
             if (btn.dataset.uploadProject !== undefined) {
               await recordSelectedFiles();
-              await createProjectFromDrawer();
+              const created = await createProjectFromDrawer();
               await loadState();
+              selectedId = created?.data?.project?.id || projects[0]?.id || selectedId;
               renderRows();
               renderDetail();
               renderDashboard();
               renderCash();
+              renderSuppliers();
+              switchView("projectsView");
             }
             if (btn.dataset.applyFilter !== undefined) {
               const values = collectDrawerValues();
@@ -800,15 +816,27 @@
           name: file.name,
           size: file.size,
           type: file.type || "unknown",
-          text: await readFileText(file)
+          text: await readFilePreviewText(file),
+          base64: await readFileBase64(file)
         })));
         updateParsePreview(selectedFilePayloads);
         return selectedFilePayloads;
       }
-      async function readFileText(file) {
+      async function readFilePreviewText(file) {
         const readable = /\.(txt|csv|json|md|html|xml|tsv)$/i.test(file.name) || /^text\//.test(file.type || "");
-        if (!readable) return `文件名：${file.name}\n文件类型：${file.type || "unknown"}\n文件大小：${file.size} bytes`;
+        if (!readable) return `文件名：${file.name}\n文件类型：${file.type || "unknown"}\n文件大小：${file.size} bytes\n文件内容将在服务端提取并交给 AI 解析。`;
         return await file.text();
+      }
+      function readFileBase64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const value = String(reader.result || "");
+            resolve(value.includes(",") ? value.split(",")[1] : value);
+          };
+          reader.onerror = () => reject(new Error(`读取文件失败：${file.name}`));
+          reader.readAsDataURL(file);
+        });
       }
       function updateParsePreview(files) {
         const preview = document.querySelector(".parse-preview");
@@ -836,7 +864,7 @@
       async function createProjectFromDrawer() {
         const values = collectDrawerValues();
         const files = await buildSelectedFilePayloads();
-        await apiPost("/api/projects", {
+        return await apiPost("/api/projects", {
           values,
           files,
         });

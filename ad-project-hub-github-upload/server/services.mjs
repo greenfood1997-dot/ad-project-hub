@@ -1,52 +1,38 @@
-export async function createProject(db, values, files, user) {
-  if (!values?.["项目名称"]) throw new Error("请填写项目名称");
+export function createProject(db, values, files, user) {
+  if (!values?.["项目名称"] && !files.length) throw new Error("请填写项目名称或先上传合同/执行表");
   const now = new Date().toISOString();
-  const parsed = await analyzeProjectFiles(db.settings?.aiService, values, files);
-  const contract = Number(values["合同金额"] || parsed.contract || 0);
-  const costBudget = Number(parsed.costBudget || 0);
-  const costUsed = Number(parsed.costUsed || 0);
-  const paid = Number(parsed.paid || 0);
-  const receivable = Number(parsed.receivable || Math.max(contract - paid, 0));
+  const contract = Number(values["合同金额"] || 0);
   const project = {
     id: `P-${Date.now()}`,
-    name: values["项目名称"] || parsed.projectName || "未命名项目",
-    client: values["客户 / 品牌"] || parsed.client || "",
+    name: values["项目名称"] || `待解析合同-${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+    client: values["客户 / 品牌"] || "",
     owner: values["负责人"] || user.name,
     contract,
-    costBudget,
-    costUsed,
-    paid,
-    receivable,
-    status: files.length ? "解析完成" : "草稿",
-    risk: parsed.risk || inferRisk({ contract, costBudget, costUsed, receivable }),
-    aiSummary: parsed.summary || (files.length ? "文件已解析，结构化字段已同步到项目台账。" : ""),
-    nextMilestone: parsed.nextMilestone || parsed.servicePeriod || "",
-    paymentDue: parsed.paymentDue || "",
-    margin: contract ? Math.max(0, Math.round(((contract - costUsed) / contract) * 100)) : 0,
-    tasks: parsed.tasks || [],
-    costs: parsed.costs || [],
-    extractedFields: parsed,
+    costBudget: 0,
+    costUsed: 0,
+    paid: 0,
+    receivable: contract,
+    status: files.length ? "AI解析中" : "草稿",
+    risk: "低",
+    aiSummary: files.length ? "合同/执行表已进入 AI 解析队列，可在项目详情查看解析进度。" : "",
+    nextMilestone: "",
+    paymentDue: "",
+    margin: 0,
+    tasks: [],
+    costs: [],
+    extractedFields: {},
     createdAt: now,
     createdBy: user.id,
     files
   };
-  const parseJob = createParseJob(project, files, parsed);
+  const parseJob = createParseJob(project, files, {}, values);
   db.projects.unshift(project);
-  for (const supplier of parsed.suppliers || []) {
-    db.suppliers.unshift({
-      supplier: supplier.supplier || supplier.name || "未命名供应商",
-      project: project.name,
-      type: supplier.type || "项目费用",
-      amount: Number(supplier.amount || 0),
-      status: supplier.status || "待结算"
-    });
-  }
   db.parseJobs.unshift(parseJob);
   db.auditLogs.unshift({ type: "project", target: project.name, action: "create", user: user.name, at: now });
   return { project, parseJob };
 }
 
-export function createParseJob(project, files, parsed = {}) {
+export function createParseJob(project, files, parsed = {}, sourceValues = {}) {
   const now = new Date().toISOString();
   const finished = files.length && (parsed.summary || parsed.contract || parsed.client);
   return {
@@ -62,13 +48,14 @@ export function createParseJob(project, files, parsed = {}) {
       { name: "写入项目", status: finished ? "完成" : "等待" }
     ],
     files,
+    sourceValues,
     extractedFields: parsed,
     createdAt: now,
     updatedAt: now
   };
 }
 
-export function advanceParseJob(db, idOrProjectId) {
+export async function advanceParseJob(db, idOrProjectId) {
   const job = db.parseJobs.find((item) => item.id === idOrProjectId || item.projectId === idOrProjectId);
   if (!job) throw new Error("解析任务不存在");
   job.progress = Math.min(100, job.progress + 25);
@@ -79,7 +66,71 @@ export function advanceParseJob(db, idOrProjectId) {
     return { ...step, status: job.progress >= threshold ? "完成" : index === current ? "进行中" : "等待" };
   });
   job.updatedAt = new Date().toISOString();
+
+  if (job.progress >= 75 && !job.extractedFields?.summary) {
+    const project = db.projects.find((item) => item.id === job.projectId);
+    if (project) {
+      job.status = "解析中";
+      job.steps = setStepStatus(job.steps, "字段识别", "进行中");
+      const parsed = await analyzeProjectFiles(db.settings?.aiService, job.sourceValues || {}, job.files || []);
+      applyParsedFields(db, project, job, parsed);
+    }
+  }
+
   return job;
+}
+
+function setStepStatus(steps, name, status) {
+  return steps.map((step) => step.name === name ? { ...step, status } : step);
+}
+
+function applyParsedFields(db, project, job, parsed) {
+  const contract = Number(project.contract || parsed.contract || 0);
+  const costBudget = Number(parsed.costBudget || 0);
+  const costUsed = Number(parsed.costUsed || 0);
+  const paid = Number(parsed.paid || 0);
+  const receivable = Number(parsed.receivable || Math.max(contract - paid, 0));
+  const oldName = project.name;
+
+  Object.assign(project, {
+    name: project.name.startsWith("待解析合同-") && parsed.projectName ? parsed.projectName : project.name,
+    client: project.client || parsed.client || "",
+    contract,
+    costBudget,
+    costUsed,
+    paid,
+    receivable,
+    status: "解析完成",
+    risk: parsed.risk || inferRisk({ contract, costBudget, costUsed, receivable }),
+    aiSummary: parsed.summary || "文件已解析，结构化字段已同步到项目台账。",
+    nextMilestone: parsed.nextMilestone || parsed.servicePeriod || "",
+    paymentDue: parsed.paymentDue || "",
+    margin: contract ? Math.max(0, Math.round(((contract - costUsed) / contract) * 100)) : 0,
+    tasks: parsed.tasks || [],
+    costs: parsed.costs || [],
+    extractedFields: parsed
+  });
+
+  job.projectName = project.name;
+  job.status = "已完成";
+  job.progress = 100;
+  job.extractedFields = parsed;
+  job.updatedAt = new Date().toISOString();
+  job.steps = job.steps.map((step) => ({ ...step, status: "完成" }));
+
+  for (const supplier of parsed.suppliers || []) {
+    db.suppliers.unshift({
+      supplier: supplier.supplier || supplier.name || "未命名供应商",
+      project: project.name,
+      type: supplier.type || "项目费用",
+      amount: Number(supplier.amount || 0),
+      status: supplier.status || "待结算"
+    });
+  }
+
+  for (const supplier of db.suppliers || []) {
+    if (supplier.project === oldName) supplier.project = project.name;
+  }
 }
 
 export function validateAiSettings(values) {
@@ -182,11 +233,12 @@ export function normalizeAiSettings(values = {}) {
 }
 
 async function analyzeProjectFiles(aiSettings, values, files) {
-  const text = files
-    .map((file) => `文件：${file.name}\n${file.text || ""}`)
+  const extractedFiles = await Promise.all(files.map(extractFileContent));
+  const text = extractedFiles
+    .map((file) => `文件：${file.name}\n类型：${file.type || "unknown"}\n提取状态：${file.extractionStatus}\n${file.text || ""}`)
     .join("\n\n")
-    .slice(0, 30000);
-  const fallback = inferFieldsFromText(values, text, files);
+    .slice(0, 50000);
+  const fallback = inferFieldsFromText(values, text, extractedFiles);
 
   if (!text.trim() || !aiSettings?.["API Key"]) return fallback;
 
@@ -205,11 +257,11 @@ async function analyzeProjectFiles(aiSettings, values, files) {
         messages: [
           {
             role: "system",
-            content: "你是广告项目经营中台的文件解析助手。只返回 JSON，不要 Markdown。字段包括 projectName, client, contract, paid, receivable, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, suppliers, tasks。金额返回数字，日期保留原文。"
+            content: "你是广告项目经营中台的文件解析和自动归档助手。你要把合同、报价单、执行表、排期表、供应商结算表中的关键信息归类到项目中台。只返回 JSON，不要 Markdown。字段包括 projectName, client, contract, paid, receivable, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, suppliers, tasks, archiveTags, confidence, missingFields。金额返回数字，日期保留原文。costs 为 [科目, 金额]；suppliers 为对象数组，含 supplier,type,amount,status；tasks 为 [节点, 进度百分比]。"
           },
           {
             role: "user",
-            content: `表单字段：${JSON.stringify(values)}\n\n请从以下合同/执行表文本中抽取项目经营字段：\n${text}`
+            content: `表单字段：${JSON.stringify(values)}\n\n请从以下上传文件内容中抽取并自动归档项目经营字段，同步项目进度、回款进度、成本科目和供应商费用：\n${text}`
           }
         ]
       })
@@ -223,6 +275,54 @@ async function analyzeProjectFiles(aiSettings, values, files) {
       ...fallback,
       summary: `${fallback.summary} AI 解析未完成，已使用本地规则抽取。原因：${error.message}`
     };
+  }
+}
+
+async function extractFileContent(file) {
+  const name = file.name || "未命名文件";
+  const type = file.type || "";
+  const lowerName = name.toLowerCase();
+  const fallback = {
+    ...file,
+    text: file.text || `文件名：${name}\n文件类型：${type || "unknown"}\n文件大小：${file.size || 0} bytes`,
+    extractionStatus: "仅记录文件信息"
+  };
+
+  try {
+    if (file.text && !file.base64) return { ...file, extractionStatus: "浏览器已读取文本" };
+    if (!file.base64) return fallback;
+
+    const buffer = Buffer.from(file.base64, "base64");
+    if (lowerName.endsWith(".pdf") || type === "application/pdf") {
+      const pdfParse = (await import("pdf-parse")).default;
+      const parsed = await pdfParse(buffer);
+      return { ...file, text: parsed.text || "", extractionStatus: parsed.text ? "PDF 文本提取成功" : "PDF 未提取到文本，可能是扫描件" };
+    }
+
+    if (lowerName.endsWith(".docx") || type.includes("wordprocessingml")) {
+      const mammoth = await import("mammoth");
+      const parsed = await mammoth.extractRawText({ buffer });
+      return { ...file, text: parsed.value || "", extractionStatus: parsed.value ? "Word 文本提取成功" : "Word 未提取到文本" };
+    }
+
+    if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsm") || type.includes("spreadsheet")) {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+      const text = workbook.SheetNames.map((sheetName) => {
+        const sheet = workbook.Sheets[sheetName];
+        const csv = XLSX.utils.sheet_to_csv(sheet);
+        return `工作表：${sheetName}\n${csv}`;
+      }).join("\n\n");
+      return { ...file, text, extractionStatus: text ? "Excel 表格提取成功" : "Excel 未提取到表格内容" };
+    }
+
+    if (lowerName.endsWith(".csv") || lowerName.endsWith(".txt") || lowerName.endsWith(".md") || lowerName.endsWith(".tsv") || type.startsWith("text/")) {
+      return { ...file, text: buffer.toString("utf8"), extractionStatus: "文本文件读取成功" };
+    }
+
+    return fallback;
+  } catch (error) {
+    return { ...fallback, extractionStatus: `文件内容提取失败：${error.message}` };
   }
 }
 
@@ -283,7 +383,10 @@ function normalizeParsedFields(parsed, values, files) {
     summary: parsed.summary || `已完成 ${files.length} 个文件的结构化解析。`,
     costs: Array.isArray(parsed.costs) ? parsed.costs.map(normalizePair).filter(Boolean) : [],
     suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : [],
-    tasks: Array.isArray(parsed.tasks) ? parsed.tasks.map(normalizePair).filter(Boolean) : []
+    tasks: Array.isArray(parsed.tasks) ? parsed.tasks.map(normalizePair).filter(Boolean) : [],
+    archiveTags: Array.isArray(parsed.archiveTags) ? parsed.archiveTags : [],
+    confidence: parsed.confidence || "",
+    missingFields: Array.isArray(parsed.missingFields) ? parsed.missingFields : []
   };
 }
 
