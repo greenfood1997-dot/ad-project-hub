@@ -82,6 +82,27 @@ npm run serve
 db/schema.postgres.sql
 ```
 
+## 腾讯云 OCR
+
+扫描版 PDF 或图片合同无法直接用 `pdf-parse` 读取正文。配置腾讯云 OCR 后，系统会在 PDF 无文本时自动调用 OCR，再把识别出的文字交给合同解析逻辑。
+
+在 Render 的 Environment 中配置：
+
+```env
+TENCENT_SECRET_ID=你的 SecretId
+TENCENT_SECRET_KEY=你的 SecretKey
+TENCENT_OCR_REGION=ap-guangzhou
+```
+
+可选配置：
+
+```env
+TENCENT_OCR_ACTION=GeneralAccurateOCR
+TENCENT_OCR_PDF_PAGES=3
+```
+
+`TENCENT_OCR_PDF_PAGES` 表示扫描 PDF 最多识别前几页，默认 3 页。
+
 ## 下一步生产化
 
 - 用户登录和角色权限

@@ -1,3 +1,5 @@
+import { recognizeFileWithTencentOcr, tencentOcrConfigured } from "./tencent-ocr.mjs";
+
 export async function createProject(db, values, files, user) {
   if (!values?.["项目名称"] && !files.length) throw new Error("请填写项目名称或先上传合同/执行表");
   const now = new Date().toISOString();
@@ -352,30 +354,7 @@ async function analyzeProjectFiles(aiSettings, values, files) {
 
   try {
     const ai = normalizeAiSettings(aiSettings);
-    const res = await fetch(`${ai["Base URL"].replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${ai["API Key"]}`
-      },
-      body: JSON.stringify({
-        model: ai["模型名称"] || "deepseek-chat",
-        temperature: 0.1,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: "你是广告项目经营中台的文件解析和自动归档助手。你要把合同、报价单、执行表、排期表、供应商结算表中的关键信息归类到项目中台。只返回 JSON，不要 Markdown。字段包括 projectName, client, contract, paid, receivable, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, suppliers, tasks, archiveTags, confidence, missingFields。金额返回数字，日期保留原文。costs 为 [科目, 金额]；suppliers 为对象数组，含 supplier,type,amount,status；tasks 为 [节点, 进度百分比]。"
-          },
-          {
-            role: "user",
-            content: `表单字段：${JSON.stringify(values)}\n\n请从以下上传文件内容中抽取并自动归档项目经营字段，同步项目进度、回款进度、成本科目和供应商费用：\n${text}`
-          }
-        ]
-      })
-    });
-    if (!res.ok) throw new Error(`AI 服务返回 ${res.status}`);
-    const data = await res.json();
+    const data = await requestAiJson(ai, values, text);
     const content = data.choices?.[0]?.message?.content || "{}";
     return normalizeParsedFields({ ...fallback, ...parseJsonObject(content) }, values, files);
   } catch (error) {
@@ -383,6 +362,61 @@ async function analyzeProjectFiles(aiSettings, values, files) {
       ...fallback,
       summary: `${fallback.summary} AI 解析未完成，已使用本地规则抽取。原因：${error.message}`
     };
+  }
+}
+
+async function requestAiJson(ai, values, text) {
+  const url = `${ai["Base URL"].replace(/\/$/, "")}/chat/completions`;
+  const messages = [
+    {
+      role: "system",
+      content: "你是广告项目经营中台的文件解析和自动归档助手。你要把合同、报价单、执行表、排期表、供应商结算表中的关键信息归类到项目中台。只返回 JSON，不要 Markdown。字段包括 projectName, client, partyA, partyB, contract, paid, receivable, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, suppliers, tasks, archiveTags, confidence, missingFields。金额返回数字，日期保留原文。costs 为 [科目, 金额]；suppliers 为对象数组，含 supplier,type,amount,status；tasks 为 [节点, 进度百分比]。"
+    },
+    {
+      role: "user",
+      content: `表单字段：${JSON.stringify(values)}\n\n请从以下上传文件内容中抽取并自动归档项目经营字段，同步项目进度、回款进度、成本科目和供应商费用：\n${text}`
+    }
+  ];
+  const baseBody = {
+    model: ai["模型名称"] || "deepseek-chat",
+    temperature: 0.1,
+    messages
+  };
+
+  const first = await postAi(url, ai["API Key"], {
+    ...baseBody,
+    response_format: { type: "json_object" }
+  });
+  if (first.ok) return await first.res.json();
+
+  if (first.res.status === 400) {
+    const retry = await postAi(url, ai["API Key"], baseBody);
+    if (retry.ok) return await retry.res.json();
+    throw new Error(`AI 服务返回 ${retry.res.status}：${retry.detail || first.detail || "请求格式不兼容"}`);
+  }
+
+  throw new Error(`AI 服务返回 ${first.res.status}：${first.detail || "请求失败"}`);
+}
+
+async function postAi(url, apiKey, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(body)
+  });
+  const detail = res.ok ? "" : await readAiError(res);
+  return { ok: res.ok, res, detail };
+}
+
+async function readAiError(res) {
+  try {
+    const text = await res.text();
+    return text.slice(0, 300);
+  } catch {
+    return "";
   }
 }
 
@@ -404,7 +438,32 @@ async function extractFileContent(file) {
     if (lowerName.endsWith(".pdf") || type === "application/pdf") {
       const pdfParse = (await import("pdf-parse")).default;
       const parsed = await pdfParse(buffer);
-      return { ...file, text: parsed.text || "", extractionStatus: parsed.text ? "PDF 文本提取成功" : "PDF 未提取到文本，可能是扫描件" };
+      const text = (parsed.text || "").trim();
+      if (!text && tencentOcrConfigured()) {
+        const ocrText = await recognizeFileWithTencentOcr(file, { isPdf: true });
+        return {
+          ...file,
+          text: ocrText,
+          extractionStatus: ocrText.trim() ? "PDF 未提取到文本，已使用腾讯云 OCR 识别" : "腾讯云 OCR 未识别到文本"
+        };
+      }
+      return {
+        ...file,
+        text,
+        extractionStatus: text
+          ? "PDF 文本提取成功"
+          : "PDF 未提取到可解析文本，可能是扫描件或图片合同；需要接入 OCR/视觉模型后才能精准识别"
+      };
+    }
+
+    if (type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(lowerName)) {
+      if (!tencentOcrConfigured()) return fallback;
+      const ocrText = await recognizeFileWithTencentOcr(file, { isPdf: false });
+      return {
+        ...file,
+        text: ocrText,
+        extractionStatus: ocrText.trim() ? "图片合同已使用腾讯云 OCR 识别" : "腾讯云 OCR 未识别到文本"
+      };
     }
 
     if (lowerName.endsWith(".docx") || type.includes("wordprocessingml")) {
@@ -454,6 +513,7 @@ function inferFieldsFromText(values, text, files) {
   const client = values["客户 / 品牌"] || parties.partyA || guessText(text, ["客户", "品牌"]) || "";
   const projectName = values["项目名称"] || guessText(text, ["项目名称", "项目", "合同名称"]) || "";
   const suppliers = extractSuppliers(text);
+  const noReadableContent = files.length && !files.some((file) => (file.text || "").trim());
 
   return normalizeParsedFields({
     projectName,
@@ -469,8 +529,10 @@ function inferFieldsFromText(values, text, files) {
     nextMilestone: servicePeriod || dates[0] || "",
     paymentDue: guessDateByLabels(text, ["付款期限", "付款时间", "回款节点", "付款节点", "尾款", "余款"]) || dates[1] || dates[0] || "",
     risk: inferRisk({ contract, costBudget: costUsed, costUsed, receivable: contract - paid }),
-    summary: files.length
-      ? `已读取 ${files.length} 个文件，抽取到 ${amounts.length} 个金额字段、${dates.length} 个日期字段。`
+    summary: noReadableContent
+      ? `已读取 ${files.length} 个文件，但未提取到可解析正文。该文件可能是扫描件或图片合同，需要接入 OCR/视觉模型后才能精准识别金额、甲乙方和期限。`
+      : files.length
+        ? `已读取 ${files.length} 个文件，抽取到 ${amounts.length} 个金额字段、${dates.length} 个日期字段。`
       : "未上传文件，等待解析。",
     costs: costUsed ? [["文件识别费用", costUsed]] : [],
     suppliers,
