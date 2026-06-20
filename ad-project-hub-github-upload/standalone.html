@@ -520,6 +520,44 @@
       function reminderProjects() {
         return projects.map((project) => ({ ...project, alerts: [...(project.alerts || []), ...projectRiskAlerts(project)] }));
       }
+      function alertCenterProjects() {
+        return reminderProjects().map((project) => {
+          const alerts = [...(project.alerts || [])];
+          if (displayRisk(project) === "高" && !alerts.length) {
+            const contract = Number(project.contract || 0);
+            const paid = Number(project.paid || 0);
+            const receivable = Number(project.receivable || Math.max(contract - paid, 0));
+            const budget = projectExecutionBudget(project);
+            const costUsed = Number(project.costUsed || 0);
+            const status = String(project.status || "");
+            if (receivable > 0) {
+              alerts.push({
+                role: "销售",
+                type: "高风险回款跟进",
+                severity: "高",
+                text: `项目当前为高风险，仍待回款 ${money(receivable)}，请销售跟进客户回款。`
+              });
+            }
+            if ((budget && costUsed >= budget * 0.8) || !/已完成|结案|完成/.test(status)) {
+              alerts.push({
+                role: "PM",
+                type: "高风险执行跟进",
+                severity: "高",
+                text: `项目当前为高风险，请 PM 核实执行进度、交付状态和成本风险。`
+              });
+            }
+            if (!alerts.length) {
+              alerts.push({
+                role: "PM",
+                type: "高风险项目复核",
+                severity: "高",
+                text: "项目当前为高风险，请 PM 复核项目执行、回款和成本状态。"
+              });
+            }
+          }
+          return { ...project, alerts };
+        });
+      }
       function displayRisk(project) {
         const alerts = projectRiskAlerts(project);
         if (alerts.some((alert) => alert.severity === "高")) return "高";
@@ -651,7 +689,7 @@
       }
       function renderAlerts() {
         const role = document.getElementById("roleFilter").value;
-        const alerts = reminderProjects()
+        const alerts = alertCenterProjects()
           .flatMap(p => (p.alerts || []).map(a => ({...a, project:p.name})))
           .filter(a => role === "全部角色" || a.role === role);
         document.getElementById("alertList").innerHTML = alerts.length ? alerts.map((a, index) => `<div class="alert-item" data-project="${a.project}" data-type="${a.type}"><strong>${a.type}<em class="status-pill">${index === 0 ? "待处理" : "已分派"}</em></strong><span>${a.role} · ${a.project}</span><p>${a.text}</p><div class="alert-edit"><input data-mentions placeholder="@成员，例如 @何佳 @林泽" /><input data-note placeholder="处理备注或手动修改预警内容" /></div><div class="alert-actions"><button class="tiny-btn" data-alert-action="resolve">标记处理</button><button class="tiny-btn" data-alert-action="assign">分派负责人</button><button class="tiny-btn" data-alert-action="save">保存修改</button></div></div>`).join("") : `<div class="alert-item"><strong>暂无预警</strong><span>${role}</span><p>当前角色没有待处理风险。</p></div>`;
