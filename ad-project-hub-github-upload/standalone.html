@@ -158,14 +158,19 @@
       .simple-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
       .empty-state { padding: 34px; text-align: center; color: #66758a; }
       .summary-pie { display: grid; grid-template-columns: 150px 1fr; gap: 18px; align-items: center; min-height: 210px; }
-      .pie { --paid-angle: 0deg; --due-angle: 0deg; --deduction-angle: 0deg; --center-value: "0"; width: 150px; height: 150px; border-radius: 50%; background: conic-gradient(#2563eb 0 var(--paid-angle), #e8a321 var(--paid-angle) calc(var(--paid-angle) + var(--due-angle)), #94a3b8 calc(var(--paid-angle) + var(--due-angle)) calc(var(--paid-angle) + var(--due-angle) + var(--deduction-angle)), #edf1f6 0 360deg); position: relative; transition: background .75s ease; }
-      .pie::before { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid rgba(37,99,235,.18); border-top-color: rgba(37,99,235,.8); animation: pieSpin 1.8s linear infinite; }
-      .pie::after { content: var(--center-value); position: absolute; inset: 34px; border-radius: 50%; background: #fff; display: grid; place-items: center; font-weight: 800; color: #172033; }
-      @keyframes pieSpin { to { transform: rotate(360deg); } }
+      .pie { width: 150px; height: 150px; position: relative; overflow: visible; }
+      .pie svg { width: 100%; height: 100%; overflow: visible; display: block; }
+      .pie-slice { cursor: pointer; transform-box: fill-box; transform-origin: center; transition: transform .18s ease, filter .18s ease, opacity .18s ease; }
+      .pie-slice:hover, .pie-slice.active { transform: scale(1.055); filter: drop-shadow(0 8px 10px rgba(23,32,51,.16)); }
+      .pie-center { pointer-events: none; font-weight: 800; fill: #172033; font-size: 18px; text-anchor: middle; dominant-baseline: central; }
+      .pie-hole { fill: #fff; pointer-events: none; }
+      .pie-tooltip { position: absolute; left: 50%; top: -10px; transform: translate(-50%, -100%); background: #172033; color: #fff; border-radius: 7px; padding: 7px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s ease, transform .15s ease; box-shadow: 0 8px 18px rgba(23,32,51,.18); }
+      .pie-tooltip.show { opacity: 1; transform: translate(-50%, -112%); }
       .pie-list { display: grid; gap: 12px; }
       .pie-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #edf1f6; padding-bottom: 10px; }
       .pie-item:last-child { border-bottom: 0; padding-bottom: 0; }
       .pie-item span { color: #66758a; font-size: 13px; }
+      .pie-item[data-slice] { cursor: pointer; }
       .dashboard-alerts { margin-top: 12px; }
       .dashboard-alert-grid { display: grid; gap: 10px; }
       .dashboard-alert { border: 1px solid #f1d4c6; background: #fffaf7; border-radius: 8px; padding: 12px; }
@@ -265,7 +270,7 @@
             <div class="focus-card">
               <h2>所有项目汇总</h2>
               <div class="summary-pie">
-                <div class="pie"></div>
+                <div class="pie" id="dashboardPie"></div>
                 <div class="pie-list" id="dashboardPieList">
                   <div class="pie-item"><span><i class="dot" style="background:#2563eb"></i>已回款</span><strong>0</strong></div>
                   <div class="pie-item"><span><i class="dot" style="background:#e8a321"></i>待回款</span><strong>0</strong></div>
@@ -379,36 +384,90 @@
       let appState = { settings: {}, uploads: [], parseJobs: [] };
       const money = value => value >= 10000 ? `${Math.round(value / 10000)}万` : value.toLocaleString("zh-CN");
       const riskClass = risk => risk === "高" ? "risk-high" : risk === "中" ? "risk-mid" : "risk-low";
+      function polarPoint(cx, cy, radius, angle) {
+        const radians = (angle - 90) * Math.PI / 180;
+        return { x: cx + radius * Math.cos(radians), y: cy + radius * Math.sin(radians) };
+      }
+      function donutSlicePath(cx, cy, outerRadius, innerRadius, startAngle, endAngle) {
+        if (endAngle - startAngle >= 359.99) endAngle = startAngle + 359.99;
+        const outerStart = polarPoint(cx, cy, outerRadius, endAngle);
+        const outerEnd = polarPoint(cx, cy, outerRadius, startAngle);
+        const innerStart = polarPoint(cx, cy, innerRadius, startAngle);
+        const innerEnd = polarPoint(cx, cy, innerRadius, endAngle);
+        const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+        return [
+          `M ${outerStart.x} ${outerStart.y}`,
+          `A ${outerRadius} ${outerRadius} 0 ${largeArc} 0 ${outerEnd.x} ${outerEnd.y}`,
+          `L ${innerStart.x} ${innerStart.y}`,
+          `A ${innerRadius} ${innerRadius} 0 ${largeArc} 1 ${innerEnd.x} ${innerEnd.y}`,
+          "Z"
+        ].join(" ");
+      }
+      function renderSummaryPie(parts, centerText) {
+        const pie = document.getElementById("dashboardPie");
+        if (!pie) return;
+        const total = parts.reduce((sum, part) => sum + Math.max(Number(part.value || 0), 0), 0);
+        let angle = 0;
+        const slices = total ? parts.map((part) => {
+          const value = Math.max(Number(part.value || 0), 0);
+          const start = angle;
+          const end = angle + (value / total) * 360;
+          angle = end;
+          return `<path class="pie-slice" d="${donutSlicePath(75, 75, 68, 36, start, end)}" fill="${part.color}" data-slice="${part.key}" data-label="${part.label}" data-value="${money(value)}"><title>${part.label}：${money(value)}</title></path>`;
+        }).join("") : `<circle cx="75" cy="75" r="68" fill="#edf1f6"></circle>`;
+        pie.innerHTML = `
+          <svg viewBox="0 0 150 150" aria-label="所有项目汇总">
+            ${slices}
+            <circle class="pie-hole" cx="75" cy="75" r="36"></circle>
+            <text class="pie-center" x="75" y="75">${centerText}</text>
+          </svg>
+          <div class="pie-tooltip" id="pieTooltip"></div>`;
+        const tooltip = pie.querySelector("#pieTooltip");
+        const showSlice = (slice) => {
+          if (!slice) return;
+          pie.querySelectorAll(".pie-slice").forEach((item) => item.classList.toggle("active", item === slice));
+          tooltip.textContent = `${slice.dataset.label}：${slice.dataset.value}`;
+          tooltip.classList.add("show");
+        };
+        const hideSlice = () => {
+          pie.querySelectorAll(".pie-slice").forEach((item) => item.classList.remove("active"));
+          tooltip.classList.remove("show");
+        };
+        pie.querySelectorAll(".pie-slice").forEach((slice) => {
+          slice.addEventListener("mouseenter", () => showSlice(slice));
+          slice.addEventListener("mouseleave", hideSlice);
+        });
+        pie.showSlice = (key) => showSlice(pie.querySelector(`.pie-slice[data-slice="${key}"]`));
+        pie.hideSlice = hideSlice;
+      }
       function renderDashboard() {
         const contract = projects.reduce((sum, item) => sum + Number(item.contract || 0), 0);
         const paid = projects.reduce((sum, item) => sum + Number(item.paid || 0), 0);
         const receivable = projects.reduce((sum, item) => sum + Number(item.receivable || 0), 0);
         const deductionTotal = projects.reduce((sum, item) => sum + Number(item.costUsed || 0), 0);
         const projectProfit = contract - deductionTotal;
-        const pieTotal = Math.max(paid + receivable + deductionTotal, 0);
-        const paidAngle = pieTotal ? (paid / pieTotal) * 360 : 0;
-        const dueAngle = pieTotal ? (receivable / pieTotal) * 360 : 0;
-        const deductionAngle = pieTotal ? (deductionTotal / pieTotal) * 360 : 0;
         const highRisk = projects.filter(item => item.risk === "高").length;
         const rate = contract ? Math.round((paid / contract) * 100) : 0;
-        const pie = document.querySelector(".pie");
-        if (pie) {
-          pie.style.setProperty("--paid-angle", `${paidAngle}deg`);
-          pie.style.setProperty("--due-angle", `${dueAngle}deg`);
-          pie.style.setProperty("--deduction-angle", `${deductionAngle}deg`);
-          pie.style.setProperty("--center-value", `"${money(contract)}"`);
-          pie.title = `项目总金额 ${money(contract)}，已回款 ${money(paid)}，待回款 ${money(receivable)}，扣减合计 ${money(deductionTotal)}`;
-        }
+        renderSummaryPie([
+          { key: "paid", label: "已回款", value: paid, color: "#2563eb" },
+          { key: "receivable", label: "待回款", value: receivable, color: "#e8a321" },
+          { key: "deduction", label: "扣减合计", value: deductionTotal, color: "#94a3b8" }
+        ], money(contract));
         document.getElementById("dashboardMetrics").innerHTML = `
           <div class="metric"><span>合同总额</span><strong>${money(contract)}</strong><p>${projects.length ? `${projects.length} 个项目` : "暂无项目"}</p></div>
           <div class="metric"><span>回款率</span><strong>${rate}%</strong><p>已回款 ${money(paid)}</p></div>
           <div class="metric"><span>待回款</span><strong>${money(receivable)}</strong><p>按项目汇总</p></div>
           <div class="metric"><span>高风险</span><strong>${highRisk}</strong><p>${highRisk ? "需处理" : "暂无预警"}</p></div>`;
         document.getElementById("dashboardPieList").innerHTML = `
-          <div class="pie-item"><span><i class="dot" style="background:#2563eb"></i>已回款</span><strong>${money(paid)}</strong></div>
-          <div class="pie-item"><span><i class="dot" style="background:#e8a321"></i>待回款</span><strong>${money(receivable)}</strong></div>
-          <div class="pie-item"><span>扣减合计</span><strong>${money(deductionTotal)}</strong></div>
+          <div class="pie-item" data-slice="paid" title="已回款：${money(paid)}"><span><i class="dot" style="background:#2563eb"></i>已回款</span><strong>${money(paid)}</strong></div>
+          <div class="pie-item" data-slice="receivable" title="待回款：${money(receivable)}"><span><i class="dot" style="background:#e8a321"></i>待回款</span><strong>${money(receivable)}</strong></div>
+          <div class="pie-item" data-slice="deduction" title="扣减合计：${money(deductionTotal)}"><span><i class="dot" style="background:#94a3b8"></i>扣减合计</span><strong>${money(deductionTotal)}</strong></div>
           <div class="pie-item"><span>经营毛利率</span><strong>${contract ? `${Math.round((projectProfit / contract) * 100)}%` : "0%"}</strong></div>`;
+        const dashboardPie = document.getElementById("dashboardPie");
+        document.querySelectorAll("#dashboardPieList [data-slice]").forEach((item) => {
+          item.addEventListener("mouseenter", () => dashboardPie?.showSlice?.(item.dataset.slice));
+          item.addEventListener("mouseleave", () => dashboardPie?.hideSlice?.());
+        });
         document.getElementById("dashboardCashNote").textContent = projects.length
           ? `当前项目总金额 ${money(contract)}，已回款 ${money(paid)}，待回款 ${money(receivable)}；扣减合计 ${money(deductionTotal)}，项目利润 ${money(projectProfit)}。`
           : "暂无项目数据。新建项目并上传合同 / 执行表后，这里会自动统计回款、利润和费用扣减。";
