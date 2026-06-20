@@ -34,7 +34,13 @@ export async function createProject(db, values, files, user) {
   db.auditLogs.unshift({ type: "project", target: project.name, action: "create", user: user.name, at: now });
 
   if (files.length) {
-    await analyzeAndApplyProjectFiles(db, project, parseJob);
+    try {
+      await analyzeAndApplyProjectFiles(db, project, parseJob);
+      assertUniqueProject(db, projectToValues(project), project.files || files, project.contract, project.id);
+    } catch (error) {
+      removeCreatedProject(db, project.id, parseJob.id);
+      throw error;
+    }
   }
 
   return { project, parseJob };
@@ -63,13 +69,14 @@ export function createParseJob(project, files, parsed = {}, sourceValues = {}) {
   };
 }
 
-function assertUniqueProject(db, values = {}, files = [], contract = 0) {
+function assertUniqueProject(db, values = {}, files = [], contract = 0, ignoreProjectId = "") {
   const incomingName = normalizeProjectText(values["项目名称"] || files.map((file) => file.name).join(" "));
   const incomingClient = normalizeProjectText(values["客户 / 品牌"] || "");
   const incomingFiles = normalizeProjectText(files.map((file) => file.name).join(" "));
   const incomingAmount = Math.round(Number(contract || 0));
 
   for (const project of db.projects || []) {
+    if (ignoreProjectId && project.id === ignoreProjectId) continue;
     const existingName = normalizeProjectText(project.name || "");
     const existingClient = normalizeProjectText(project.client || "");
     const existingFiles = normalizeProjectText((project.files || []).map((file) => file.name).join(" "));
@@ -79,10 +86,26 @@ function assertUniqueProject(db, values = {}, files = [], contract = 0) {
     const similarName = incomingName && existingName && similarity(incomingName, existingName) >= 0.82;
     const sameFile = incomingFiles && existingFiles && (incomingFiles.includes(existingFiles) || existingFiles.includes(incomingFiles));
 
-    if ((similarName && (sameClient || sameAmount)) || (sameFile && (sameClient || sameAmount))) {
+    if ((sameClient && sameAmount) || (similarName && (sameClient || sameAmount)) || (sameFile && (sameClient || sameAmount))) {
       throw new Error(`疑似重复项目：${project.name}。请在项目台账中确认后再上传，避免重复归档。`);
     }
   }
+}
+
+function projectToValues(project) {
+  return {
+    "项目名称": project.name || "",
+    "客户 / 品牌": project.client || "",
+    "合同金额": project.contract || 0
+  };
+}
+
+function removeCreatedProject(db, projectId, parseJobId) {
+  db.projects = (db.projects || []).filter((item) => item.id !== projectId);
+  db.parseJobs = (db.parseJobs || []).filter((item) => item.id !== parseJobId && item.projectId !== projectId);
+  db.files = (db.files || []).filter((item) => item.projectId !== projectId);
+  db.suppliers = (db.suppliers || []).filter((item) => item.projectId !== projectId);
+  db.auditLogs = (db.auditLogs || []).filter((item) => !(item.type === "project" && item.action === "create"));
 }
 
 function normalizeProjectText(value) {

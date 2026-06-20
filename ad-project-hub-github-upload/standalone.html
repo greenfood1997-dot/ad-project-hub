@@ -804,7 +804,6 @@
             if (btn.dataset.uploadProject !== undefined) {
               btn.disabled = true;
               btn.textContent = "解析并同步中...";
-              await recordSelectedFiles();
               const created = await createProjectFromDrawer();
               await loadState();
               selectedId = created?.data?.project?.id || projects[0]?.id || selectedId;
