@@ -226,7 +226,9 @@ function applyParsedFields(db, project, job, parsed) {
   const profitBreakdown = hasCostSheet ? calculateProfitBreakdown(contract, parsed) : null;
   const costBudget = hasCostSheet ? profitBreakdown.totalDeduction : parseMoney(project.costBudget);
   const costUsed = hasCostSheet ? profitBreakdown.totalDeduction : parseMoney(project.costUsed);
-  const paid = parseMoney(parsed.paid);
+  const parsedPaid = parseMoney(parsed.paid);
+  const existingPaid = parseMoney(project.paid);
+  const paid = hasCostSheet ? Math.max(existingPaid, parsedPaid) : parsedPaid;
   const receivable = parseMoney(parsed.receivable) || Math.max(contract - paid, 0);
   const oldName = project.name;
   const parsedProjectName = parsed.projectName || parsed.name || "";
@@ -742,7 +744,8 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
   const contract = hasCostSheet && !hasContractInBatch
     ? parseMoney(values["合同金额"])
     : (parseMoney(values["合同金额"]) || extractContractAmount(text) || amounts[0] || 0);
-  const paid = guessAmount(text, ["已回款", "已付款", "首付款", "预付款", "已收款"]) || 0;
+  const explicitPaid = guessAmount(text, ["已回款", "已付款", "首付款", "预付款", "已收款"]) || 0;
+  const paid = explicitPaid || tableMetrics.projectRevenue || 0;
   const advancePayment = hasCostSheet ? tableMetrics.advancePayment || guessAmount(text, ["项目垫款", "垫款本金", "垫款", "代垫"]) || 0 : 0;
   const advanceInterest = hasCostSheet ? guessAmount(text, ["垫款利息", "资金占用费", "利息"]) || 0 : 0;
   const executionBudget = hasCostSheet ? tableMetrics.executionBudget || guessAmount(text, ["项目执行预算", "执行预算", "执行支出", "执行成本", "供应商", "应结", "结算金额"]) || 0 : 0;
@@ -796,7 +799,7 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
 
 function normalizeParsedFields(parsed, values, files, interestRateSettings) {
   const contract = parseMoney(parsed.contract) || parseMoney(values["合同金额"]);
-  const paid = parseMoney(parsed.paid);
+  const paid = parseMoney(parsed.paid) || parseMoney(parsed.projectRevenue);
   const hasCostSheet = Boolean(parsed.hasCostSheet) || isCostSheet(files, files.map((file) => file.text || "").join("\n"));
   const profitBreakdown = hasCostSheet ? calculateProfitBreakdown(contract, parsed, interestRateSettings) : null;
   const costUsed = profitBreakdown?.totalDeduction || 0;
@@ -815,6 +818,7 @@ function normalizeParsedFields(parsed, values, files, interestRateSettings) {
     executionBudget: profitBreakdown?.executionBudget || 0,
     internalLabor: profitBreakdown?.internalLabor || 0,
     overhead: profitBreakdown?.overhead || 0,
+    projectRevenue: parseMoney(parsed.projectRevenue),
     profit: hasCostSheet ? contract - costUsed : 0,
     profitBreakdown,
     risk: parsed.risk || inferRisk({ contract, costBudget: hasCostSheet ? parsed.costBudget : 0, costUsed, receivable: parsed.receivable }),
