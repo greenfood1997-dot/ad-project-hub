@@ -3,6 +3,21 @@ import { recognizeFileWithTencentOcr, tencentOcrConfigured } from "./tencent-ocr
 export async function createProject(db, values, files, user) {
   if (!values?.["项目名称"] && !files.length) throw new Error("请填写项目名称或先上传合同/执行表");
   const now = new Date().toISOString();
+  if (files.length) {
+    const parsedForRouting = await analyzeProjectFiles(db.settings?.aiService, values || {}, files || [], db.settings?.interestRate);
+    if (parsedForRouting.hasCostSheet) {
+      const targetProject = findMatchingProjectForCostSheet(db, parsedForRouting, files);
+      if (targetProject) {
+        const parseJob = createParseJob(targetProject, files, parsedForRouting, values);
+        db.parseJobs.unshift(parseJob);
+        applyParsedFields(db, targetProject, parseJob, parsedForRouting);
+        targetProject.files = [...(targetProject.files || []), ...files];
+        db.auditLogs.unshift({ type: "project", target: targetProject.name, action: "cost-sheet-merge", user: user.name, at: now });
+        return { project: targetProject, parseJob, merged: true };
+      }
+      throw new Error("这是成本/利润测算表，但未匹配到已有合同项目。请先上传合同，或在表内补充完整项目名称/客户名称。");
+    }
+  }
   const contract = parseMoney(values["合同金额"]);
   assertUniqueProject(db, values, files, contract);
   const project = {
@@ -108,6 +123,35 @@ function removeCreatedProject(db, projectId, parseJobId) {
   db.auditLogs = (db.auditLogs || []).filter((item) => !(item.type === "project" && item.action === "create"));
 }
 
+function findMatchingProjectForCostSheet(db, parsed = {}, files = []) {
+  const incomingName = normalizeProjectText(parsed.projectName || parsed.name || files.map((file) => file.name).join(" "));
+  const incomingClient = normalizeProjectText(parsed.client || parsed.partyA || "");
+  const incomingText = normalizeProjectText([
+    parsed.projectName,
+    parsed.client,
+    parsed.partyA,
+    files.map((file) => `${file.name || ""} ${file.text || ""}`).join(" ")
+  ].join(" "));
+  const incomingContract = parseMoney(parsed.contract);
+
+  const scored = (db.projects || []).map((project) => {
+    const existingName = normalizeProjectText(project.name || "");
+    const existingClient = normalizeProjectText(project.client || "");
+    const existingContract = parseMoney(project.contract);
+    let score = 0;
+
+    if (incomingName && existingName) score += similarity(incomingName, existingName) * 55;
+    if (incomingClient && existingClient && (incomingClient.includes(existingClient) || existingClient.includes(incomingClient))) score += 35;
+    if (incomingText && existingName && (incomingText.includes(existingName) || existingName.includes(incomingName))) score += 30;
+    if (incomingText && existingClient && incomingText.includes(existingClient)) score += 25;
+    if (incomingContract && existingContract && Math.abs(incomingContract - existingContract) <= Math.max(100, existingContract * 0.05)) score += 25;
+
+    return { project, score };
+  }).sort((a, b) => b.score - a.score);
+
+  return scored[0]?.score >= 45 ? scored[0].project : null;
+}
+
 function normalizeProjectText(value) {
   return String(value || "")
     .toLowerCase()
@@ -167,8 +211,8 @@ async function analyzeAndApplyProjectFiles(db, project, job) {
 function applyParsedFields(db, project, job, parsed) {
   const parsedContract = parseMoney(parsed.contract);
   const existingContract = parseMoney(project.contract);
-  const contract = parsedContract || existingContract;
   const hasCostSheet = Boolean(parsed.hasCostSheet);
+  const contract = hasCostSheet ? (existingContract || parsedContract) : (parsedContract || existingContract);
   const profitBreakdown = hasCostSheet ? calculateProfitBreakdown(contract, parsed) : null;
   const costBudget = hasCostSheet ? profitBreakdown.totalDeduction : parseMoney(project.costBudget);
   const costUsed = hasCostSheet ? profitBreakdown.totalDeduction : parseMoney(project.costUsed);

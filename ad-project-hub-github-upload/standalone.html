@@ -813,7 +813,7 @@
               renderCash();
               renderSuppliers();
               switchView("projectsView");
-              showToast("合同解析完成，字段已同步到台账");
+              showToast(created?.data?.merged ? "成本表已归并到已有项目" : "合同解析完成，字段已同步到台账");
             }
             if (btn.dataset.applyFilter !== undefined) {
               const values = collectDrawerValues();
