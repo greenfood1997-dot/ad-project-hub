@@ -44,7 +44,7 @@ export async function createProject(db, values, files, user) {
     createdBy: user.id,
     files
   };
-  applyProjectRisk(project);
+  project.alerts = projectRiskAlerts(project);
   const parseJob = createParseJob(project, files, {}, values);
   db.projects.unshift(project);
   db.parseJobs.unshift(parseJob);
@@ -104,7 +104,7 @@ export function updateProject(db, body, user) {
   project.costBudget = executionBudget || profitBreakdown.executionBudget || parseMoney(project.costBudget);
   project.costUsed = profitBreakdown.totalDeduction || parseMoney(project.costUsed);
   project.margin = contract ? profitMargin(contract, contract - project.costUsed) : 0;
-  applyProjectRisk(project);
+  project.alerts = projectRiskAlerts(project);
   project.updatedAt = new Date().toISOString();
 
   for (const supplier of db.suppliers || []) {
@@ -346,7 +346,7 @@ function applyParsedFields(db, project, job, parsed) {
     costs: hasCostSheet ? profitBreakdown.costs : (project.costs || []),
     extractedFields: hasCostSheet ? { ...parsed, profitBreakdown, profit: contract - costUsed } : parsed
   });
-  applyProjectRisk(project);
+  project.alerts = projectRiskAlerts(project);
 
   job.projectName = project.name;
   job.status = "已完成";
@@ -1310,13 +1310,6 @@ function extractSuppliers(text) {
   return rows.slice(0, 10);
 }
 
-function applyProjectRisk(project) {
-  const alerts = projectRiskAlerts(project);
-  project.alerts = alerts;
-  project.risk = alerts.some((alert) => alert.severity === "高") ? "高" : alerts.length ? "中" : "低";
-  return project.risk;
-}
-
 function parseProjectDate(text) {
   const match = String(text || "").match(/(20\d{2})[年./-]\s*(\d{1,2})(?:[月./-]\s*(\d{1,2}))?/);
   if (!match) return null;
@@ -1419,13 +1412,11 @@ function projectRiskAlerts(project = {}) {
 }
 
 function inferRisk(values = {}) {
-  const alerts = projectRiskAlerts({
-    contract: values.contract,
-    paid: parseMoney(values.contract) - parseMoney(values.receivable),
-    receivable: values.receivable,
-    costBudget: values.costBudget,
-    costUsed: values.costUsed,
-    extractedFields: { executionBudget: values.costBudget }
-  });
-  return alerts.some((alert) => alert.severity === "高") ? "高" : alerts.length ? "中" : "低";
+  const contract = parseMoney(values.contract);
+  const costBudget = parseMoney(values.costBudget);
+  const costUsed = parseMoney(values.costUsed);
+  const receivable = parseMoney(values.receivable);
+  if (contract && (costUsed / contract > 0.75 || receivable / contract > 0.8)) return "高";
+  if (costBudget && costUsed / costBudget > 0.8) return "中";
+  return "低";
 }
