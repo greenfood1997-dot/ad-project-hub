@@ -76,12 +76,15 @@
       .workspace { display: grid; grid-template-columns: minmax(360px,.95fr) minmax(460px,1.2fr); gap: 14px; margin-top: 14px; align-items: stretch; height: 100%; min-height: 0; }
       .project-list, .detail { padding: 16px; overflow: auto; min-height: 0; }
       .section-head { justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
-      .project-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 76px; border: 1px solid #e3e9f1; background: #fff; border-radius: 8px; padding: 12px; text-align: left; margin-top: 10px; }
+      .project-row { width: 100%; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; min-height: 76px; border: 1px solid #e3e9f1; background: #fff; border-radius: 8px; padding: 12px; text-align: left; margin-top: 10px; overflow: hidden; }
       .project-row.selected { border-color: #2563eb; background: #f4f8ff; }
-      .project-row strong, .project-row span { display: block; }
-      .project-row strong { margin-bottom: 6px; }
+      .project-main { min-width: 0; display: grid; gap: 6px; }
+      .project-row strong, .project-row span { display: block; min-width: 0; }
+      .project-row strong { margin-bottom: 0; line-height: 1.35; word-break: break-word; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+      .project-row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .parse-list-status { display: inline-flex; margin-top: 7px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; padding: 3px 8px; font-size: 12px; font-style: normal; }
-      .row-right { align-items: center; gap: 10px; flex-shrink: 0; }
+      .row-right { align-items: flex-end; gap: 6px; flex-shrink: 0; flex-direction: column; max-width: 110px; }
+      .row-right span { max-width: 100%; }
       .risk { display: inline-flex; min-width: 58px; justify-content: center; border-radius: 999px; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
       .risk-high { color: #b91c1c; background: #fee2e2; }
       .risk-mid { color: #a16207; background: #fef3c7; }
@@ -337,6 +340,7 @@
             <div class="focus-card"><h2>飞书通知</h2><p class="focus-note">推送成本、回款、节点预警到项目群。</p><br><button class="ghost" data-panel="feishu">配置</button></div>
             <div class="focus-card"><h2>企业微信</h2><p class="focus-note">支持机器人 Webhook 和消息卡片。</p><br><button class="ghost" data-panel="wechat">配置</button></div>
             <div class="focus-card"><h2>AI 服务</h2><p class="focus-note">配置 API Key 后，用于合同 OCR、Excel 解析和项目问数。</p><br><button class="ghost" data-panel="aiService">配置</button></div>
+            <div class="focus-card"><h2>资金利率</h2><p class="focus-note">自动匹配最新 LPR，用于项目垫款利息和利润测算。</p><br><button class="ghost" data-panel="interestRate">配置</button></div>
           </div>
         </section>
       </main>
@@ -366,7 +370,8 @@
         const contract = projects.reduce((sum, item) => sum + Number(item.contract || 0), 0);
         const paid = projects.reduce((sum, item) => sum + Number(item.paid || 0), 0);
         const receivable = projects.reduce((sum, item) => sum + Number(item.receivable || 0), 0);
-        const supplierCost = supplierSettlements.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+        const deductionTotal = projects.reduce((sum, item) => sum + Number(item.costUsed || 0), 0);
+        const projectProfit = contract - deductionTotal;
         const highRisk = projects.filter(item => item.risk === "高").length;
         const rate = contract ? Math.round((paid / contract) * 100) : 0;
         document.getElementById("dashboardMetrics").innerHTML = `
@@ -377,11 +382,11 @@
         document.getElementById("dashboardPieList").innerHTML = `
           <div class="pie-item"><span><i class="dot" style="background:#2563eb"></i>已回款</span><strong>${money(paid)}</strong></div>
           <div class="pie-item"><span><i class="dot" style="background:#e8a321"></i>待回款</span><strong>${money(receivable)}</strong></div>
-          <div class="pie-item"><span>供应商成本</span><strong>${money(supplierCost)}</strong></div>
-          <div class="pie-item"><span>当前毛利估算</span><strong>${contract ? `${Math.round(((contract - supplierCost) / contract) * 100)}%` : "0%"}</strong></div>`;
+          <div class="pie-item"><span>扣减合计</span><strong>${money(deductionTotal)}</strong></div>
+          <div class="pie-item"><span>经营毛利率</span><strong>${contract ? `${Math.round((projectProfit / contract) * 100)}%` : "0%"}</strong></div>`;
         document.getElementById("dashboardCashNote").textContent = projects.length
-          ? `当前合同总额 ${money(contract)}，已回款 ${money(paid)}，待回款 ${money(receivable)}；供应商成本 ${money(supplierCost)}。`
-          : "暂无项目数据。新建项目并上传合同 / 执行表后，这里会自动统计回款、成本和供应商待结算费用。";
+          ? `当前项目总金额 ${money(contract)}，已回款 ${money(paid)}，待回款 ${money(receivable)}；扣减合计 ${money(deductionTotal)}，项目利润 ${money(projectProfit)}。`
+          : "暂无项目数据。新建项目并上传合同 / 执行表后，这里会自动统计回款、利润和费用扣减。";
         document.getElementById("dashboardAlerts").innerHTML = highRisk
           ? projects.filter(item => item.risk === "高").map(item => `<div class="dashboard-alert"><strong>${item.name}</strong><span>高风险</span><p>请进入预警中心处理。</p></div>`).join("")
           : `<div class="dashboard-alert"><strong>暂无风险预警</strong><span>系统</span><p>项目产生成本、回款或进度风险后会显示在这里。</p></div>`;
@@ -407,8 +412,8 @@
         const costChart = document.getElementById("costChart");
         if (!costChart) return;
         costChart.innerHTML = projects.map(p => {
-          const rate = Math.round(p.costUsed / p.costBudget * 100);
-          return `<div class="pressure-row"><span>${p.pm}</span><div><i style="width:${Math.min(rate,100)}%"></i></div><b>${rate}%</b></div>`;
+          const rate = p.costBudget ? Math.round((p.costUsed || 0) / p.costBudget * 100) : 0;
+          return `<div class="pressure-row"><span>${p.owner || p.pm || "未分配"}</span><div><i style="width:${Math.min(rate,100)}%"></i></div><b>${p.costBudget ? `${rate}%` : "待传"}</b></div>`;
         }).join("");
       }
       function renderAlerts() {
@@ -450,8 +455,8 @@
           const job = (appState.parseJobs || []).find((item) => item.projectId === p.id);
           const parsing = job && job.status !== "已完成";
           return `<button class="project-row ${p.id === selectedId ? "selected" : ""}" data-id="${p.id}">
-            <div><strong>${p.name}</strong><span>${p.client || "未填写客户"} · ${p.owner || "未分配负责人"}</span>${job ? `<em class="parse-list-status">${job.status} · ${job.progress}%</em>` : ""}</div>
-            <div class="row-right"><b class="risk ${riskClass(p.risk)}">${p.risk}风险</b><span>${parsing ? "AI解析中" : p.status}</span><span>›</span></div>
+            <div class="project-main"><strong>${p.name}</strong><span>${p.client || "未填写客户"} · ${p.owner || "未分配负责人"}</span>${job ? `<em class="parse-list-status">${job.status} · ${job.progress}%</em>` : ""}</div>
+            <div class="row-right"><b class="risk ${riskClass(p.risk)}">${p.risk}风险</b><span>${parsing ? "AI解析中" : p.status}</span></div>
           </button>`;
         }).join("");
         document.querySelectorAll(".project-row").forEach(row => row.addEventListener("click", () => { selectedId = row.dataset.id; renderRows(); renderDetail(); }));
@@ -464,15 +469,18 @@
           detail.innerHTML = `<div class="empty-state">暂无项目详情。新建项目后会在这里显示合同、成本、回款和供应商费用。</div>`;
           return;
         }
+        const hasCostData = Number(p.costBudget || 0) > 0 || Number(p.costUsed || 0) > 0 || (p.costs || []).length > 0;
         const usedRate = p.costBudget ? Math.round((p.costUsed || 0) / p.costBudget * 100) : 0;
+        const projectProfit = (p.contract || 0) - (p.costUsed || 0);
+        const marginText = hasCostData && p.contract ? `${Math.round((projectProfit / (p.contract || 1)) * 100)}%` : "待成本表";
         const relatedSuppliers = supplierSettlements.filter(item => item.project === p.name);
         const supplierCost = relatedSuppliers.reduce((sum, item) => sum + item.amount, 0);
         const parseJob = (appState.parseJobs || []).find((job) => job.projectId === p.id);
         detail.innerHTML = `
           <div class="detail-head"><div><span class="id">${p.id}</span><h2>${p.name}</h2><p>${p.client || "未填写客户"} · ${p.status}</p></div><b class="risk ${riskClass(p.risk)}">${p.risk}风险</b></div>
           <div class="summary"><span>AI</span><p>${p.aiSummary || "文件已记录，等待 AI 解析任务生成结构化字段。"}</p></div>
-          <div class="detail-metrics"><div class="mini"><span>合同金额</span><strong>${money(p.contract || 0)}</strong></div><div class="mini"><span>成本使用</span><strong>${usedRate || 0}%</strong></div><div class="mini"><span>已回款</span><strong>${money(p.paid || 0)}</strong></div><div class="mini"><span>毛利率</span><strong>${p.margin || 0}%</strong></div></div>
-          <div class="split"><div><h3>执行进度</h3>${(p.tasks || []).map(([name,value]) => `<div class="progress-row"><span>${name}</span><div><i style="width:${value}%"></i></div><b>${value}%</b></div>`).join("") || `<p class="focus-note">暂无执行进度。</p>`}</div><div><h3>成本构成</h3>${(p.costs || []).map(([name,value]) => `<div class="cost-row"><span>${name}</span><b>${money(value)}</b></div>`).join("") || `<p class="focus-note">暂无成本数据。</p>`}<div class="cost-row"><span>供应商计入成本</span><b>${money(supplierCost)}</b></div></div></div>
+          <div class="detail-metrics"><div class="mini"><span>项目总金额</span><strong>${money(p.contract || 0)}</strong></div><div class="mini"><span>扣减合计</span><strong>${hasCostData ? money(p.costUsed || 0) : "待上传"}</strong></div><div class="mini"><span>项目利润</span><strong>${hasCostData ? money(projectProfit) : "待成本表"}</strong></div><div class="mini"><span>毛利率</span><strong>${marginText}</strong></div></div>
+          <div class="split"><div><h3>执行进度</h3>${(p.tasks || []).map(([name,value]) => `<div class="progress-row"><span>${name}</span><div><i style="width:${value}%"></i></div><b>${value}%</b></div>`).join("") || `<p class="focus-note">暂无执行进度。</p>`}</div><div><h3>利润测算结构</h3>${hasCostData ? (p.costs || []).map(([name,value]) => `<div class="cost-row"><span>${name}</span><b>${money(value)}</b></div>`).join("") : `<p class="focus-note">尚未上传本项目月度成本表，暂不计算项目利润和毛利率。</p>`}${hasCostData ? `<div class="cost-row"><span>项目利润</span><b>${money(projectProfit)}</b></div>` : ""}</div></div>
           <div class="focus-card job-box"><div class="panel-row"><h3>AI 解析进度</h3>${parseJob && parseJob.status !== "已完成" ? `<button class="tiny-btn" data-refresh-job="${parseJob.id}">刷新解析进度</button>` : parseJob ? `<button class="tiny-btn" data-refresh-job="${parseJob.id}">查看最新结果</button>` : ""}</div>${parseJob ? `<p class="focus-note">${parseJob.status} · ${parseJob.progress}%${parseJob.status !== "已完成" ? "，关闭窗口后也可在项目台账继续查看。" : "，结构化字段已写入项目。"}</p><div class="job-progress"><i style="width:${parseJob.progress}%"></i></div><div class="job-steps">${parseJob.steps.map(step => `<div class="job-step"><strong>${step.name}</strong>${step.status}</div>`).join("")}</div>${parseJob.extractedFields?.summary ? `<div class="summary" style="margin-bottom:0"><span>结果</span><p>${parseJob.extractedFields.summary}</p></div>` : ""}` : `<p class="focus-note">暂无解析任务。上传合同或执行表后会显示解析进度。</p>`}</div>
           <div class="focus-card" style="margin-top:16px"><h3>供应商费用归属</h3>${relatedSuppliers.length ? relatedSuppliers.map(item => `<div class="cost-row"><span>${item.supplier} · ${item.type}</span><b>${money(item.amount)} / ${item.status}</b></div>`).join("") : `<p class="focus-note">暂无供应商费用。</p>`}</div>
           <div class="timeline"><div><span>下一节点</span><strong>${p.nextMilestone || "暂无"}</strong></div><div><span>回款节点</span><strong>${p.paymentDue || "暂无"}</strong></div></div>`;
@@ -520,6 +528,12 @@
       }
       function setConnectionStatus(text, type = "") {
         const status = document.getElementById("aiConnectionStatus");
+        if (!status) return;
+        status.className = `connection-status ${type}`.trim();
+        status.textContent = text;
+      }
+      function setInterestRateStatus(text, type = "") {
+        const status = document.getElementById("interestRateStatus");
         if (!status) return;
         status.className = `connection-status ${type}`.trim();
         status.textContent = text;
@@ -602,6 +616,24 @@
         const values = normalizeAiForm(collectDrawerValues(), options);
         fillDrawerValues(values);
       }
+      function normalizeInterestRateForm(values) {
+        const source = values["利率来源"] || values.source || "latest_lpr";
+        const annualRate = Number(values["年化利率"] || values.annualRate || 3.45);
+        const spread = Number(values["公司加点"] || values.spread || 0);
+        const fallbackRate = Number(values["兜底利率"] || values.fallbackRate || 3.45);
+        return {
+          source,
+          annualRate,
+          spread,
+          fallbackRate,
+          term: "1Y",
+          updatedAt: values.updatedAt || new Date().toISOString(),
+          "利率来源": source,
+          "年化利率": annualRate,
+          "公司加点": spread,
+          "兜底利率": fallbackRate,
+        };
+      }
       async function openDrawer(type) {
         await loadState();
         const panels = {
@@ -656,6 +688,18 @@
               <div id="aiConnectionStatus" class="connection-status">尚未校验连接。请点击“校验配置”，确认真实连通后再保存。</div>
             </div><div class="drawer-actions"><button class="ghost" data-test-ai data-submit="AI 配置校验通过">校验配置</button><button class="primary" data-setting="aiService" data-submit="AI 服务配置已保存">保存配置</button></div>`
           },
+          interestRate: {
+            title: "资金利率配置",
+            desc: "用于自动计算项目垫款利息；默认刷新 1 年期 LPR，可叠加公司资金成本加点。",
+            body: `<div class="form-grid">
+              <div class="field"><label>利率来源</label><select><option value="latest_lpr">最新 1 年期 LPR</option><option value="manual">手动年化利率</option></select></div>
+              <div class="field"><label>年化利率</label><input placeholder="例如 3.45，单位 %" /></div>
+              <div class="field"><label>公司加点</label><input placeholder="例如 2，表示 LPR + 2%" /></div>
+              <div class="field"><label>兜底利率</label><input placeholder="联网失败时使用，例如 3.45" /></div>
+              <div class="summary"><span>资金</span><p>垫款利息 = 项目垫款 × (年化利率 + 公司加点) × 垫款天数 / 365。成本表未填写利息时系统自动计算。</p></div>
+              <div id="interestRateStatus" class="connection-status">尚未刷新。可点击“刷新 LPR”获取当前公开利率。</div>
+            </div><div class="drawer-actions"><button class="ghost" data-refresh-rate data-submit="LPR 已刷新">刷新 LPR</button><button class="primary" data-setting="interestRate" data-submit="资金利率配置已保存">保存配置</button></div>`
+          },
           baseSettings: {
             title: "基础设置",
             desc: "仅中台管理人员可编辑，用于定义项目中台的基础业务规则。",
@@ -704,8 +748,14 @@
         document.getElementById("drawerBody").innerHTML = panel.body;
         document.getElementById("drawerMask").classList.add("show");
         if (appState.settings?.[type]) fillDrawerValues(appState.settings[type]);
-          if (type === "aiService") {
-            applyAiDefaults();
+        if (type === "interestRate") {
+          const rate = appState.settings?.interestRate;
+          if (rate?.annualRate) {
+            setInterestRateStatus(`当前年化利率 ${rate.annualRate}% + 加点 ${rate.spread || 0}%，${rate.updatedAt ? `更新时间：${new Date(rate.updatedAt).toLocaleString()}` : "尚未联网刷新"}`, "success");
+          }
+        }
+        if (type === "aiService") {
+          applyAiDefaults();
           const provider = document.querySelector("#drawerBody .field select");
           const apiKey = Array.from(document.querySelectorAll("#drawerBody .field input")).find(input => input.type === "password");
           provider?.addEventListener("change", () => applyAiDefaults({ forceProviderDefaults: true }));
@@ -740,6 +790,17 @@
               showToast("AI 配置校验成功，已真实连接到服务");
               return;
             }
+            if (btn.dataset.refreshRate !== undefined) {
+              btn.disabled = true;
+              btn.textContent = "刷新中...";
+              setInterestRateStatus("正在连接中国货币网获取 LPR...", "pending");
+              const result = await apiPost("/api/settings/interest-rate/refresh", {}, true);
+              await loadState();
+              fillDrawerValues(result.data);
+              setInterestRateStatus(`${result.data.note}；当前用于计算：${Number(result.data.annualRate || 0) + Number(result.data.spread || 0)}%`, result.data.status === "已刷新" ? "success" : "error");
+              showToast(result.data.status === "已刷新" ? "LPR 已刷新" : "LPR 刷新失败，已使用兜底利率");
+              return;
+            }
             if (btn.dataset.uploadProject !== undefined) {
               btn.disabled = true;
               btn.textContent = "解析并同步中...";
@@ -761,7 +822,12 @@
               renderRows();
             }
             if (btn.dataset.setting) {
-              const values = btn.dataset.setting === "aiService" ? normalizeAiForm(collectDrawerValues()) : collectDrawerValues();
+              const rawValues = collectDrawerValues();
+              const values = btn.dataset.setting === "aiService"
+                ? normalizeAiForm(rawValues)
+                : btn.dataset.setting === "interestRate"
+                  ? normalizeInterestRateForm(rawValues)
+                  : rawValues;
               fillDrawerValues(values);
               if (btn.dataset.setting === "aiService") {
                 btn.disabled = true;

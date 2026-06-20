@@ -5,6 +5,7 @@ import {
   advanceParseJob,
   createProject,
   recordFiles,
+  refreshInterestRate,
   saveSetting,
   supplierCsv,
   testAiSettings,
@@ -33,6 +34,13 @@ export async function handleApi(req, res) {
     if (!requireRole(user, ["admin"], res)) return;
     const body = await readBody(req);
     const data = await testAiSettings(body.values);
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/settings/interest-rate/refresh") {
+    if (!requireRole(user, ["admin"], res)) return;
+    const data = await mutateDb((db) => refreshInterestRate(db, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }

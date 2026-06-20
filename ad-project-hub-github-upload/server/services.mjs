@@ -4,6 +4,7 @@ export async function createProject(db, values, files, user) {
   if (!values?.["项目名称"] && !files.length) throw new Error("请填写项目名称或先上传合同/执行表");
   const now = new Date().toISOString();
   const contract = parseMoney(values["合同金额"]);
+  assertUniqueProject(db, values, files, contract);
   const project = {
     id: `P-${Date.now()}`,
     name: values["项目名称"] || `待解析合同-${new Date().toLocaleString("zh-CN", { hour12: false })}`,
@@ -62,6 +63,47 @@ export function createParseJob(project, files, parsed = {}, sourceValues = {}) {
   };
 }
 
+function assertUniqueProject(db, values = {}, files = [], contract = 0) {
+  const incomingName = normalizeProjectText(values["项目名称"] || files.map((file) => file.name).join(" "));
+  const incomingClient = normalizeProjectText(values["客户 / 品牌"] || "");
+  const incomingFiles = normalizeProjectText(files.map((file) => file.name).join(" "));
+  const incomingAmount = Math.round(Number(contract || 0));
+
+  for (const project of db.projects || []) {
+    const existingName = normalizeProjectText(project.name || "");
+    const existingClient = normalizeProjectText(project.client || "");
+    const existingFiles = normalizeProjectText((project.files || []).map((file) => file.name).join(" "));
+    const existingAmount = Math.round(Number(project.contract || 0));
+    const sameAmount = incomingAmount && existingAmount && Math.abs(incomingAmount - existingAmount) <= Math.max(100, incomingAmount * 0.01);
+    const sameClient = incomingClient && existingClient && (incomingClient.includes(existingClient) || existingClient.includes(incomingClient));
+    const similarName = incomingName && existingName && similarity(incomingName, existingName) >= 0.82;
+    const sameFile = incomingFiles && existingFiles && (incomingFiles.includes(existingFiles) || existingFiles.includes(incomingFiles));
+
+    if ((similarName && (sameClient || sameAmount)) || (sameFile && (sameClient || sameAmount))) {
+      throw new Error(`疑似重复项目：${project.name}。请在项目台账中确认后再上传，避免重复归档。`);
+    }
+  }
+}
+
+function normalizeProjectText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/[^\p{Script=Han}a-z0-9]+/gu, "");
+}
+
+function similarity(a, b) {
+  if (!a || !b) return 0;
+  const short = a.length <= b.length ? a : b;
+  const long = a.length > b.length ? a : b;
+  if (long.includes(short)) return short.length / long.length;
+  const setA = new Set(a);
+  const setB = new Set(b);
+  const intersection = [...setA].filter((char) => setB.has(char)).length;
+  const union = new Set([...setA, ...setB]).size || 1;
+  return intersection / union;
+}
+
 export async function advanceParseJob(db, idOrProjectId) {
   const job = db.parseJobs.find((item) => item.id === idOrProjectId || item.projectId === idOrProjectId);
   if (!job) throw new Error("解析任务不存在");
@@ -95,7 +137,7 @@ async function analyzeAndApplyProjectFiles(db, project, job) {
   job.steps = setStepStatus(job.steps, "字段识别", "进行中");
   job.updatedAt = new Date().toISOString();
 
-  const parsed = await analyzeProjectFiles(db.settings?.aiService, job.sourceValues || {}, job.files || []);
+  const parsed = await analyzeProjectFiles(db.settings?.aiService, job.sourceValues || {}, job.files || [], db.settings?.interestRate);
   applyParsedFields(db, project, job, parsed);
 }
 
@@ -103,8 +145,10 @@ function applyParsedFields(db, project, job, parsed) {
   const parsedContract = parseMoney(parsed.contract);
   const existingContract = parseMoney(project.contract);
   const contract = parsedContract || existingContract;
-  const costBudget = parseMoney(parsed.costBudget);
-  const costUsed = parseMoney(parsed.costUsed);
+  const hasCostSheet = Boolean(parsed.hasCostSheet);
+  const profitBreakdown = hasCostSheet ? calculateProfitBreakdown(contract, parsed) : null;
+  const costBudget = hasCostSheet ? profitBreakdown.totalDeduction : parseMoney(project.costBudget);
+  const costUsed = hasCostSheet ? profitBreakdown.totalDeduction : parseMoney(project.costUsed);
   const paid = parseMoney(parsed.paid);
   const receivable = parseMoney(parsed.receivable) || Math.max(contract - paid, 0);
   const oldName = project.name;
@@ -124,10 +168,10 @@ function applyParsedFields(db, project, job, parsed) {
     aiSummary: parsed.summary || "文件已解析，结构化字段已同步到项目台账。",
     nextMilestone: parsed.nextMilestone || parsed.servicePeriod || parsed.deliveryDate || "",
     paymentDue: parsed.paymentDue || "",
-    margin: contract ? Math.max(0, Math.round(((contract - costUsed) / contract) * 100)) : 0,
+    margin: contract ? profitMargin(contract, contract - costUsed) : 0,
     tasks: parsed.tasks || [],
-    costs: parsed.costs || [],
-    extractedFields: parsed
+    costs: hasCostSheet ? profitBreakdown.costs : (project.costs || []),
+    extractedFields: hasCostSheet ? { ...parsed, profitBreakdown, profit: contract - costUsed } : parsed
   });
 
   job.projectName = project.name;
@@ -137,7 +181,7 @@ function applyParsedFields(db, project, job, parsed) {
   job.updatedAt = new Date().toISOString();
   job.steps = job.steps.map((step) => ({ ...step, status: "完成" }));
 
-  for (const supplier of parsed.suppliers || []) {
+  for (const supplier of hasCostSheet ? (parsed.suppliers || []) : []) {
     db.suppliers.unshift({
       supplier: supplier.supplier || supplier.name || "未命名供应商",
       project: project.name,
@@ -199,6 +243,66 @@ export async function saveSetting(db, type, values, user) {
   db.settings[type] = saved;
   db.auditLogs.unshift({ type: "settings", target: type, user: user.name, at: saved.savedAt });
   return saved;
+}
+
+export async function refreshInterestRate(db, user) {
+  const current = db.settings?.interestRate || {};
+  const fetched = await fetchLatestLprRate().catch((error) => ({
+    ok: false,
+    error: error.message,
+    annualRate: Number(current.annualRate || current.fallbackRate || 3.45)
+  }));
+  const saved = {
+    source: "latest_lpr",
+    term: "1Y",
+    annualRate: fetched.annualRate,
+    spread: Number(current.spread || 0),
+    fallbackRate: Number(current.fallbackRate || 3.45),
+    updatedAt: new Date().toISOString(),
+    checkedAt: new Date().toISOString(),
+    status: fetched.ok ? "已刷新" : "使用兜底利率",
+    note: fetched.ok
+      ? `已从中国货币网匹配 1 年期 LPR：${fetched.annualRate}%`
+      : `联网刷新失败，继续使用兜底利率：${fetched.error || "未知错误"}`
+  };
+  Object.assign(saved, {
+    "利率来源": saved.source,
+    "年化利率": saved.annualRate,
+    "公司加点": saved.spread,
+    "兜底利率": saved.fallbackRate
+  });
+  db.settings.interestRate = saved;
+  db.auditLogs.unshift({ type: "settings", target: "interestRate", user: user.name, at: saved.updatedAt });
+  return saved;
+}
+
+async function fetchLatestLprRate() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch("https://www.chinamoney.com.cn/chinese/bklpr/", {
+      headers: { "user-agent": "ad-project-hub/1.0" },
+      signal: controller.signal
+    });
+    if (!res.ok) throw new Error(`中国货币网返回 ${res.status}`);
+    const html = await res.text();
+    const annualRate = parseLprRate(html);
+    if (!annualRate) throw new Error("未识别到 1 年期 LPR");
+    return { ok: true, annualRate };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseLprRate(text) {
+  const compact = String(text || "").replace(/\s+/g, " ");
+  const oneYearMatch = compact.match(/1\s*年期[^%]{0,80}?(\d+(?:\.\d+)?)\s*%/i)
+    || compact.match(/一年期[^%]{0,80}?(\d+(?:\.\d+)?)\s*%/i);
+  if (oneYearMatch) return Number(oneYearMatch[1]);
+  const rates = [...compact.matchAll(/(\d+(?:\.\d+)?)\s*%/g)]
+    .map((match) => Number(match[1]))
+    .filter((value) => value > 0 && value < 20);
+  return rates[0] || 0;
 }
 
 export function recordFiles(db, body, user) {
@@ -351,13 +455,13 @@ function parseChineseNumber(value) {
   return total + section + number;
 }
 
-async function analyzeProjectFiles(aiSettings, values, files) {
+async function analyzeProjectFiles(aiSettings, values, files, interestRateSettings) {
   const extractedFiles = await Promise.all(files.map(extractFileContent));
   const text = extractedFiles
     .map((file) => `文件：${file.name}\n类型：${file.type || "unknown"}\n提取状态：${file.extractionStatus}\n${file.text || ""}`)
     .join("\n\n")
     .slice(0, 50000);
-  const fallback = inferFieldsFromText(values, text, extractedFiles);
+  const fallback = inferFieldsFromText(values, text, extractedFiles, interestRateSettings);
 
   if (!text.trim() || !aiSettings?.["API Key"]) return fallback;
 
@@ -365,7 +469,7 @@ async function analyzeProjectFiles(aiSettings, values, files) {
     const ai = normalizeAiSettings(aiSettings);
     const data = await requestAiJson(ai, values, text);
     const content = data.choices?.[0]?.message?.content || "{}";
-    return normalizeParsedFields(mergeParsedFields(fallback, parseJsonObject(content)), values, files);
+    return normalizeParsedFields(mergeParsedFields(fallback, parseJsonObject(content)), values, files, interestRateSettings);
   } catch (error) {
     return {
       ...fallback,
@@ -390,7 +494,7 @@ async function requestAiJson(ai, values, text) {
   const messages = [
     {
       role: "system",
-      content: "你是广告项目经营中台的文件解析和自动归档助手。你要把合同、报价单、执行表、排期表、供应商结算表中的关键信息归类到项目中台。只返回 JSON，不要 Markdown。字段包括 projectName, client, partyA, partyB, contract, paid, receivable, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, suppliers, tasks, archiveTags, confidence, missingFields。金额返回数字，日期保留原文。costs 为 [科目, 金额]；suppliers 为对象数组，含 supplier,type,amount,status；tasks 为 [节点, 进度百分比]。"
+      content: "你是广告项目经营中台的文件解析和自动归档助手。你要把合同、报价单、执行表、排期表、供应商结算表中的关键信息归类到项目中台。只返回 JSON，不要 Markdown。字段包括 projectName, client, partyA, partyB, contract, paid, receivable, advancePayment, advanceInterest, executionBudget, internalLabor, overhead, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, suppliers, tasks, archiveTags, confidence, missingFields, hasCostSheet。金额返回数字，日期保留原文。项目利润口径固定为：项目总金额 - 项目垫款 - 垫款利息 - 项目执行预算 - 内部人力 - 公摊费用（水电、办公室租金及其他公摊）= 项目利润。只有文件明确是成本表、供应商结算表、费用明细表时，hasCostSheet 才为 true，并尽量返回 advancePayment、advanceInterest、executionBudget、internalLabor、overhead；合同或报价单中的合同金额、服务费用、付款金额不要写入成本字段。costs 为 [科目, 金额]；suppliers 为对象数组，含 supplier,type,amount,status；tasks 为 [节点, 进度百分比]。"
     },
     {
       role: "user",
@@ -552,17 +656,23 @@ function parseJsonObject(content) {
   }
 }
 
-function inferFieldsFromText(values, text, files) {
+function inferFieldsFromText(values, text, files, interestRateSettings) {
   const amounts = extractAmounts(text);
   const dates = extractDates(text);
+  const hasCostSheet = isCostSheet(files, text);
   const contract = parseMoney(values["合同金额"]) || extractContractAmount(text) || amounts[0] || 0;
   const paid = guessAmount(text, ["已回款", "已付款", "首付款", "预付款", "已收款"]) || 0;
-  const costUsed = guessAmount(text, ["成本", "费用", "执行费用", "供应商", "应结"]) || 0;
+  const advancePayment = hasCostSheet ? guessAmount(text, ["项目垫款", "垫款本金", "垫款", "代垫"]) || 0 : 0;
+  const advanceInterest = hasCostSheet ? guessAmount(text, ["垫款利息", "资金占用费", "利息"]) || 0 : 0;
+  const executionBudget = hasCostSheet ? guessAmount(text, ["项目执行预算", "执行预算", "执行成本", "供应商", "应结", "结算金额"]) || 0 : 0;
+  const internalLabor = hasCostSheet ? guessAmount(text, ["内部人力", "人力成本", "内部工时", "工时成本"]) || 0 : 0;
+  const overhead = hasCostSheet ? guessAmount(text, ["公摊费用", "水电", "办公室租金", "房租", "租金", "其他费用", "管理公摊"]) || 0 : 0;
+  const costUsed = advancePayment + advanceInterest + executionBudget + internalLabor + overhead;
   const parties = extractParties(text);
   const servicePeriod = extractServicePeriod(text, dates);
   const client = values["客户 / 品牌"] || parties.partyA || guessText(text, ["客户", "品牌"]) || "";
   const projectName = values["项目名称"] || guessText(text, ["项目名称", "项目", "合同名称"]) || "";
-  const suppliers = extractSuppliers(text);
+  const suppliers = hasCostSheet ? extractSuppliers(text) : [];
   const noReadableContent = files.length && !files.some((file) => (file.text || "").trim());
   const extractionNote = files
     .map((file) => file.extractionStatus)
@@ -575,29 +685,39 @@ function inferFieldsFromText(values, text, files) {
     contract,
     paid,
     receivable: contract ? Math.max(contract - paid, 0) : 0,
-    costBudget: costUsed,
+    costBudget: hasCostSheet ? costUsed : 0,
     costUsed,
+    advancePayment,
+    advanceInterest,
+    advanceStartDate: guessDateByLabels(text, ["垫款开始", "垫款日期", "垫款时间", "付款日期", "代垫日期"]) || "",
+    advanceEndDate: guessDateByLabels(text, ["垫款结束", "归还日期", "回款日期", "结算日期", "计息截止"]) || "",
+    executionBudget,
+    internalLabor,
+    overhead,
+    hasCostSheet,
     partyA: parties.partyA,
     partyB: parties.partyB,
     servicePeriod,
     nextMilestone: servicePeriod || dates[0] || "",
     paymentDue: guessDateByLabels(text, ["付款期限", "付款时间", "回款节点", "付款节点", "尾款", "余款"]) || dates[1] || dates[0] || "",
-    risk: inferRisk({ contract, costBudget: costUsed, costUsed, receivable: contract - paid }),
+    risk: inferRisk({ contract, costBudget: hasCostSheet ? costUsed : 0, costUsed, receivable: contract - paid }),
     summary: noReadableContent
       ? `已读取 ${files.length} 个文件，但未提取到可解析正文。${extractionNote || "该文件可能是扫描件或图片合同，需要接入 OCR/视觉模型后才能精准识别金额、甲乙方和期限。"}`
       : files.length
         ? `已读取 ${files.length} 个文件，抽取到 ${amounts.length} 个金额字段、${dates.length} 个日期字段。${extractionNote ? `提取状态：${extractionNote}` : ""}`
       : "未上传文件，等待解析。",
-    costs: costUsed ? [["文件识别费用", costUsed]] : [],
+    costs: hasCostSheet && costUsed ? [["成本表费用", costUsed]] : [],
     suppliers,
     tasks: dates.length ? dates.slice(0, 4).map((date, index) => [`节点 ${index + 1}：${date}`, index === 0 ? 30 : 0]) : []
-  }, values, files);
+  }, values, files, interestRateSettings);
 }
 
-function normalizeParsedFields(parsed, values, files) {
+function normalizeParsedFields(parsed, values, files, interestRateSettings) {
   const contract = parseMoney(parsed.contract) || parseMoney(values["合同金额"]);
   const paid = parseMoney(parsed.paid);
-  const costUsed = parseMoney(parsed.costUsed);
+  const hasCostSheet = Boolean(parsed.hasCostSheet) || isCostSheet(files, files.map((file) => file.text || "").join("\n"));
+  const profitBreakdown = hasCostSheet ? calculateProfitBreakdown(contract, parsed, interestRateSettings) : null;
+  const costUsed = profitBreakdown?.totalDeduction || 0;
   return {
     ...parsed,
     projectName: parsed.projectName || values["项目名称"] || "",
@@ -605,12 +725,20 @@ function normalizeParsedFields(parsed, values, files) {
     contract,
     paid,
     receivable: parseMoney(parsed.receivable) || Math.max(contract - paid, 0),
-    costBudget: parseMoney(parsed.costBudget) || costUsed || 0,
+    costBudget: hasCostSheet ? (parseMoney(parsed.costBudget) || costUsed || 0) : 0,
     costUsed,
-    risk: parsed.risk || inferRisk({ contract, costBudget: parsed.costBudget, costUsed, receivable: parsed.receivable }),
+    hasCostSheet,
+    advancePayment: profitBreakdown?.advancePayment || 0,
+    advanceInterest: profitBreakdown?.advanceInterest || 0,
+    executionBudget: profitBreakdown?.executionBudget || 0,
+    internalLabor: profitBreakdown?.internalLabor || 0,
+    overhead: profitBreakdown?.overhead || 0,
+    profit: hasCostSheet ? contract - costUsed : 0,
+    profitBreakdown,
+    risk: parsed.risk || inferRisk({ contract, costBudget: hasCostSheet ? parsed.costBudget : 0, costUsed, receivable: parsed.receivable }),
     summary: parsed.summary || `已完成 ${files.length} 个文件的结构化解析。`,
-    costs: Array.isArray(parsed.costs) ? parsed.costs.map(normalizePair).filter(Boolean) : [],
-    suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : [],
+    costs: hasCostSheet ? profitBreakdown.costs : [],
+    suppliers: hasCostSheet && Array.isArray(parsed.suppliers) ? parsed.suppliers : [],
     tasks: Array.isArray(parsed.tasks) ? parsed.tasks.map(normalizePair).filter(Boolean) : [],
     archiveTags: Array.isArray(parsed.archiveTags) ? parsed.archiveTags : [],
     confidence: parsed.confidence || "",
@@ -618,10 +746,104 @@ function normalizeParsedFields(parsed, values, files) {
   };
 }
 
+function calculateProfitBreakdown(contract, parsed = {}, interestRateSettings) {
+  const sourceCosts = Array.isArray(parsed.costs) ? parsed.costs.map(normalizePair).filter(Boolean) : [];
+  const pick = (field, labels) => parseMoney(parsed[field]) || sumCostLabels(sourceCosts, labels);
+  const advancePayment = pick("advancePayment", ["项目垫款", "垫款本金", "垫款", "代垫"]);
+  const explicitAdvanceInterest = pick("advanceInterest", ["垫款利息", "资金占用费", "利息"]);
+  const interestMeta = calculateAdvanceInterest(advancePayment, parsed, interestRateSettings);
+  const advanceInterest = explicitAdvanceInterest || interestMeta.amount;
+  const executionBudget = pick("executionBudget", ["项目执行预算", "执行预算", "执行成本", "供应商", "媒介", "达人", "制作", "投放", "结算"]);
+  const internalLabor = pick("internalLabor", ["内部人力", "人力成本", "内部工时", "工时"]);
+  const overhead = pick("overhead", ["公摊费用", "水电", "办公室租金", "房租", "租金", "其他费用", "管理公摊"]);
+  const totalDeduction = advancePayment + advanceInterest + executionBudget + internalLabor + overhead;
+  const profit = Number(contract || 0) - totalDeduction;
+  return {
+    advancePayment,
+    advanceInterest,
+    executionBudget,
+    internalLabor,
+    overhead,
+    totalDeduction,
+    profit,
+    margin: profitMargin(contract, profit),
+    interestRate: interestMeta.annualRate,
+    interestDays: interestMeta.days,
+    interestSource: explicitAdvanceInterest ? "成本表填写" : interestMeta.source,
+    costs: [
+      ["项目垫款", advancePayment],
+      ["垫款利息", advanceInterest],
+      ["项目执行预算", executionBudget],
+      ["内部人力", internalLabor],
+      ["公摊费用", overhead]
+    ]
+  };
+}
+
+function calculateAdvanceInterest(advancePayment, parsed = {}, interestRateSettings = {}) {
+  const principal = Number(advancePayment || 0);
+  if (!principal) return { amount: 0, annualRate: effectiveAnnualRate(interestRateSettings), days: 0, source: "无垫款" };
+  const annualRate = effectiveAnnualRate(interestRateSettings);
+  const days = advanceInterestDays(parsed);
+  return {
+    amount: Math.round(principal * (annualRate / 100) * (days / 365)),
+    annualRate,
+    days,
+    source: interestRateSettings?.source === "latest_lpr" ? "最新LPR自动计算" : "配置利率自动计算"
+  };
+}
+
+function effectiveAnnualRate(settings = {}) {
+  const base = Number(settings.annualRate || settings.fallbackRate || 3.45);
+  const spread = Number(settings.spread || 0);
+  return Number((base + spread).toFixed(4));
+}
+
+function advanceInterestDays(parsed = {}) {
+  const start = parseDateValue(parsed.advanceStartDate || parsed.advanceDate || parsed.paymentDate);
+  const end = parseDateValue(parsed.advanceEndDate || parsed.settlementDate || parsed.receivableDate) || new Date();
+  if (!start) return Number(parsed.advanceDays || parsed.interestDays || 30) || 30;
+  const diff = Math.ceil((end.getTime() - start.getTime()) / 86400000);
+  return Math.max(1, diff);
+}
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const text = String(value).trim().replace(/[年月.]/g, "-").replace(/日/g, "");
+  const match = text.match(/(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3] || 1));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function sumCostLabels(costs, labels) {
+  return costs
+    .filter(([name]) => labels.some((label) => String(name).includes(label)))
+    .reduce((sum, [, value]) => sum + parseMoney(value), 0);
+}
+
+function profitMargin(contract, profit) {
+  const amount = Number(contract || 0);
+  if (!amount) return 0;
+  return Math.round((Number(profit || 0) / amount) * 100);
+}
+
 function normalizePair(item) {
   if (Array.isArray(item)) return [String(item[0] || "未命名"), parseMoney(item[1])];
   if (item && typeof item === "object") return [String(item.name || item.type || "未命名"), parseMoney(item.value || item.amount || item.progress)];
   return null;
+}
+
+function isCostSheet(files = [], text = "") {
+  const fileNames = files.map((file) => file.name || "").join(" ");
+  const source = `${fileNames}\n${text}`.slice(0, 12000);
+  const hasCostKeyword = /(成本表|成本明细|费用明细|供应商结算|结算表|月度成本|成本台账|成本归集|利润测算|项目利润|垫款|垫款利息|执行预算|内部人力|人力成本|公摊费用|水电|办公室租金|应结金额|实付金额|供应商费用)/.test(source);
+  const hasTableCostColumns = /(供应商|费用类型|成本科目|应结|已结算|待结算|结算状态|垫款|利息|执行预算|内部人力|公摊|租金|水电)/.test(source)
+    && /(金额|费用|成本|付款|结算)/.test(source);
+  const looksOnlyContract = /(合同|协议|甲方|乙方|服务内容|付款方式|合同金额|服务费用)/.test(source)
+    && !hasCostKeyword
+    && !hasTableCostColumns;
+  return !looksOnlyContract && (hasCostKeyword || hasTableCostColumns);
 }
 
 function extractAmounts(text) {
@@ -799,10 +1021,14 @@ function guessAmount(text, labels) {
   for (const label of labels) {
     const index = text.indexOf(label);
     if (index === -1) continue;
-    const amount = extractAmounts(text.slice(index, index + 120))[0];
+    const amount = extractNearestAmount(text.slice(index + label.length, index + label.length + 80));
     if (amount) return amount;
   }
   return 0;
+}
+
+function extractNearestAmount(text) {
+  return extractAmountCandidates(text)[0]?.value || 0;
 }
 
 function guessText(text, labels) {

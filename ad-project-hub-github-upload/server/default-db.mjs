@@ -11,7 +11,16 @@ export const defaultDb = {
     wechat: null,
     baseSettings: null,
     collabSettings: null,
-    alertSettings: null
+    alertSettings: null,
+    interestRate: {
+      source: "latest_lpr",
+      annualRate: 3.45,
+      spread: 0,
+      fallbackRate: 3.45,
+      term: "1Y",
+      updatedAt: null,
+      note: "默认使用 1 年期 LPR；联网刷新失败时使用兜底年化利率。"
+    }
   },
   projects: [],
   suppliers: [],
