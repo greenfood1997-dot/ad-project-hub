@@ -544,10 +544,11 @@
           const res = await fetch(`${apiBase}/api/state`);
           const data = await res.json();
           if (data.ok) {
+            const previousSelectedId = selectedId;
             appState = data.data;
             projects = appState.projects || [];
             supplierSettlements = appState.suppliers || [];
-            selectedId = projects[0]?.id || null;
+            selectedId = projects.some((project) => project.id === previousSelectedId) ? previousSelectedId : projects[0]?.id || null;
           }
         } catch {
           appState = { settings: {}, uploads: [], parseJobs: [] };
@@ -569,19 +570,27 @@
           if (label && control && values[label] !== undefined) control.value = values[label];
         });
       }
+      const aiProviderPresets = {
+        "GPT / OpenAI": { baseUrl: "https://api.openai.com/v1", model: "gpt-4.1" },
+        "Kimi / Moonshot": { baseUrl: "https://api.moonshot.cn/v1", model: "moonshot-v1-8k" },
+        DeepSeek: { baseUrl: "https://api.deepseek.com", model: "deepseek-chat" },
+        "OpenAI 兼容接口": { baseUrl: "https://api.deepseek.com", model: "deepseek-chat" },
+        "私有化模型服务": { baseUrl: "", model: "" },
+      };
       function normalizeAiForm(values) {
         const normalized = { ...values };
         const providerText = `${normalized["服务商"] || ""}${normalized["Base URL"] || ""}${normalized["模型名称"] || ""}`.toLowerCase();
-        const looksDeepSeek = providerText.includes("deepseek") || (normalized["API Key"] && !normalized["Base URL"] && !providerText.includes("openai"));
-        if (looksDeepSeek) {
-          normalized["服务商"] = "DeepSeek";
-          normalized["Base URL"] = normalized["Base URL"] || "https://api.deepseek.com";
-          normalized["模型名称"] = normalized["模型名称"] || "deepseek-chat";
+        const matchedProvider = Object.keys(aiProviderPresets).find((provider) => {
+          const [firstName] = provider.toLowerCase().split(" / ");
+          return providerText.includes(firstName) || providerText.includes(firstName.split(" ")[0]);
+        });
+        const preset = aiProviderPresets[normalized["服务商"]] || aiProviderPresets[matchedProvider] || (normalized["API Key"] && !normalized["Base URL"] ? aiProviderPresets.DeepSeek : null);
+        if (preset) {
+          normalized["服务商"] = normalized["服务商"] || matchedProvider || "DeepSeek";
+          normalized["Base URL"] = normalized["Base URL"] || preset.baseUrl;
+          normalized["模型名称"] = normalized["模型名称"] || preset.model;
         }
-        if ((normalized["服务商"] || "").includes("GPT") && !normalized["Base URL"]) {
-          normalized["Base URL"] = "https://api.openai.com/v1";
-          normalized["模型名称"] = normalized["模型名称"] || "gpt-4.1";
-        }
+        normalized["Base URL"] = (normalized["Base URL"] || "").replace(/\/$/, "");
         return normalized;
       }
       function applyAiDefaults() {
@@ -631,14 +640,14 @@
           },
           aiService: {
             title: "AI 服务配置",
-            desc: "粘贴 API Key 后即可用于合同解析、执行表结构化、风险判断和项目问数。",
+            desc: "选择服务商并粘贴一次 API Key，系统会自动匹配接口地址和模型，并在下次打开时继续沿用。",
             body: `<div class="form-grid">
               <div class="field"><label>服务商</label><select><option>GPT / OpenAI</option><option>Kimi / Moonshot</option><option>DeepSeek</option><option>OpenAI 兼容接口</option><option>私有化模型服务</option></select></div>
-              <div class="field"><label>Base URL</label><input placeholder="https://api.openai.com/v1 或你的私有网关地址" /></div>
               <div class="field password-field"><label>API Key</label><div class="password-wrap"><input type="password" placeholder="粘贴 sk-... 或企业内部网关 Token" /><button type="button" class="eye-btn" data-toggle-password>👁</button></div></div>
-              <div class="field"><label>模型名称</label><input placeholder="例如 gpt-4.1、kimi-k2.6、deepseek-v4-pro" /></div>
+              <div class="field"><label>Base URL</label><input readonly placeholder="系统自动匹配" /></div>
+              <div class="field"><label>模型名称</label><input readonly placeholder="系统自动匹配" /></div>
               <div class="field"><label>启用能力</label><select><option>合同解析 + Excel 解析 + 风险判断</option><option>仅合同解析</option><option>仅项目问数</option><option>仅风险预警</option></select></div>
-              <div class="summary"><span>AI</span><p>保存后，系统会在新建项目上传文件时调用该接口，返回结构化字段并进入人工确认。</p></div>
+              <div class="summary"><span>AI</span><p>保存后，配置会写入服务端数据库；关闭网页再打开仍会保持当前服务商、API Key、模型和连接状态。</p></div>
               <div id="aiConnectionStatus" class="connection-status">尚未校验连接。请点击“校验配置”，确认真实连通后再保存。</div>
             </div><div class="drawer-actions"><button class="ghost" data-test-ai data-submit="AI 配置校验通过">校验配置</button><button class="primary" data-setting="aiService" data-submit="AI 服务配置已保存">保存配置</button></div>`
           },
@@ -690,8 +699,8 @@
         document.getElementById("drawerBody").innerHTML = panel.body;
         document.getElementById("drawerMask").classList.add("show");
         if (appState.settings?.[type]) fillDrawerValues(appState.settings[type]);
-        if (type === "aiService") {
-          applyAiDefaults();
+          if (type === "aiService") {
+            applyAiDefaults();
           const provider = document.querySelector("#drawerBody .field select");
           const apiKey = Array.from(document.querySelectorAll("#drawerBody .field input")).find(input => input.type === "password");
           provider?.addEventListener("change", applyAiDefaults);

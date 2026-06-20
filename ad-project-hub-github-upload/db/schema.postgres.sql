@@ -68,9 +68,14 @@ create table if not exists parse_jobs (
   progress integer not null default 0,
   steps jsonb not null,
   files jsonb not null default '[]'::jsonb,
+  source_values jsonb not null default '{}'::jsonb,
+  extracted_fields jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table parse_jobs add column if not exists source_values jsonb not null default '{}'::jsonb;
+alter table parse_jobs add column if not exists extracted_fields jsonb not null default '{}'::jsonb;
 
 create table if not exists suppliers (
   id bigserial primary key,

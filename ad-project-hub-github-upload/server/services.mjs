@@ -156,6 +156,7 @@ export function validateAiSettings(values) {
   const normalized = normalizeAiSettings(values);
   if (!normalized["API Key"]) throw new Error("请先填写 API Key");
   if (!normalized["Base URL"]) throw new Error("请先填写 Base URL");
+  if (!normalized["模型名称"]) throw new Error("请先选择服务商，系统会自动匹配模型名称");
   try {
     new URL(normalized["Base URL"]);
   } catch {
@@ -202,7 +203,11 @@ export async function saveSetting(db, type, values, user) {
 
 export function recordFiles(db, body, user) {
   const now = new Date().toISOString();
-  const files = Array.isArray(body.files) ? body.files : [];
+  const files = (Array.isArray(body.files) ? body.files : []).map((file) => ({
+    ...file,
+    uploadedAt: file.uploadedAt || now,
+    uploadedBy: file.uploadedBy || user.id
+  }));
   const upload = { files, projectName: body.projectName || "", user: user.name, at: now };
   db.files.unshift(upload);
   db.auditLogs.unshift({ type: "upload", target: upload.projectName || "未命名项目", count: files.length, user: user.name, at: now });
@@ -235,16 +240,18 @@ export function supplierCsv(db) {
 export function normalizeAiSettings(values = {}) {
   const normalized = { ...values };
   const providerText = `${normalized["服务商"] || ""}${normalized["Base URL"] || ""}${normalized["模型名称"] || ""}`.toLowerCase();
-  const looksDeepSeek = providerText.includes("deepseek") || (!normalized["Base URL"] && normalized["API Key"] && !providerText.includes("openai"));
+  const presets = [
+    { match: ["deepseek"], provider: "DeepSeek", baseUrl: "https://api.deepseek.com", model: "deepseek-chat" },
+    { match: ["kimi", "moonshot"], provider: "Kimi / Moonshot", baseUrl: "https://api.moonshot.cn/v1", model: "moonshot-v1-8k" },
+    { match: ["gpt", "openai"], provider: "GPT / OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4.1" }
+  ];
+  const preset = presets.find((item) => item.match.some((keyword) => providerText.includes(keyword)))
+    || (normalized["API Key"] && !normalized["Base URL"] ? presets[0] : null);
 
-  if (looksDeepSeek) {
-    normalized["服务商"] = "DeepSeek";
-    normalized["Base URL"] = normalized["Base URL"] || "https://api.deepseek.com";
-    normalized["模型名称"] = normalized["模型名称"] || "deepseek-chat";
-  }
-
-  if ((normalized["服务商"] || "").includes("GPT") && !normalized["Base URL"]) {
-    normalized["Base URL"] = "https://api.openai.com/v1";
+  if (preset) {
+    normalized["服务商"] = normalized["服务商"] || preset.provider;
+    normalized["Base URL"] = normalized["Base URL"] || preset.baseUrl;
+    normalized["模型名称"] = normalized["模型名称"] || preset.model;
   }
 
   normalized["Base URL"] = (normalized["Base URL"] || "").replace(/\/$/, "");

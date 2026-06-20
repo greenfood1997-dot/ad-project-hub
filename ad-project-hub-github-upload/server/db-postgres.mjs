@@ -43,7 +43,10 @@ export async function readPostgresDb() {
       created_by as "createdBy", created_at as "createdAt"
       from projects order by created_at desc`),
     db.query("select project_id as \"projectId\", project_name as \"projectName\", name, size, mime_type as type, storage_url as \"storageUrl\", uploaded_at as \"uploadedAt\" from project_files order by uploaded_at desc"),
-    db.query("select id, project_id as \"projectId\", project_name as \"projectName\", status, progress, steps, files, created_at as \"createdAt\", updated_at as \"updatedAt\" from parse_jobs order by created_at desc"),
+    db.query(`select id, project_id as "projectId", project_name as "projectName",
+      status, progress, steps, files, source_values as "sourceValues",
+      extracted_fields as "extractedFields", created_at as "createdAt",
+      updated_at as "updatedAt" from parse_jobs order by created_at desc`),
     db.query("select supplier, project, type, amount::float, status from suppliers order by created_at desc"),
     db.query("select action, project, type, mentions, note, user_name as \"user\", created_at as at from alert_updates order by created_at desc"),
     db.query("select project, body, mentions, user_name as \"user\", created_at as at from comments order by created_at desc"),
@@ -134,8 +137,20 @@ export async function writePostgresDbFromSnapshot(snapshot) {
 
     for (const job of snapshot.parseJobs || []) {
       await db.query(
-        "insert into parse_jobs (id, project_id, project_name, status, progress, steps, files, created_at, updated_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-        [job.id, job.projectId, job.projectName, job.status, job.progress, JSON.stringify(job.steps || []), JSON.stringify(job.files || []), job.createdAt || new Date().toISOString(), job.updatedAt || new Date().toISOString()]
+        "insert into parse_jobs (id, project_id, project_name, status, progress, steps, files, source_values, extracted_fields, created_at, updated_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+        [
+          job.id,
+          job.projectId,
+          job.projectName,
+          job.status,
+          job.progress,
+          JSON.stringify(job.steps || []),
+          JSON.stringify(job.files || []),
+          JSON.stringify(job.sourceValues || {}),
+          JSON.stringify(job.extractedFields || {}),
+          job.createdAt || new Date().toISOString(),
+          job.updatedAt || new Date().toISOString()
+        ]
       );
     }
 
