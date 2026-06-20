@@ -82,11 +82,11 @@ export function updateProject(db, body, user) {
   const existingBreakdown = project.extractedFields?.profitBreakdown || {};
   const executionBudgetRatio = values["执行预算占比"] || project.extractedFields?.executionBudgetRatio || "";
   const explicitBudgetLimit = values["项目预算上限"] || values["执行预算上限"] || values["项目执行预算上限"];
+  const ratio = parsePercent(executionBudgetRatio);
   const budgetLimit = explicitBudgetLimit !== undefined && explicitBudgetLimit !== ""
     ? parseMoney(explicitBudgetLimit)
     : (parseMoney(existingBreakdown.executionBudget) || parseMoney(project.extractedFields?.executionBudget));
-  const ratio = parsePercent(executionBudgetRatio);
-  const executionBudget = budgetLimit || (ratio ? contract * ratio : 0);
+  const executionBudget = ratio ? contract * ratio : budgetLimit;
 
   if (nextName) project.name = nextName;
   project.client = nextClient;
