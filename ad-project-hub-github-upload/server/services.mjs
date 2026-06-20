@@ -573,7 +573,7 @@ async function requestAiJson(ai, values, text) {
   const messages = [
     {
       role: "system",
-      content: "你是广告项目经营中台的文件解析和自动归档助手。你要把合同、报价单、执行表、排期表、供应商结算表中的关键信息归类到项目中台。只返回 JSON，不要 Markdown。字段包括 projectName, client, partyA, partyB, contract, paid, receivable, advancePayment, advanceInterest, executionBudget, internalLabor, overhead, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, suppliers, tasks, archiveTags, confidence, missingFields, hasCostSheet。金额返回数字，日期保留原文。项目利润口径固定为：项目总金额 - 项目垫款 - 垫款利息 - 项目执行预算 - 内部人力 - 公摊费用（水电、办公室租金及其他公摊）= 项目利润。只有文件明确是成本表、供应商结算表、费用明细表时，hasCostSheet 才为 true，并尽量返回 advancePayment、advanceInterest、executionBudget、internalLabor、overhead；合同或报价单中的合同金额、服务费用、付款金额不要写入成本字段。costs 为 [科目, 金额]；suppliers 为对象数组，含 supplier,type,amount,status；tasks 为 [节点, 进度百分比]。"
+      content: "你是广告项目经营中台的文件解析和自动归档助手。你要把合同、报价单、执行表、排期表、供应商结算表中的关键信息归类到项目中台。只返回 JSON，不要 Markdown。字段包括 projectName, client, partyA, partyB, contract, paid, receivable, advancePayment, advanceInterest, executionCost, executionBudget, internalLabor, overhead, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, suppliers, tasks, archiveTags, confidence, missingFields, hasCostSheet。金额返回数字，日期保留原文。项目利润口径固定为：项目总金额 - 实时执行支出 - 项目垫款 - 垫款利息 - 内部人力 - 公摊费用（水电、办公室租金及其他公摊）= 项目利润。executionBudget 是项目预留预算上限，通常来自合同金额占比；执行表中的执行支出请写入 executionCost。只有文件明确是成本表、供应商结算表、费用明细表时，hasCostSheet 才为 true，并尽量返回 advancePayment、advanceInterest、executionCost、internalLabor、overhead；合同或报价单中的合同金额、服务费用、付款金额不要写入成本字段。costs 为 [科目, 金额]；suppliers 为对象数组，含 supplier,type,amount,status；tasks 为 [节点, 进度百分比]。"
     },
     {
       role: "user",
@@ -746,12 +746,13 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
     : (parseMoney(values["合同金额"]) || extractContractAmount(text) || amounts[0] || 0);
   const explicitPaid = guessAmount(text, ["已回款", "已付款", "首付款", "预付款", "已收款"]) || 0;
   const paid = explicitPaid || tableMetrics.projectRevenue || 0;
-  const advancePayment = hasCostSheet ? tableMetrics.advancePayment || guessAmount(text, ["项目垫款", "垫款本金", "垫款", "代垫"]) || 0 : 0;
+  const advancePayment = hasCostSheet ? pickTableMetric(tableMetrics, "advancePayment", guessAmount(text, ["项目垫款", "垫款本金", "垫款", "代垫"])) : 0;
   const advanceInterest = hasCostSheet ? guessAmount(text, ["垫款利息", "资金占用费", "利息"]) || 0 : 0;
-  const executionBudget = hasCostSheet ? tableMetrics.executionBudget || guessAmount(text, ["项目执行预算", "执行预算", "执行支出", "执行成本", "供应商", "应结", "结算金额"]) || 0 : 0;
-  const internalLabor = hasCostSheet ? tableMetrics.internalLabor || guessAmount(text, ["内部人力", "人力", "人力成本", "内部工时", "工时成本"]) || 0 : 0;
-  const overhead = hasCostSheet ? tableMetrics.overhead || guessAmount(text, ["公摊费用", "公摊", "水电", "办公室租金", "房租", "租金", "其他费用", "管理公摊"]) || 0 : 0;
-  const costUsed = advancePayment + advanceInterest + executionBudget + internalLabor + overhead;
+  const executionCost = hasCostSheet ? pickTableMetric(tableMetrics, "executionCost", guessAmount(text, ["执行支出", "执行成本", "供应商", "应结", "结算金额"])) : 0;
+  const executionBudget = hasCostSheet ? guessAmount(text, ["项目执行预算", "执行预算"]) || 0 : 0;
+  const internalLabor = hasCostSheet ? pickTableMetric(tableMetrics, "internalLabor", guessAmount(text, ["内部人力", "人力", "人力成本", "内部工时", "工时成本"])) : 0;
+  const overhead = hasCostSheet ? pickTableMetric(tableMetrics, "overhead", guessAmount(text, ["公摊费用", "公摊", "水电", "办公室租金", "房租", "租金", "其他费用", "管理公摊"])) : 0;
+  const costUsed = advancePayment + advanceInterest + executionCost + internalLabor + overhead;
   const parties = extractParties(text);
   const servicePeriod = extractServicePeriod(text, dates);
   const client = values["客户 / 品牌"] || parties.partyA || guessText(text, ["客户", "品牌"]) || "";
@@ -768,6 +769,7 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
     client,
     contract,
     projectRevenue: tableMetrics.projectRevenue || 0,
+    executionBudgetRatio: values["执行预算占比"] || values.executionBudgetRatio || "",
     paid,
     receivable: contract ? Math.max(contract - paid, 0) : 0,
     costBudget: hasCostSheet ? costUsed : 0,
@@ -776,6 +778,7 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
     advanceInterest,
     advanceStartDate: guessDateByLabels(text, ["垫款开始", "垫款日期", "垫款时间", "付款日期", "代垫日期"]) || "",
     advanceEndDate: guessDateByLabels(text, ["垫款结束", "归还日期", "回款日期", "结算日期", "计息截止"]) || "",
+    executionCost,
     executionBudget,
     internalLabor,
     overhead,
@@ -815,6 +818,7 @@ function normalizeParsedFields(parsed, values, files, interestRateSettings) {
     hasCostSheet,
     advancePayment: profitBreakdown?.advancePayment || 0,
     advanceInterest: profitBreakdown?.advanceInterest || 0,
+    executionCost: profitBreakdown?.executionCost || 0,
     executionBudget: profitBreakdown?.executionBudget || 0,
     internalLabor: profitBreakdown?.internalLabor || 0,
     overhead: profitBreakdown?.overhead || 0,
@@ -835,18 +839,21 @@ function normalizeParsedFields(parsed, values, files, interestRateSettings) {
 function calculateProfitBreakdown(contract, parsed = {}, interestRateSettings) {
   const sourceCosts = Array.isArray(parsed.costs) ? parsed.costs.map(normalizePair).filter(Boolean) : [];
   const pick = (field, labels) => parseMoney(parsed[field]) || sumCostLabels(sourceCosts, labels);
+  const executionBudgetRatio = parsePercent(parsed.executionBudgetRatio || parsed["执行预算占比"]);
+  const executionBudget = parseMoney(parsed.executionBudget) || (executionBudgetRatio ? Number(contract || 0) * executionBudgetRatio : 0);
   const advancePayment = pick("advancePayment", ["项目垫款", "垫款本金", "垫款", "代垫"]);
   const explicitAdvanceInterest = pick("advanceInterest", ["垫款利息", "资金占用费", "利息"]);
   const interestMeta = calculateAdvanceInterest(advancePayment, parsed, interestRateSettings);
   const advanceInterest = explicitAdvanceInterest || interestMeta.amount;
-  const executionBudget = pick("executionBudget", ["项目执行预算", "执行预算", "执行支出", "执行成本", "供应商", "媒介", "达人", "制作", "投放", "结算"]);
+  const executionCost = pick("executionCost", ["执行支出", "执行成本", "供应商", "媒介", "达人", "制作", "投放", "结算"]);
   const internalLabor = pick("internalLabor", ["内部人力", "人力成本", "人力", "内部工时", "工时"]);
   const overhead = pick("overhead", ["公摊费用", "公摊", "水电", "办公室租金", "房租", "租金", "其他费用", "管理公摊"]);
-  const totalDeduction = advancePayment + advanceInterest + executionBudget + internalLabor + overhead;
+  const totalDeduction = advancePayment + advanceInterest + executionCost + internalLabor + overhead;
   const profit = Number(contract || 0) - totalDeduction;
   return {
     advancePayment,
     advanceInterest,
+    executionCost,
     executionBudget,
     internalLabor,
     overhead,
@@ -859,7 +866,8 @@ function calculateProfitBreakdown(contract, parsed = {}, interestRateSettings) {
     costs: [
       ["项目垫款", advancePayment],
       ["垫款利息", advanceInterest],
-      ["项目执行预算", executionBudget],
+      ["项目执行总成本", executionCost],
+      ["项目执行预算上限", executionBudget],
       ["内部人力", internalLabor],
       ["公摊费用", overhead]
     ]
@@ -914,6 +922,14 @@ function profitMargin(contract, profit) {
   return Math.round((Number(profit || 0) / amount) * 100);
 }
 
+function parsePercent(value) {
+  if (value === null || value === undefined || value === "") return 0;
+  const text = String(value).trim();
+  const number = parseMoney(text);
+  if (!number) return 0;
+  return text.includes("%") || number > 1 ? number / 100 : number;
+}
+
 function normalizePair(item) {
   if (Array.isArray(item)) return [String(item[0] || "未命名"), parseMoney(item[1])];
   if (item && typeof item === "object") return [String(item.name || item.type || "未命名"), parseMoney(item.value || item.amount || item.progress)];
@@ -922,11 +938,7 @@ function normalizePair(item) {
 
 function extractCostTableMetrics(text) {
   const totals = {
-    projectRevenue: 0,
-    executionBudget: 0,
-    internalLabor: 0,
-    advancePayment: 0,
-    overhead: 0
+    _seen: {}
   };
   const lines = String(text || "").split(/\r?\n/);
   let headers = [];
@@ -940,6 +952,10 @@ function extractCostTableMetrics(text) {
 
     if (headerIndexes.length >= 2) {
       headers = headerIndexes;
+      headers.forEach(({ key }) => {
+        totals._seen[key] = true;
+        totals[key] = totals[key] || 0;
+      });
       continue;
     }
 
@@ -956,11 +972,22 @@ function extractCostTableMetrics(text) {
 function costColumnKey(label) {
   const text = String(label || "").replace(/\s+/g, "");
   if (/收入|项目收入|确认收入/.test(text)) return "projectRevenue";
-  if (/执行支出|执行预算|执行成本|项目执行/.test(text)) return "executionBudget";
+  if (/执行支出|执行成本|项目执行/.test(text)) return "executionCost";
   if (/人力|内部人力|人力成本/.test(text)) return "internalLabor";
   if (/垫款|项目垫款|代垫/.test(text)) return "advancePayment";
   if (/公摊|公摊费用|水电|租金|办公室/.test(text)) return "overhead";
   return "";
+}
+
+function tableMetricValue(metrics, key) {
+  return metrics?._seen?.[key] && metrics[key] !== null && metrics[key] !== undefined
+    ? metrics[key]
+    : null;
+}
+
+function pickTableMetric(metrics, key, fallback = 0) {
+  const value = tableMetricValue(metrics, key);
+  return value === null ? Number(fallback || 0) : value;
 }
 
 function isCostSheet(files = [], text = "") {
