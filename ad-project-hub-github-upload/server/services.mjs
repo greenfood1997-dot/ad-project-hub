@@ -439,13 +439,22 @@ async function extractFileContent(file) {
       const pdfParse = (await import("pdf-parse")).default;
       const parsed = await pdfParse(buffer);
       const text = (parsed.text || "").trim();
-      if (!text && tencentOcrConfigured()) {
-        const ocrText = await recognizeFileWithTencentOcr(file, { isPdf: true });
-        return {
-          ...file,
-          text: ocrText,
-          extractionStatus: ocrText.trim() ? "PDF 未提取到文本，已使用腾讯云 OCR 识别" : "腾讯云 OCR 未识别到文本"
-        };
+      if (shouldUseOcrForPdf(text) && tencentOcrConfigured()) {
+        const reason = text ? "PDF 文本缺少可解析金额/日期" : "PDF 未提取到文本";
+        try {
+          const ocrText = await recognizeFileWithTencentOcr(file, { isPdf: true });
+          return {
+            ...file,
+            text: ocrText,
+            extractionStatus: ocrText.trim() ? `${reason}，已使用腾讯云 OCR 识别` : "腾讯云 OCR 未识别到文本"
+          };
+        } catch (error) {
+          return {
+            ...file,
+            text,
+            extractionStatus: `${reason}，但腾讯云 OCR 调用失败：${error.message}`
+          };
+        }
       }
       return {
         ...file,
@@ -458,12 +467,16 @@ async function extractFileContent(file) {
 
     if (type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(lowerName)) {
       if (!tencentOcrConfigured()) return fallback;
-      const ocrText = await recognizeFileWithTencentOcr(file, { isPdf: false });
-      return {
-        ...file,
-        text: ocrText,
-        extractionStatus: ocrText.trim() ? "图片合同已使用腾讯云 OCR 识别" : "腾讯云 OCR 未识别到文本"
-      };
+      try {
+        const ocrText = await recognizeFileWithTencentOcr(file, { isPdf: false });
+        return {
+          ...file,
+          text: ocrText,
+          extractionStatus: ocrText.trim() ? "图片合同已使用腾讯云 OCR 识别" : "腾讯云 OCR 未识别到文本"
+        };
+      } catch (error) {
+        return { ...fallback, extractionStatus: `图片合同腾讯云 OCR 调用失败：${error.message}` };
+      }
     }
 
     if (lowerName.endsWith(".docx") || type.includes("wordprocessingml")) {
@@ -493,6 +506,14 @@ async function extractFileContent(file) {
   }
 }
 
+function shouldUseOcrForPdf(text) {
+  const normalized = (text || "").trim();
+  if (!normalized) return true;
+  const hasAmount = extractAmounts(normalized).length > 0 || extractContractAmount(normalized) > 0;
+  const hasDate = extractDates(normalized).length > 0;
+  return !hasAmount && !hasDate;
+}
+
 function parseJsonObject(content) {
   try {
     return JSON.parse(content);
@@ -514,6 +535,10 @@ function inferFieldsFromText(values, text, files) {
   const projectName = values["项目名称"] || guessText(text, ["项目名称", "项目", "合同名称"]) || "";
   const suppliers = extractSuppliers(text);
   const noReadableContent = files.length && !files.some((file) => (file.text || "").trim());
+  const extractionNote = files
+    .map((file) => file.extractionStatus)
+    .filter(Boolean)
+    .join("；");
 
   return normalizeParsedFields({
     projectName,
@@ -530,9 +555,9 @@ function inferFieldsFromText(values, text, files) {
     paymentDue: guessDateByLabels(text, ["付款期限", "付款时间", "回款节点", "付款节点", "尾款", "余款"]) || dates[1] || dates[0] || "",
     risk: inferRisk({ contract, costBudget: costUsed, costUsed, receivable: contract - paid }),
     summary: noReadableContent
-      ? `已读取 ${files.length} 个文件，但未提取到可解析正文。该文件可能是扫描件或图片合同，需要接入 OCR/视觉模型后才能精准识别金额、甲乙方和期限。`
+      ? `已读取 ${files.length} 个文件，但未提取到可解析正文。${extractionNote || "该文件可能是扫描件或图片合同，需要接入 OCR/视觉模型后才能精准识别金额、甲乙方和期限。"}`
       : files.length
-        ? `已读取 ${files.length} 个文件，抽取到 ${amounts.length} 个金额字段、${dates.length} 个日期字段。`
+        ? `已读取 ${files.length} 个文件，抽取到 ${amounts.length} 个金额字段、${dates.length} 个日期字段。${extractionNote ? `提取状态：${extractionNote}` : ""}`
       : "未上传文件，等待解析。",
     costs: costUsed ? [["文件识别费用", costUsed]] : [],
     suppliers,
