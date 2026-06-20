@@ -414,9 +414,11 @@ export async function testAiSettings(values) {
 }
 
 export async function saveSetting(db, type, values, user) {
-  const checked = type === "aiService" ? await testAiSettings(values) : null;
-  const normalized = type === "aiService" ? validateAiSettings(values) : values;
-  const saved = { ...normalized, connection: checked, savedAt: new Date().toISOString(), savedBy: user.id };
+  const current = db.settings?.[type] || {};
+  const candidate = type === "aiService" ? { ...current, ...values } : values;
+  const checked = type === "aiService" ? await testAiSettings(candidate) : null;
+  const normalized = type === "aiService" ? validateAiSettings(candidate) : values;
+  const saved = { ...current, ...normalized, connection: checked, savedAt: new Date().toISOString(), savedBy: user.id };
   db.settings[type] = saved;
   db.auditLogs.unshift({ type: "settings", target: type, user: user.name, at: saved.savedAt });
   return saved;

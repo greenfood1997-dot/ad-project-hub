@@ -145,6 +145,7 @@
       .focus-card h2 { font-size: 17px; margin-bottom: 12px; }
       .cash-line { display: grid; gap: 10px; margin: 18px 0; }
       .cash-track { height: 14px; background: #edf1f6; border-radius: 999px; display: flex; overflow: hidden; }
+      .cash-track i { transition: width .75s ease; }
       .cash-track i:first-child { background: #2563eb; }
       .cash-track i:last-child { background: #e8a321; }
       .focus-note { color: #66758a; line-height: 1.6; font-size: 14px; }
@@ -157,8 +158,10 @@
       .simple-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
       .empty-state { padding: 34px; text-align: center; color: #66758a; }
       .summary-pie { display: grid; grid-template-columns: 150px 1fr; gap: 18px; align-items: center; min-height: 210px; }
-      .pie { width: 150px; height: 150px; border-radius: 50%; background: conic-gradient(#2563eb 0 36%, #e8a321 36% 100%); position: relative; }
-      .pie::after { content: "0"; position: absolute; inset: 34px; border-radius: 50%; background: #fff; display: grid; place-items: center; font-weight: 800; color: #172033; }
+      .pie { --paid-angle: 0deg; --due-angle: 0deg; --deduction-angle: 0deg; --center-value: "0"; width: 150px; height: 150px; border-radius: 50%; background: conic-gradient(#2563eb 0 var(--paid-angle), #e8a321 var(--paid-angle) calc(var(--paid-angle) + var(--due-angle)), #94a3b8 calc(var(--paid-angle) + var(--due-angle)) calc(var(--paid-angle) + var(--due-angle) + var(--deduction-angle)), #edf1f6 0 360deg); position: relative; transition: background .75s ease; }
+      .pie::before { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid rgba(37,99,235,.18); border-top-color: rgba(37,99,235,.8); animation: pieSpin 1.8s linear infinite; }
+      .pie::after { content: var(--center-value); position: absolute; inset: 34px; border-radius: 50%; background: #fff; display: grid; place-items: center; font-weight: 800; color: #172033; }
+      @keyframes pieSpin { to { transform: rotate(360deg); } }
       .pie-list { display: grid; gap: 12px; }
       .pie-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #edf1f6; padding-bottom: 10px; }
       .pie-item:last-child { border-bottom: 0; padding-bottom: 0; }
@@ -382,8 +385,20 @@
         const receivable = projects.reduce((sum, item) => sum + Number(item.receivable || 0), 0);
         const deductionTotal = projects.reduce((sum, item) => sum + Number(item.costUsed || 0), 0);
         const projectProfit = contract - deductionTotal;
+        const pieTotal = Math.max(paid + receivable + deductionTotal, 0);
+        const paidAngle = pieTotal ? (paid / pieTotal) * 360 : 0;
+        const dueAngle = pieTotal ? (receivable / pieTotal) * 360 : 0;
+        const deductionAngle = pieTotal ? (deductionTotal / pieTotal) * 360 : 0;
         const highRisk = projects.filter(item => item.risk === "高").length;
         const rate = contract ? Math.round((paid / contract) * 100) : 0;
+        const pie = document.querySelector(".pie");
+        if (pie) {
+          pie.style.setProperty("--paid-angle", `${paidAngle}deg`);
+          pie.style.setProperty("--due-angle", `${dueAngle}deg`);
+          pie.style.setProperty("--deduction-angle", `${deductionAngle}deg`);
+          pie.style.setProperty("--center-value", `"${money(contract)}"`);
+          pie.title = `项目总金额 ${money(contract)}，已回款 ${money(paid)}，待回款 ${money(receivable)}，扣减合计 ${money(deductionTotal)}`;
+        }
         document.getElementById("dashboardMetrics").innerHTML = `
           <div class="metric"><span>合同总额</span><strong>${money(contract)}</strong><p>${projects.length ? `${projects.length} 个项目` : "暂无项目"}</p></div>
           <div class="metric"><span>回款率</span><strong>${rate}%</strong><p>已回款 ${money(paid)}</p></div>
@@ -397,6 +412,13 @@
         document.getElementById("dashboardCashNote").textContent = projects.length
           ? `当前项目总金额 ${money(contract)}，已回款 ${money(paid)}，待回款 ${money(receivable)}；扣减合计 ${money(deductionTotal)}，项目利润 ${money(projectProfit)}。`
           : "暂无项目数据。新建项目并上传合同 / 执行表后，这里会自动统计回款、利润和费用扣减。";
+        const cashTrack = document.querySelector(".cash-track");
+        if (cashTrack) {
+          const paymentTotal = paid + receivable;
+          const paidWidth = paymentTotal ? (paid / paymentTotal) * 100 : 0;
+          const dueWidth = paymentTotal ? (receivable / paymentTotal) * 100 : 0;
+          cashTrack.innerHTML = `<i style="width:${paidWidth}%"></i><i style="width:${dueWidth}%"></i>`;
+        }
         document.getElementById("dashboardAlerts").innerHTML = highRisk
           ? projects.filter(item => item.risk === "高").map(item => `<div class="dashboard-alert"><strong>${item.name}</strong><span>高风险</span><p>请进入预警中心处理。</p></div>`).join("")
           : `<div class="dashboard-alert"><strong>暂无风险预警</strong><span>系统</span><p>项目产生成本、回款或进度风险后会显示在这里。</p></div>`;
@@ -666,6 +688,14 @@
         const values = normalizeAiForm(collectDrawerValues(), options);
         fillDrawerValues(values);
       }
+      function mergeSharedAiValues(values) {
+        const current = appState.settings?.aiService || {};
+        return normalizeAiForm({
+          ...current,
+          ...values,
+          "API Key": values["API Key"] || current["API Key"] || ""
+        });
+      }
       function normalizeInterestRateForm(values) {
         const source = values["利率来源"] || values.source || "latest_lpr";
         const annualRate = Number(values["年化利率"] || values.annualRate || 3.45);
@@ -742,14 +772,14 @@
           },
           aiService: {
             title: "AI 服务配置",
-            desc: "选择服务商并粘贴一次 API Key，系统会自动匹配接口地址和模型，并在下次打开时继续沿用。",
+            desc: "管理员粘贴一次 API Key 后会保存为团队共享配置，其他同事登录后可直接使用 AI 解析和项目问数。",
             body: `<div class="form-grid">
               <div class="field"><label>服务商</label><select><option>GPT / OpenAI</option><option>Kimi / Moonshot</option><option>DeepSeek</option><option>OpenAI 兼容接口</option><option>私有化模型服务</option></select></div>
-              <div class="field password-field"><label>API Key</label><div class="password-wrap"><input type="password" placeholder="粘贴 sk-... 或企业内部网关 Token" /><button type="button" class="eye-btn" data-toggle-password>👁</button></div></div>
+              <div class="field password-field"><label>API Key</label><div class="password-wrap"><input type="password" placeholder="已保存则无需重复填写；更换时粘贴新 Key" /><button type="button" class="eye-btn" data-toggle-password>👁</button></div></div>
               <div class="field"><label>Base URL</label><input placeholder="系统自动匹配，也可手动修改" /></div>
               <div class="field"><label>模型名称</label><input placeholder="系统自动匹配，也可手动修改" /></div>
               <div class="field"><label>启用能力</label><select><option>合同解析 + Excel 解析 + 风险判断</option><option>仅合同解析</option><option>仅项目问数</option><option>仅风险预警</option></select></div>
-              <div class="summary"><span>AI</span><p>保存后，配置会写入服务端数据库；关闭网页再打开仍会保持当前服务商、API Key、模型和连接状态。</p></div>
+              <div class="summary"><span>AI</span><p>保存后，配置会写入服务端数据库并作为全员共享配置；同事上传文件会复用同一个已校验 AI 服务。</p></div>
               <div id="aiConnectionStatus" class="connection-status">尚未校验连接。请点击“校验配置”，确认真实连通后再保存。</div>
             </div><div class="drawer-actions"><button class="ghost" data-test-ai data-submit="AI 配置校验通过">校验配置</button><button class="primary" data-setting="aiService" data-submit="AI 服务配置已保存">保存配置</button></div>`
           },
@@ -838,6 +868,7 @@
           applyAiDefaults();
           const provider = document.querySelector("#drawerBody .field select");
           const apiKey = Array.from(document.querySelectorAll("#drawerBody .field input")).find(input => input.type === "password");
+          if (apiKey && appState.settings?.aiService?.["API Key"]) apiKey.placeholder = "已保存团队共享 Key；留空表示继续使用";
           provider?.addEventListener("change", () => applyAiDefaults({ forceProviderDefaults: true }));
           apiKey?.addEventListener("input", () => applyAiDefaults());
           const connection = appState.settings?.aiService?.connection;
@@ -860,7 +891,7 @@
           const originalText = btn.textContent;
           try {
             if (btn.dataset.testAi !== undefined) {
-              const values = normalizeAiForm(collectDrawerValues());
+              const values = mergeSharedAiValues(collectDrawerValues());
               fillDrawerValues(values);
               btn.disabled = true;
               btn.textContent = "校验中...";
@@ -918,7 +949,7 @@
             if (btn.dataset.setting) {
               const rawValues = collectDrawerValues();
               const values = btn.dataset.setting === "aiService"
-                ? normalizeAiForm(rawValues)
+                ? mergeSharedAiValues(rawValues)
                 : btn.dataset.setting === "interestRate"
                   ? normalizeInterestRateForm(rawValues)
                   : rawValues;
