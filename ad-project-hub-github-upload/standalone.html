@@ -404,7 +404,7 @@
       function monthSpan(start, end) {
         return Math.max(1, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth() + 1);
       }
-      function projectPaymentSchedule(project) {
+      function projectTimeline(project) {
         const fields = project.extractedFields || {};
         const text = [
           project.paymentDue,
@@ -414,8 +414,14 @@
           fields.servicePeriod,
           fields.summary
         ].filter(Boolean).join(" ");
-        if (!/季度|每季|按季|季付|季度回款/.test(text)) return null;
         const dates = Array.from(text.matchAll(/20\d{2}[年./-]\s*\d{1,2}(?:[月./-]\s*\d{1,2})?/g)).map((match) => parseProjectDate(match[0])).filter(Boolean);
+        const end = dates.length > 1 ? dates[dates.length - 1] : dates[0] || null;
+        return { text, dates, end };
+      }
+      function projectPaymentSchedule(project) {
+        const fields = project.extractedFields || {};
+        const { text, dates } = projectTimeline(project);
+        if (!/季度|每季|按季|季付|季度回款/.test(text)) return null;
         const start = dates[0] || parseProjectDate(fields.servicePeriod || project.nextMilestone || "");
         const end = dates[1] || parseProjectDate(project.paymentDue || "");
         if (!start) return null;
@@ -442,6 +448,25 @@
         const costUsed = Number(project.costUsed || 0);
         const costRate = budget ? costUsed / budget : 0;
         const alerts = [];
+        const timeline = projectTimeline(project);
+        const today = new Date();
+        const projectDone = /已完成|结案|完成/.test(String(project.status || ""));
+        if (timeline.end && today > timeline.end && receivable > 0) {
+          alerts.push({
+            role: "销售",
+            type: "合同回款已逾期",
+            severity: "高",
+            text: `合同约定节点已到期（${timeline.end.toLocaleDateString("zh-CN")}），截至今日仍待回款 ${money(receivable)}，请销售立即跟进回款。`
+          });
+        }
+        if (timeline.end && today > timeline.end && !projectDone) {
+          alerts.push({
+            role: "PM",
+            type: "合同执行已逾期",
+            severity: "高",
+            text: `合同服务期/执行节点已到期（${timeline.end.toLocaleDateString("zh-CN")}），但项目状态仍为“${project.status || "未完成"}”，请 PM 核实执行收尾。`
+          });
+        }
         const schedule = projectPaymentSchedule(project);
         if (schedule && contract && paid < schedule.firstQuarterAmount && schedule.elapsedQuarters >= 2) {
           alerts.push({
