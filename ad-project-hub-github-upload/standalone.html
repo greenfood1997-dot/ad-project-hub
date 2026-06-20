@@ -106,6 +106,10 @@
       .progress-row { display: grid; grid-template-columns: 70px minmax(100px,1fr) 42px; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 13px; }
       .progress-row div { height: 8px; border-radius: 999px; background: #e8eef6; overflow: hidden; }
       .progress-row i { display: block; height: 100%; border-radius: inherit; background: #2563eb; }
+      .payment-progress { display: grid; gap: 10px; }
+      .payment-progress-track { height: 12px; border-radius: 999px; background: #e8eef6; overflow: hidden; }
+      .payment-progress-track i { display: block; height: 100%; border-radius: inherit; background: #16a34a; }
+      .payment-progress-meta { display: flex; justify-content: space-between; gap: 12px; color: #66758a; font-size: 13px; }
       .cost-row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #edf1f6; padding: 9px 0; font-size: 13px; }
       .timeline { justify-content: space-between; gap: 12px; border-top: 1px solid #edf1f6; margin-top: 18px; padding-top: 16px; }
       .timeline div { display: grid; gap: 6px; }
@@ -473,6 +477,9 @@
         const usedRate = p.costBudget ? Math.round((p.costUsed || 0) / p.costBudget * 100) : 0;
         const projectProfit = (p.contract || 0) - (p.costUsed || 0);
         const marginText = hasCostData && p.contract ? `${Math.round((projectProfit / (p.contract || 1)) * 100)}%` : "待成本表";
+        const paidAmount = Number(p.paid || 0);
+        const paymentTotal = Number(p.contract || 0) || paidAmount + Number(p.receivable || 0);
+        const paymentRate = paymentTotal ? Math.min(100, Math.round((paidAmount / paymentTotal) * 100)) : 0;
         const relatedSuppliers = supplierSettlements.filter(item => item.project === p.name);
         const supplierCost = relatedSuppliers.reduce((sum, item) => sum + item.amount, 0);
         const parseJob = (appState.parseJobs || []).find((job) => job.projectId === p.id);
@@ -480,7 +487,7 @@
           <div class="detail-head"><div><span class="id">${p.id}</span><h2>${p.name}</h2><p>${p.client || "未填写客户"} · ${p.status}</p></div><b class="risk ${riskClass(p.risk)}">${p.risk}风险</b></div>
           <div class="summary"><span>AI</span><p>${p.aiSummary || "文件已记录，等待 AI 解析任务生成结构化字段。"}</p></div>
           <div class="detail-metrics"><div class="mini"><span>项目总金额</span><strong>${money(p.contract || 0)}</strong></div><div class="mini"><span>扣减合计</span><strong>${hasCostData ? money(p.costUsed || 0) : "待上传"}</strong></div><div class="mini"><span>项目利润</span><strong>${hasCostData ? money(projectProfit) : "待成本表"}</strong></div><div class="mini"><span>毛利率</span><strong>${marginText}</strong></div></div>
-          <div class="split"><div><h3>执行进度</h3>${(p.tasks || []).map(([name,value]) => `<div class="progress-row"><span>${name}</span><div><i style="width:${value}%"></i></div><b>${value}%</b></div>`).join("") || `<p class="focus-note">暂无执行进度。</p>`}</div><div><h3>利润测算结构</h3>${hasCostData ? (p.costs || []).map(([name,value]) => `<div class="cost-row"><span>${name}</span><b>${money(value)}</b></div>`).join("") : `<p class="focus-note">尚未上传本项目月度成本表，暂不计算项目利润和毛利率。</p>`}${hasCostData ? `<div class="cost-row"><span>项目利润</span><b>${money(projectProfit)}</b></div>` : ""}</div></div>
+          <div class="split"><div><h3>回款进度</h3><div class="payment-progress"><div class="payment-progress-track"><i style="width:${paymentRate}%"></i></div><div class="payment-progress-meta"><span>已回款 ${money(paidAmount)}</span><b>${paymentRate}%</b></div><div class="payment-progress-meta"><span>项目总金额 ${money(paymentTotal)}</span><span>待回款 ${money(Math.max(paymentTotal - paidAmount, 0))}</span></div></div></div><div><h3>利润测算结构</h3>${hasCostData ? (p.costs || []).map(([name,value]) => `<div class="cost-row"><span>${name}</span><b>${money(value)}</b></div>`).join("") : `<p class="focus-note">尚未上传本项目月度成本表，暂不计算项目利润和毛利率。</p>`}${hasCostData ? `<div class="cost-row"><span>项目利润</span><b>${money(projectProfit)}</b></div>` : ""}</div></div>
           <div class="focus-card job-box"><div class="panel-row"><h3>AI 解析进度</h3>${parseJob && parseJob.status !== "已完成" ? `<button class="tiny-btn" data-refresh-job="${parseJob.id}">刷新解析进度</button>` : parseJob ? `<button class="tiny-btn" data-refresh-job="${parseJob.id}">查看最新结果</button>` : ""}</div>${parseJob ? `<p class="focus-note">${parseJob.status} · ${parseJob.progress}%${parseJob.status !== "已完成" ? "，关闭窗口后也可在项目台账继续查看。" : "，结构化字段已写入项目。"}</p><div class="job-progress"><i style="width:${parseJob.progress}%"></i></div><div class="job-steps">${parseJob.steps.map(step => `<div class="job-step"><strong>${step.name}</strong>${step.status}</div>`).join("")}</div>${parseJob.extractedFields?.summary ? `<div class="summary" style="margin-bottom:0"><span>结果</span><p>${parseJob.extractedFields.summary}</p></div>` : ""}` : `<p class="focus-note">暂无解析任务。上传合同或执行表后会显示解析进度。</p>`}</div>
           <div class="focus-card" style="margin-top:16px"><h3>供应商费用归属</h3>${relatedSuppliers.length ? relatedSuppliers.map(item => `<div class="cost-row"><span>${item.supplier} · ${item.type}</span><b>${money(item.amount)} / ${item.status}</b></div>`).join("") : `<p class="focus-note">暂无供应商费用。</p>`}</div>
           <div class="timeline"><div><span>下一节点</span><strong>${p.nextMilestone || "暂无"}</strong></div><div><span>回款节点</span><strong>${p.paymentDue || "暂无"}</strong></div></div>`;
@@ -641,7 +648,7 @@
             title: "新建项目",
             desc: "可手动录入，也可上传合同和执行表，由 AI 自动补全金额、节点、成本和回款计划。",
             body: `<div class="form-grid">
-              <div class="dropzone" id="projectDropzone">上传合同 / 执行表<br><small>支持拖拽或点击选择 PDF、Word、Excel、CSV</small><input id="projectFileInput" type="file" multiple hidden /></div>
+              <div class="dropzone" id="projectDropzone">上传合同 / 执行表<br><small>可连续拖拽多个文件，支持 PDF、Word、Excel、CSV</small><input id="projectFileInput" type="file" multiple hidden /></div>
               <div class="field"><label>解析方式</label><select><option>合同 + 执行表联合解析</option><option>仅解析合同字段</option><option>仅解析执行表成本</option><option>先建项目，稍后上传</option></select></div>
               <div class="field"><label>项目名称</label><input placeholder="例如：某品牌年度整合传播" /></div>
               <div class="field"><label>客户 / 品牌</label><input placeholder="客户名称、品牌名称" /></div>
@@ -856,6 +863,16 @@
       }
       let selectedFiles = [];
       let selectedFilePayloads = [];
+      function fileKey(file) {
+        return `${file.name}-${file.size}-${file.lastModified || 0}`;
+      }
+      function appendSelectedFiles(files) {
+        const map = new Map(selectedFiles.map((file) => [fileKey(file), file]));
+        files.forEach((file) => map.set(fileKey(file), file));
+        selectedFiles = Array.from(map.values());
+        selectedFilePayloads = [];
+        updateDropzoneLabel();
+      }
       function updateDropzoneLabel() {
         const dropzone = document.getElementById("projectDropzone");
         if (!dropzone) return;
@@ -863,7 +880,7 @@
         const names = selectedFiles.map(file => file.name).join("、");
         dropzone.innerHTML = selectedFiles.length
           ? `已选择 ${selectedFiles.length} 个文件<br><small>${names}</small>`
-          : `上传合同 / 执行表<br><small>支持拖拽或点击选择 PDF、Word、Excel、CSV</small>`;
+          : `上传合同 / 执行表<br><small>可连续拖拽多个文件，支持 PDF、Word、Excel、CSV</small>`;
         dropzone.appendChild(input);
       }
       function bindFileDropzone() {
@@ -873,9 +890,8 @@
         selectedFiles = [];
         dropzone.addEventListener("click", () => input.click());
         input.addEventListener("change", () => {
-          selectedFiles = Array.from(input.files || []);
-          selectedFilePayloads = [];
-          updateDropzoneLabel();
+          appendSelectedFiles(Array.from(input.files || []));
+          input.value = "";
         });
         dropzone.addEventListener("dragover", (event) => {
           event.preventDefault();
@@ -887,9 +903,7 @@
         dropzone.addEventListener("drop", (event) => {
           event.preventDefault();
           dropzone.style.background = "#f4f8ff";
-          selectedFiles = Array.from(event.dataTransfer.files || []);
-          selectedFilePayloads = [];
-          updateDropzoneLabel();
+          appendSelectedFiles(Array.from(event.dataTransfer.files || []));
         });
       }
       async function buildSelectedFilePayloads() {
