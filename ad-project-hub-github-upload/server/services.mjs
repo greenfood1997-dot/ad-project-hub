@@ -1317,6 +1317,14 @@ function parseProjectDate(text) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function projectNamePeriod(project = {}) {
+  const text = String(project.name || "");
+  const match = text.match(/(20\d{2})年\s*(\d{1,2})\s*[-至到]\s*(\d{1,2})月/);
+  if (!match) return [];
+  const year = Number(match[1]);
+  return [new Date(year, Number(match[2]) - 1, 1), new Date(year, Number(match[3]), 0)];
+}
+
 function addMonths(date, months) {
   const next = new Date(date);
   next.setMonth(next.getMonth() + months);
@@ -1335,11 +1343,13 @@ function projectTimeline(project = {}) {
     project.aiSummary,
     fields.paymentDue,
     fields.servicePeriod,
-    fields.summary
+    fields.summary,
+    project.name
   ].filter(Boolean).join(" ");
   const dates = Array.from(text.matchAll(/20\d{2}[年./-]\s*\d{1,2}(?:[月./-]\s*\d{1,2})?/g)).map((match) => parseProjectDate(match[0])).filter(Boolean);
-  const end = dates.length > 1 ? dates[dates.length - 1] : dates[0] || null;
-  return { text, dates, end };
+  const allDates = [...dates, ...projectNamePeriod(project)].sort((a, b) => a - b);
+  const end = allDates.length > 1 ? allDates[allDates.length - 1] : allDates[0] || null;
+  return { text, dates: allDates, end };
 }
 
 function projectPaymentSchedule(project = {}) {

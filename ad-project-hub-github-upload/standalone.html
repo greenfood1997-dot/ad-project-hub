@@ -396,6 +396,13 @@
         const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3] || 1));
         return Number.isNaN(date.getTime()) ? null : date;
       }
+      function projectNamePeriod(project) {
+        const text = String(project.name || "");
+        const match = text.match(/(20\d{2})年\s*(\d{1,2})\s*[-至到]\s*(\d{1,2})月/);
+        if (!match) return [];
+        const year = Number(match[1]);
+        return [new Date(year, Number(match[2]) - 1, 1), new Date(year, Number(match[3]), 0)];
+      }
       function addMonths(date, months) {
         const next = new Date(date);
         next.setMonth(next.getMonth() + months);
@@ -412,11 +419,14 @@
           project.aiSummary,
           fields.paymentDue,
           fields.servicePeriod,
-          fields.summary
+          fields.summary,
+          project.name
         ].filter(Boolean).join(" ");
         const dates = Array.from(text.matchAll(/20\d{2}[年./-]\s*\d{1,2}(?:[月./-]\s*\d{1,2})?/g)).map((match) => parseProjectDate(match[0])).filter(Boolean);
-        const end = dates.length > 1 ? dates[dates.length - 1] : dates[0] || null;
-        return { text, dates, end };
+        const periodDates = projectNamePeriod(project);
+        const allDates = [...dates, ...periodDates].sort((a, b) => a - b);
+        const end = allDates.length > 1 ? allDates[allDates.length - 1] : allDates[0] || null;
+        return { text, dates: allDates, end };
       }
       function projectPaymentSchedule(project) {
         const fields = project.extractedFields || {};
@@ -510,6 +520,12 @@
       function reminderProjects() {
         return projects.map((project) => ({ ...project, alerts: [...(project.alerts || []), ...projectRiskAlerts(project)] }));
       }
+      function displayRisk(project) {
+        const alerts = projectRiskAlerts(project);
+        if (alerts.some((alert) => alert.severity === "高")) return "高";
+        if (alerts.length && project.risk === "低") return "中";
+        return project.risk || "低";
+      }
       function polarPoint(cx, cy, radius, angle) {
         const radians = (angle - 90) * Math.PI / 180;
         return { x: cx + radius * Math.cos(radians), y: cy + radius * Math.sin(radians) };
@@ -572,7 +588,7 @@
         const receivable = projects.reduce((sum, item) => sum + Number(item.receivable || 0), 0);
         const deductionTotal = projects.reduce((sum, item) => sum + Number(item.costUsed || 0), 0);
         const projectProfit = contract - deductionTotal;
-        const highRisk = projects.filter(item => item.risk === "高").length;
+        const highRisk = projects.filter(item => displayRisk(item) === "高").length;
         const rate = contract ? Math.round((paid / contract) * 100) : 0;
         renderSummaryPie([
           { key: "paid", label: "已回款", value: paid, color: "#2563eb" },
@@ -605,7 +621,7 @@
           cashTrack.innerHTML = `<i style="width:${paidWidth}%"></i><i style="width:${dueWidth}%"></i>`;
         }
         document.getElementById("dashboardAlerts").innerHTML = highRisk
-          ? projects.filter(item => item.risk === "高").map(item => `<div class="dashboard-alert"><strong>${item.name}</strong><span>高风险</span><p>请进入预警中心处理。</p></div>`).join("")
+          ? projects.filter(item => displayRisk(item) === "高").map(item => `<div class="dashboard-alert"><strong>${item.name}</strong><span>高风险</span><p>请进入预警中心处理。</p></div>`).join("")
           : `<div class="dashboard-alert"><strong>暂无风险预警</strong><span>系统</span><p>项目产生成本、回款或进度风险后会显示在这里。</p></div>`;
         document.getElementById("dashboardTodos").innerHTML = projects.length
           ? projects.slice(0, 3).map(item => `<div class="todo-item"><i class="todo-dot" style="background:#2563eb"></i><div><strong>${item.name}</strong><br><span>${item.status}</span></div><b>${money(item.contract || 0)}</b></div>`).join("")
@@ -661,7 +677,7 @@
         const projectRows = document.getElementById("projectRows");
         if (!projectRows) return;
         const visibleProjects = projects.filter((p) => {
-          if (projectFilters.risk && projectFilters.risk !== "全部" && `${p.risk}风险` !== projectFilters.risk) return false;
+          if (projectFilters.risk && projectFilters.risk !== "全部" && `${displayRisk(p)}风险` !== projectFilters.risk) return false;
           if (projectFilters.status && projectFilters.status !== "全部" && p.status !== projectFilters.status) return false;
           if (projectFilters.owner && !`${p.owner || ""}${p.sales || ""}${p.pm || ""}`.includes(projectFilters.owner)) return false;
           return true;
@@ -673,9 +689,10 @@
         projectRows.innerHTML = visibleProjects.map(p => {
           const job = (appState.parseJobs || []).find((item) => item.projectId === p.id);
           const parsing = job && job.status !== "已完成";
+          const risk = displayRisk(p);
           return `<div class="project-row ${p.id === selectedId ? "selected" : ""}" data-id="${p.id}" role="button" tabindex="0">
             <div class="project-main"><strong>${p.name}</strong><span>${p.client || "未填写客户"} · ${p.owner || "未分配负责人"}</span>${job ? `<em class="parse-list-status">${job.status} · ${job.progress}%</em>` : ""}</div>
-            <div class="row-right"><b class="risk ${riskClass(p.risk)}">${p.risk}风险</b><span>${parsing ? "AI解析中" : p.status}</span><div class="project-actions"><button class="tiny-btn" data-edit-project="${p.id}">编辑</button><button class="tiny-btn danger" data-delete-project="${p.id}">删除</button></div></div>
+            <div class="row-right"><b class="risk ${riskClass(risk)}">${risk}风险</b><span>${parsing ? "AI解析中" : p.status}</span><div class="project-actions"><button class="tiny-btn" data-edit-project="${p.id}">编辑</button><button class="tiny-btn danger" data-delete-project="${p.id}">删除</button></div></div>
           </div>`;
         }).join("");
         document.querySelectorAll(".project-row").forEach(row => {
@@ -736,7 +753,7 @@
         const supplierCost = relatedSuppliers.reduce((sum, item) => sum + item.amount, 0);
         const parseJob = (appState.parseJobs || []).find((job) => job.projectId === p.id);
         detail.innerHTML = `
-          <div class="detail-head"><div><span class="id">${p.id}</span><h2>${p.name}</h2><p>${p.client || "未填写客户"} · ${p.status}</p></div><b class="risk ${riskClass(p.risk)}">${p.risk}风险</b></div>
+          <div class="detail-head"><div><span class="id">${p.id}</span><h2>${p.name}</h2><p>${p.client || "未填写客户"} · ${p.status}</p></div><b class="risk ${riskClass(displayRisk(p))}">${displayRisk(p)}风险</b></div>
           <div class="summary"><span>AI</span><p>${p.aiSummary || "文件已记录，等待 AI 解析任务生成结构化字段。"}</p></div>
           <div class="detail-metrics"><div class="mini"><span>项目总金额</span><strong>${money(p.contract || 0)}</strong></div><div class="mini"><span>执行总成本</span><strong>${hasCostData ? money(p.costUsed || 0) : "待上传"}</strong></div><div class="mini"><span>项目利润</span><strong>${hasCostData ? money(projectProfit) : "待成本表"}</strong></div><div class="mini"><span>项目毛利</span><strong>${marginText}</strong></div></div>
           <div class="split"><div><h3>回款进度</h3><div class="payment-progress"><div class="payment-progress-track"><i style="width:${paymentRate}%"></i></div><div class="payment-progress-meta"><span>已回款 ${money(paidAmount)}</span><b>${paymentRate}%</b></div><div class="payment-progress-meta"><span>项目总金额 ${money(paymentTotal)}</span><span>待回款 ${money(Math.max(paymentTotal - paidAmount, 0))}</span></div></div></div><div><h3>利润测算结构</h3>${hasCostData ? (p.costs || []).map(([name,value]) => `<div class="cost-row"><span>${name}</span><b>${money(value)}</b></div>`).join("") : `<p class="focus-note">尚未上传本项目月度成本表，暂不计算项目利润和毛利率。</p>`}${hasCostData ? `<div class="cost-row"><span>项目利润</span><b>${money(projectProfit)}</b></div>` : ""}</div></div>
