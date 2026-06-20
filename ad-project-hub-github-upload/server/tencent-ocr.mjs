@@ -26,7 +26,9 @@ export async function recognizeFileWithTencentOcr(file, options = {}) {
   const errors = [];
   for (let page = 1; page <= pageCount; page += 1) {
     try {
+      console.log(`[OCR] ${file.name || "file"}: recognizing PDF page ${page}/${pageCount}`);
       const text = await recognizePage(base64, { isPdf: true, page });
+      console.log(`[OCR] ${file.name || "file"}: page ${page} returned ${text.length} characters`);
       if (text.trim()) texts.push(`第${page}页\n${text}`);
     } catch (error) {
       errors.push(`第${page}页：${error.message}`);
@@ -54,6 +56,7 @@ async function recognizePage(imageBase64, { isPdf, page = 1 }) {
 
   const response = await callTencentApi(action, payload);
   const detections = response.TextDetections || [];
+  console.log(`[OCR] Tencent ${action}${isPdf ? ` page ${page}` : ""}: ${detections.length} text detections`);
   return detections.map((item) => item.DetectedText || "").filter(Boolean).join("\n");
 }
 

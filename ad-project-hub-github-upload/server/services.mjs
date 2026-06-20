@@ -356,13 +356,24 @@ async function analyzeProjectFiles(aiSettings, values, files) {
     const ai = normalizeAiSettings(aiSettings);
     const data = await requestAiJson(ai, values, text);
     const content = data.choices?.[0]?.message?.content || "{}";
-    return normalizeParsedFields({ ...fallback, ...parseJsonObject(content) }, values, files);
+    return normalizeParsedFields(mergeParsedFields(fallback, parseJsonObject(content)), values, files);
   } catch (error) {
     return {
       ...fallback,
       summary: `${fallback.summary} AI 解析未完成，已使用本地规则抽取。原因：${error.message}`
     };
   }
+}
+
+function mergeParsedFields(fallback, aiParsed) {
+  const merged = { ...fallback };
+  for (const [key, value] of Object.entries(aiParsed || {})) {
+    if (value === null || value === undefined || value === "") continue;
+    if (typeof value === "number" && value === 0 && parseMoney(fallback[key])) continue;
+    if (Array.isArray(value) && !value.length) continue;
+    merged[key] = value;
+  }
+  return merged;
 }
 
 async function requestAiJson(ai, values, text) {
@@ -441,20 +452,26 @@ async function extractFileContent(file) {
       const text = (parsed.text || "").trim();
       if (shouldUseOcrForPdf(text) && tencentOcrConfigured()) {
         const reason = text ? "PDF 文本缺少可解析金额/日期" : "PDF 未提取到文本";
+        console.log(`[OCR] ${name}: ${reason}; calling Tencent OCR`);
         try {
           const ocrText = await recognizeFileWithTencentOcr(file, { isPdf: true });
+          console.log(`[OCR] ${name}: Tencent OCR returned ${ocrText.length} characters`);
           return {
             ...file,
             text: ocrText,
             extractionStatus: ocrText.trim() ? `${reason}，已使用腾讯云 OCR 识别` : "腾讯云 OCR 未识别到文本"
           };
         } catch (error) {
+          console.error(`[OCR] ${name}: Tencent OCR failed: ${error.message}`);
           return {
             ...file,
             text,
             extractionStatus: `${reason}，但腾讯云 OCR 调用失败：${error.message}`
           };
         }
+      }
+      if (shouldUseOcrForPdf(text) && !tencentOcrConfigured()) {
+        console.warn(`[OCR] ${name}: Tencent OCR is not configured`);
       }
       return {
         ...file,
@@ -468,13 +485,16 @@ async function extractFileContent(file) {
     if (type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(lowerName)) {
       if (!tencentOcrConfigured()) return fallback;
       try {
+        console.log(`[OCR] ${name}: calling Tencent OCR for image`);
         const ocrText = await recognizeFileWithTencentOcr(file, { isPdf: false });
+        console.log(`[OCR] ${name}: Tencent OCR returned ${ocrText.length} characters`);
         return {
           ...file,
           text: ocrText,
           extractionStatus: ocrText.trim() ? "图片合同已使用腾讯云 OCR 识别" : "腾讯云 OCR 未识别到文本"
         };
       } catch (error) {
+        console.error(`[OCR] ${name}: Tencent OCR failed: ${error.message}`);
         return { ...fallback, extractionStatus: `图片合同腾讯云 OCR 调用失败：${error.message}` };
       }
     }
