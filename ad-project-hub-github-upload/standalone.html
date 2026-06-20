@@ -577,24 +577,29 @@
         "OpenAI 兼容接口": { baseUrl: "https://api.deepseek.com", model: "deepseek-chat" },
         "私有化模型服务": { baseUrl: "", model: "" },
       };
-      function normalizeAiForm(values) {
+      function detectAiProvider(values = {}) {
+        const provider = values["服务商"] || "";
+        if (aiProviderPresets[provider]) return provider;
+        const text = `${provider}${values["Base URL"] || ""}${values["模型名称"] || ""}`.toLowerCase();
+        if (text.includes("deepseek")) return "DeepSeek";
+        if (text.includes("kimi") || text.includes("moonshot")) return "Kimi / Moonshot";
+        if (text.includes("gpt") || text.includes("openai")) return "GPT / OpenAI";
+        return "";
+      }
+      function normalizeAiForm(values, options = {}) {
         const normalized = { ...values };
-        const providerText = `${normalized["服务商"] || ""}${normalized["Base URL"] || ""}${normalized["模型名称"] || ""}`.toLowerCase();
-        const matchedProvider = Object.keys(aiProviderPresets).find((provider) => {
-          const [firstName] = provider.toLowerCase().split(" / ");
-          return providerText.includes(firstName) || providerText.includes(firstName.split(" ")[0]);
-        });
-        const preset = aiProviderPresets[normalized["服务商"]] || aiProviderPresets[matchedProvider] || (normalized["API Key"] && !normalized["Base URL"] ? aiProviderPresets.DeepSeek : null);
+        const provider = detectAiProvider(normalized) || (normalized["API Key"] && !normalized["Base URL"] ? "DeepSeek" : "");
+        const preset = aiProviderPresets[provider];
         if (preset) {
-          normalized["服务商"] = normalized["服务商"] || matchedProvider || "DeepSeek";
-          normalized["Base URL"] = normalized["Base URL"] || preset.baseUrl;
-          normalized["模型名称"] = normalized["模型名称"] || preset.model;
+          normalized["服务商"] = provider;
+          normalized["Base URL"] = options.forceProviderDefaults ? preset.baseUrl : (normalized["Base URL"] || preset.baseUrl);
+          normalized["模型名称"] = options.forceProviderDefaults ? preset.model : (normalized["模型名称"] || preset.model);
         }
         normalized["Base URL"] = (normalized["Base URL"] || "").replace(/\/$/, "");
         return normalized;
       }
-      function applyAiDefaults() {
-        const values = normalizeAiForm(collectDrawerValues());
+      function applyAiDefaults(options = {}) {
+        const values = normalizeAiForm(collectDrawerValues(), options);
         fillDrawerValues(values);
       }
       async function openDrawer(type) {
@@ -644,8 +649,8 @@
             body: `<div class="form-grid">
               <div class="field"><label>服务商</label><select><option>GPT / OpenAI</option><option>Kimi / Moonshot</option><option>DeepSeek</option><option>OpenAI 兼容接口</option><option>私有化模型服务</option></select></div>
               <div class="field password-field"><label>API Key</label><div class="password-wrap"><input type="password" placeholder="粘贴 sk-... 或企业内部网关 Token" /><button type="button" class="eye-btn" data-toggle-password>👁</button></div></div>
-              <div class="field"><label>Base URL</label><input readonly placeholder="系统自动匹配" /></div>
-              <div class="field"><label>模型名称</label><input readonly placeholder="系统自动匹配" /></div>
+              <div class="field"><label>Base URL</label><input placeholder="系统自动匹配，也可手动修改" /></div>
+              <div class="field"><label>模型名称</label><input placeholder="系统自动匹配，也可手动修改" /></div>
               <div class="field"><label>启用能力</label><select><option>合同解析 + Excel 解析 + 风险判断</option><option>仅合同解析</option><option>仅项目问数</option><option>仅风险预警</option></select></div>
               <div class="summary"><span>AI</span><p>保存后，配置会写入服务端数据库；关闭网页再打开仍会保持当前服务商、API Key、模型和连接状态。</p></div>
               <div id="aiConnectionStatus" class="connection-status">尚未校验连接。请点击“校验配置”，确认真实连通后再保存。</div>
@@ -703,8 +708,8 @@
             applyAiDefaults();
           const provider = document.querySelector("#drawerBody .field select");
           const apiKey = Array.from(document.querySelectorAll("#drawerBody .field input")).find(input => input.type === "password");
-          provider?.addEventListener("change", applyAiDefaults);
-          apiKey?.addEventListener("input", applyAiDefaults);
+          provider?.addEventListener("change", () => applyAiDefaults({ forceProviderDefaults: true }));
+          apiKey?.addEventListener("input", () => applyAiDefaults());
           const connection = appState.settings?.aiService?.connection;
           if (connection?.checkedAt) {
             setConnectionStatus(`已连接 ${connection.provider || "AI 服务"}，模型：${connection.model || "未指定"}，校验时间：${new Date(connection.checkedAt).toLocaleString()}`, "success");

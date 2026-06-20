@@ -239,17 +239,19 @@ export function supplierCsv(db) {
 
 export function normalizeAiSettings(values = {}) {
   const normalized = { ...values };
-  const providerText = `${normalized["服务商"] || ""}${normalized["Base URL"] || ""}${normalized["模型名称"] || ""}`.toLowerCase();
+  const selectedProvider = normalized["服务商"] || "";
+  const providerText = `${selectedProvider}${normalized["Base URL"] || ""}${normalized["模型名称"] || ""}`.toLowerCase();
   const presets = [
     { match: ["deepseek"], provider: "DeepSeek", baseUrl: "https://api.deepseek.com", model: "deepseek-chat" },
     { match: ["kimi", "moonshot"], provider: "Kimi / Moonshot", baseUrl: "https://api.moonshot.cn/v1", model: "moonshot-v1-8k" },
     { match: ["gpt", "openai"], provider: "GPT / OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4.1" }
   ];
-  const preset = presets.find((item) => item.match.some((keyword) => providerText.includes(keyword)))
+  const preset = presets.find((item) => item.provider === selectedProvider)
+    || presets.find((item) => item.match.some((keyword) => providerText.includes(keyword)))
     || (normalized["API Key"] && !normalized["Base URL"] ? presets[0] : null);
 
   if (preset) {
-    normalized["服务商"] = normalized["服务商"] || preset.provider;
+    normalized["服务商"] = preset.provider;
     normalized["Base URL"] = normalized["Base URL"] || preset.baseUrl;
     normalized["模型名称"] = normalized["模型名称"] || preset.model;
   }
