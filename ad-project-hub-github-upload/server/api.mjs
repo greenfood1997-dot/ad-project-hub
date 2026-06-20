@@ -4,12 +4,14 @@ import {
   addComment,
   advanceParseJob,
   createProject,
+  deleteProject,
   recordFiles,
   refreshInterestRate,
   saveSetting,
   supplierCsv,
   testAiSettings,
-  updateAlert
+  updateAlert,
+  updateProject
 } from "./services.mjs";
 
 export async function handleApi(req, res) {
@@ -48,6 +50,20 @@ export async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/projects") {
     const body = await readBody(req);
     const data = await mutateDb((db) => createProject(db, body.values, body.files || [], user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/projects/update") {
+    const body = await readBody(req);
+    const data = await mutateDb((db) => updateProject(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/projects/delete") {
+    const body = await readBody(req);
+    const data = await mutateDb((db) => deleteProject(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }

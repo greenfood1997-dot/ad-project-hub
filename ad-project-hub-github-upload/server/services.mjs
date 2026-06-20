@@ -62,6 +62,104 @@ export async function createProject(db, values, files, user) {
   return { project, parseJob };
 }
 
+export function updateProject(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+
+  const values = body.values || {};
+  const oldName = project.name;
+  const nextName = String(values["项目名称"] || project.name || "").trim();
+  const nextClient = String(values["客户 / 品牌"] || project.client || "").trim();
+  const nextOwner = String(values["负责人"] || project.owner || "").trim();
+  const contract = values["合同金额"] !== undefined && values["合同金额"] !== ""
+    ? parseMoney(values["合同金额"])
+    : parseMoney(project.contract);
+  const paid = values["已回款"] !== undefined && values["已回款"] !== ""
+    ? parseMoney(values["已回款"])
+    : parseMoney(project.paid);
+
+  const existingBreakdown = project.extractedFields?.profitBreakdown || {};
+  const executionBudgetRatio = values["执行预算占比"] || project.extractedFields?.executionBudgetRatio || "";
+  const explicitBudgetLimit = values["项目预算上限"] || values["执行预算上限"] || values["项目执行预算上限"];
+  const budgetLimit = explicitBudgetLimit !== undefined && explicitBudgetLimit !== ""
+    ? parseMoney(explicitBudgetLimit)
+    : (parseMoney(existingBreakdown.executionBudget) || parseMoney(project.extractedFields?.executionBudget));
+  const ratio = parsePercent(executionBudgetRatio);
+  const executionBudget = budgetLimit || (ratio ? contract * ratio : 0);
+
+  if (nextName) project.name = nextName;
+  project.client = nextClient;
+  project.owner = nextOwner || user.name;
+  project.contract = contract;
+  project.paid = paid;
+  project.receivable = Math.max(contract - paid, 0);
+  project.extractedFields = {
+    ...(project.extractedFields || {}),
+    executionBudgetRatio,
+    executionBudget
+  };
+
+  const profitBreakdown = syncProjectProfit(project, executionBudget);
+  project.costBudget = profitBreakdown.totalDeduction || parseMoney(project.costBudget);
+  project.costUsed = profitBreakdown.totalDeduction || parseMoney(project.costUsed);
+  project.margin = contract ? profitMargin(contract, contract - project.costUsed) : 0;
+  project.risk = inferRisk({
+    contract: project.contract,
+    costBudget: project.costBudget,
+    costUsed: project.costUsed,
+    receivable: project.receivable
+  });
+  project.updatedAt = new Date().toISOString();
+
+  for (const supplier of db.suppliers || []) {
+    if (supplier.project === oldName) supplier.project = project.name;
+  }
+  for (const job of db.parseJobs || []) {
+    if (job.projectId === project.id) job.projectName = project.name;
+  }
+
+  db.auditLogs.unshift({ type: "project", target: project.name, action: "update", user: user.name, at: project.updatedAt });
+  return project;
+}
+
+export function deleteProject(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+
+  db.projects = (db.projects || []).filter((item) => item.id !== project.id);
+  db.parseJobs = (db.parseJobs || []).filter((item) => item.projectId !== project.id);
+  db.files = (db.files || []).filter((item) => item.projectId !== project.id && item.projectName !== project.name);
+  db.suppliers = (db.suppliers || []).filter((item) => item.projectId !== project.id && item.project !== project.name);
+  const at = new Date().toISOString();
+  db.auditLogs.unshift({ type: "project", target: project.name, action: "delete", user: user.name, at });
+  return { id: project.id, name: project.name };
+}
+
+function syncProjectProfit(project, executionBudget = 0) {
+  const current = project.extractedFields?.profitBreakdown || {};
+  const parsed = {
+    ...project.extractedFields,
+    ...current,
+    executionBudget: executionBudget || current.executionBudget || project.extractedFields?.executionBudget || 0
+  };
+  const breakdown = calculateProfitBreakdown(project.contract, parsed);
+  const hasExistingCost = breakdown.totalDeduction || parseMoney(project.costUsed) || (project.costs || []).length;
+  if (!hasExistingCost) {
+    const emptyBreakdown = {
+      ...breakdown,
+      totalDeduction: 0,
+      profit: Number(project.contract || 0),
+      margin: profitMargin(project.contract, Number(project.contract || 0))
+    };
+    project.costs = [];
+    project.extractedFields = { ...(project.extractedFields || {}), profitBreakdown: emptyBreakdown, profit: emptyBreakdown.profit };
+    return emptyBreakdown;
+  }
+  project.costs = breakdown.costs;
+  project.extractedFields = { ...(project.extractedFields || {}), profitBreakdown: breakdown, profit: breakdown.profit };
+  return breakdown;
+}
+
 function hasContractLikeFile(files = [], parsed = {}) {
   if (parseMoney(parsed.contract) || parsed.partyA || parsed.partyB) return true;
   return files.some((file) => {

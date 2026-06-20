@@ -76,15 +76,17 @@
       .workspace { display: grid; grid-template-columns: minmax(360px,.95fr) minmax(460px,1.2fr); gap: 14px; margin-top: 14px; align-items: stretch; height: 100%; min-height: 0; }
       .project-list, .detail { padding: 16px; overflow: auto; min-height: 0; }
       .section-head { justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
-      .project-row { width: 100%; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; min-height: 76px; border: 1px solid #e3e9f1; background: #fff; border-radius: 8px; padding: 12px; text-align: left; margin-top: 10px; overflow: hidden; }
+      .project-row { width: 100%; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; min-height: 76px; border: 1px solid #e3e9f1; background: #fff; border-radius: 8px; padding: 12px; text-align: left; margin-top: 10px; overflow: hidden; cursor: pointer; }
+      .project-row:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
       .project-row.selected { border-color: #2563eb; background: #f4f8ff; }
       .project-main { min-width: 0; display: grid; gap: 6px; }
       .project-row strong, .project-row span { display: block; min-width: 0; }
       .project-row strong { margin-bottom: 0; line-height: 1.35; word-break: break-word; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
       .project-row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .parse-list-status { display: inline-flex; margin-top: 7px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; padding: 3px 8px; font-size: 12px; font-style: normal; }
-      .row-right { align-items: flex-end; gap: 6px; flex-shrink: 0; flex-direction: column; max-width: 110px; }
+      .row-right { align-items: flex-end; gap: 6px; flex-shrink: 0; flex-direction: column; max-width: 132px; }
       .row-right span { max-width: 100%; }
+      .project-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; margin-top: 2px; }
       .risk { display: inline-flex; min-width: 58px; justify-content: center; border-radius: 999px; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
       .risk-high { color: #b91c1c; background: #fee2e2; }
       .risk-mid { color: #a16207; background: #fef3c7; }
@@ -183,6 +185,7 @@
       .alert-edit { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(260px, 1fr); gap: 10px; margin-top: 12px; }
       .alert-edit input { border: 1px solid #e5cfc4; background: #fff; border-radius: 8px; padding: 9px 10px; min-width: 0; }
       .tiny-btn { height: 28px; border-radius: 7px; border: 1px solid #d7dee8; background: #fff; padding: 0 9px; font-size: 12px; }
+      .tiny-btn.danger { color: #b91c1c; border-color: #fecaca; background: #fff7f7; }
       .status-pill { display: inline-flex; border-radius: 999px; padding: 3px 8px; background: #eef4ff; color: #1f5fd4; font-size: 12px; margin-left: 6px; }
       .job-box { margin-top: 16px; }
       .job-progress { height: 8px; border-radius: 999px; background: #e8eef6; overflow: hidden; margin: 10px 0 12px; }
@@ -210,8 +213,9 @@
         .actions, .search, .primary, .ghost { width: 100%; }
         .metrics, .detail-metrics, .split { grid-template-columns: 1fr; }
         .workspace { grid-template-columns: minmax(0,1fr); }
-        .project-row, .timeline { align-items: flex-start; flex-direction: column; }
-        .row-right { width: 100%; justify-content: space-between; }
+        .project-row, .timeline { align-items: flex-start; }
+        .row-right { width: 100%; max-width: none; align-items: flex-start; }
+        .project-actions { justify-content: flex-start; }
         .summary-pie { grid-template-columns: 1fr; justify-items: center; }
       }
     </style>
@@ -364,6 +368,7 @@
       let projects = [];
       let supplierSettlements = [];
       let selectedId = projects[0]?.id || null;
+      let editingProjectId = null;
       let projectFilters = {};
       const apiBase = location.protocol.startsWith("http") ? "" : "http://127.0.0.1:4173";
       const isApiMode = true;
@@ -459,12 +464,49 @@
         projectRows.innerHTML = visibleProjects.map(p => {
           const job = (appState.parseJobs || []).find((item) => item.projectId === p.id);
           const parsing = job && job.status !== "已完成";
-          return `<button class="project-row ${p.id === selectedId ? "selected" : ""}" data-id="${p.id}">
+          return `<div class="project-row ${p.id === selectedId ? "selected" : ""}" data-id="${p.id}" role="button" tabindex="0">
             <div class="project-main"><strong>${p.name}</strong><span>${p.client || "未填写客户"} · ${p.owner || "未分配负责人"}</span>${job ? `<em class="parse-list-status">${job.status} · ${job.progress}%</em>` : ""}</div>
-            <div class="row-right"><b class="risk ${riskClass(p.risk)}">${p.risk}风险</b><span>${parsing ? "AI解析中" : p.status}</span></div>
-          </button>`;
+            <div class="row-right"><b class="risk ${riskClass(p.risk)}">${p.risk}风险</b><span>${parsing ? "AI解析中" : p.status}</span><div class="project-actions"><button class="tiny-btn" data-edit-project="${p.id}">编辑</button><button class="tiny-btn danger" data-delete-project="${p.id}">删除</button></div></div>
+          </div>`;
         }).join("");
-        document.querySelectorAll(".project-row").forEach(row => row.addEventListener("click", () => { selectedId = row.dataset.id; renderRows(); renderDetail(); }));
+        document.querySelectorAll(".project-row").forEach(row => {
+          const selectProject = () => { selectedId = row.dataset.id; renderRows(); renderDetail(); };
+          row.addEventListener("click", (event) => {
+            if (event.target.closest("[data-edit-project], [data-delete-project]")) return;
+            selectProject();
+          });
+          row.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            selectProject();
+          });
+        });
+        document.querySelectorAll("[data-edit-project]").forEach(btn => btn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          editingProjectId = btn.dataset.editProject;
+          openDrawer("editProject");
+        }));
+        document.querySelectorAll("[data-delete-project]").forEach(btn => btn.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          const project = projects.find((item) => item.id === btn.dataset.deleteProject);
+          if (!project || !confirm(`确认删除项目“${project.name}”？删除后会同步移除该项目解析任务和供应商归属。`)) return;
+          try {
+            btn.disabled = true;
+            await apiPost("/api/projects/delete", { id: project.id });
+            await loadState();
+            renderRows();
+            renderDetail();
+            renderDashboard();
+            renderCash();
+            renderCost();
+            renderSuppliers();
+            showToast("项目已删除");
+          } catch (error) {
+            showToast(error.message);
+          } finally {
+            btn.disabled = false;
+          }
+        }));
       }
       function renderDetail() {
         const p = projects.find(item => item.id === selectedId);
@@ -666,6 +708,20 @@
               <div class="field"><label>项目备注</label><textarea placeholder="关键交付、客户要求、特殊审批等"></textarea></div>
             </div><div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-upload-project data-submit="已创建项目草稿并进入 AI 解析">创建并解析</button></div>`
           },
+          editProject: {
+            title: "编辑项目金额",
+            desc: "可手动修正合同金额、已回款和项目预算上限，保存后会同步重算待回款、项目利润和毛利。",
+            body: `<div class="form-grid">
+              <div class="field"><label>项目名称</label><input placeholder="项目名称" /></div>
+              <div class="field"><label>客户 / 品牌</label><input placeholder="客户名称、品牌名称" /></div>
+              <div class="field"><label>负责人</label><input placeholder="项目负责人" /></div>
+              <div class="field"><label>合同金额</label><input placeholder="例如 400万" /></div>
+              <div class="field"><label>已回款</label><input placeholder="例如 120万" /></div>
+              <div class="field"><label>执行预算占比</label><input placeholder="例如 60%" /></div>
+              <div class="field"><label>项目预算上限</label><input placeholder="可手动覆盖预算上限，例如 240万" /></div>
+              <div class="summary"><span>金额</span><p>项目预算上限用于经营管控；实际项目成本仍以每月上传的执行表/成本表为准。</p></div>
+            </div><div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-update-project data-submit="项目金额已更新">保存修改</button></div>`
+          },
           feishu: {
             title: "飞书机器人配置",
             desc: "用于把成本预警、逾期回款、项目节点提醒推送到指定群或个人。",
@@ -757,6 +813,21 @@
         document.getElementById("drawerBody").innerHTML = panel.body;
         document.getElementById("drawerMask").classList.add("show");
         if (appState.settings?.[type]) fillDrawerValues(appState.settings[type]);
+        if (type === "editProject") {
+          const project = projects.find((item) => item.id === editingProjectId);
+          if (project) {
+            const breakdown = project.extractedFields?.profitBreakdown || {};
+            fillDrawerValues({
+              "项目名称": project.name || "",
+              "客户 / 品牌": project.client || "",
+              "负责人": project.owner || "",
+              "合同金额": project.contract || "",
+              "已回款": project.paid || "",
+              "执行预算占比": project.extractedFields?.executionBudgetRatio || "",
+              "项目预算上限": breakdown.executionBudget || project.extractedFields?.executionBudget || ""
+            });
+          }
+        }
         if (type === "interestRate") {
           const rate = appState.settings?.interestRate;
           if (rate?.annualRate) {
@@ -823,6 +894,21 @@
               renderSuppliers();
               switchView("projectsView");
               showToast(created?.data?.merged ? "成本表已归并到已有项目" : "合同解析完成，字段已同步到台账");
+            }
+            if (btn.dataset.updateProject !== undefined) {
+              if (!editingProjectId) throw new Error("请选择要编辑的项目");
+              btn.disabled = true;
+              btn.textContent = "保存中...";
+              await apiPost("/api/projects/update", { id: editingProjectId, values: collectDrawerValues() });
+              await loadState();
+              selectedId = editingProjectId;
+              renderRows();
+              renderDetail();
+              renderDashboard();
+              renderCash();
+              renderCost();
+              renderSuppliers();
+              editingProjectId = null;
             }
             if (btn.dataset.applyFilter !== undefined) {
               const values = collectDrawerValues();
