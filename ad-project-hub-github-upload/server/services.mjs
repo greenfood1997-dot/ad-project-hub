@@ -5,7 +5,8 @@ export async function createProject(db, values, files, user) {
   const now = new Date().toISOString();
   if (files.length) {
     const parsedForRouting = await analyzeProjectFiles(db.settings?.aiService, values || {}, files || [], db.settings?.interestRate);
-    if (parsedForRouting.hasCostSheet) {
+    const hasContractInBatch = hasContractLikeFile(files, parsedForRouting);
+    if (parsedForRouting.hasCostSheet && !hasContractInBatch) {
       const targetProject = findMatchingProjectForCostSheet(db, parsedForRouting, files);
       if (targetProject) {
         const parseJob = createParseJob(targetProject, files, parsedForRouting, values);
@@ -59,6 +60,15 @@ export async function createProject(db, values, files, user) {
   }
 
   return { project, parseJob };
+}
+
+function hasContractLikeFile(files = [], parsed = {}) {
+  if (parseMoney(parsed.contract) || parsed.partyA || parsed.partyB) return true;
+  return files.some((file) => {
+    const source = `${file.name || ""}\n${file.text || ""}`;
+    return /(合同|协议|甲方|乙方|委托方|受托方|合同金额|服务费用|付款方式)/.test(source)
+      && !/(成本表|利润测算|执行支出|人力|公摊|月度成本|供应商结算)/.test(file.name || "");
+  });
 }
 
 export function createParseJob(project, files, parsed = {}, sourceValues = {}) {
@@ -728,7 +738,10 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
   const dates = extractDates(text);
   const hasCostSheet = isCostSheet(files, text);
   const tableMetrics = hasCostSheet ? extractCostTableMetrics(text) : {};
-  const contract = hasCostSheet ? parseMoney(values["合同金额"]) : (parseMoney(values["合同金额"]) || extractContractAmount(text) || amounts[0] || 0);
+  const hasContractInBatch = hasContractLikeFile(files, {});
+  const contract = hasCostSheet && !hasContractInBatch
+    ? parseMoney(values["合同金额"])
+    : (parseMoney(values["合同金额"]) || extractContractAmount(text) || amounts[0] || 0);
   const paid = guessAmount(text, ["已回款", "已付款", "首付款", "预付款", "已收款"]) || 0;
   const advancePayment = hasCostSheet ? tableMetrics.advancePayment || guessAmount(text, ["项目垫款", "垫款本金", "垫款", "代垫"]) || 0 : 0;
   const advanceInterest = hasCostSheet ? guessAmount(text, ["垫款利息", "资金占用费", "利息"]) || 0 : 0;
