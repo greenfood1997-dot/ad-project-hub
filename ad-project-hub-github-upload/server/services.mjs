@@ -44,6 +44,7 @@ export async function createProject(db, values, files, user) {
     createdBy: user.id,
     files
   };
+  applyProjectRisk(project);
   const parseJob = createParseJob(project, files, {}, values);
   db.projects.unshift(project);
   db.parseJobs.unshift(parseJob);
@@ -100,15 +101,10 @@ export function updateProject(db, body, user) {
   };
 
   const profitBreakdown = syncProjectProfit(project, executionBudget);
-  project.costBudget = profitBreakdown.totalDeduction || parseMoney(project.costBudget);
+  project.costBudget = executionBudget || profitBreakdown.executionBudget || parseMoney(project.costBudget);
   project.costUsed = profitBreakdown.totalDeduction || parseMoney(project.costUsed);
   project.margin = contract ? profitMargin(contract, contract - project.costUsed) : 0;
-  project.risk = inferRisk({
-    contract: project.contract,
-    costBudget: project.costBudget,
-    costUsed: project.costUsed,
-    receivable: project.receivable
-  });
+  applyProjectRisk(project);
   project.updatedAt = new Date().toISOString();
 
   for (const supplier of db.suppliers || []) {
@@ -322,7 +318,7 @@ function applyParsedFields(db, project, job, parsed) {
   const hasCostSheet = Boolean(parsed.hasCostSheet);
   const contract = hasCostSheet ? (existingContract || parsedContract) : (parsedContract || existingContract);
   const profitBreakdown = hasCostSheet ? calculateProfitBreakdown(contract, parsed) : null;
-  const costBudget = hasCostSheet ? profitBreakdown.totalDeduction : parseMoney(project.costBudget);
+  const costBudget = hasCostSheet ? (profitBreakdown.executionBudget || parseMoney(project.costBudget)) : parseMoney(project.costBudget);
   const costUsed = hasCostSheet ? profitBreakdown.totalDeduction : parseMoney(project.costUsed);
   const parsedPaid = parseMoney(parsed.paid);
   const existingPaid = parseMoney(project.paid);
@@ -341,7 +337,7 @@ function applyParsedFields(db, project, job, parsed) {
     paid,
     receivable,
     status: "解析完成",
-    risk: parsed.risk || inferRisk({ contract, costBudget, costUsed, receivable }),
+    risk: inferRisk({ contract, costBudget, costUsed, receivable }),
     aiSummary: parsed.summary || "文件已解析，结构化字段已同步到项目台账。",
     nextMilestone: parsed.nextMilestone || parsed.servicePeriod || parsed.deliveryDate || "",
     paymentDue: parsed.paymentDue || "",
@@ -350,6 +346,7 @@ function applyParsedFields(db, project, job, parsed) {
     costs: hasCostSheet ? profitBreakdown.costs : (project.costs || []),
     extractedFields: hasCostSheet ? { ...parsed, profitBreakdown, profit: contract - costUsed } : parsed
   });
+  applyProjectRisk(project);
 
   job.projectName = project.name;
   job.status = "已完成";
@@ -673,7 +670,7 @@ async function requestAiJson(ai, values, text) {
   const messages = [
     {
       role: "system",
-      content: "你是广告项目经营中台的文件解析和自动归档助手。你要把合同、报价单、执行表、排期表、供应商结算表中的关键信息归类到项目中台。只返回 JSON，不要 Markdown。字段包括 projectName, client, partyA, partyB, contract, paid, receivable, advancePayment, advanceInterest, executionCost, executionBudget, internalLabor, overhead, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, suppliers, tasks, archiveTags, confidence, missingFields, hasCostSheet。金额返回数字，日期保留原文。项目利润口径固定为：项目总金额 - 实时执行支出 - 项目垫款 - 垫款利息 - 内部人力 - 公摊费用（水电、办公室租金及其他公摊）= 项目利润。executionBudget 是项目预留预算上限，通常来自合同金额占比；执行表中的执行支出请写入 executionCost。只有文件明确是成本表、供应商结算表、费用明细表时，hasCostSheet 才为 true，并尽量返回 advancePayment、advanceInterest、executionCost、internalLabor、overhead；合同或报价单中的合同金额、服务费用、付款金额不要写入成本字段。costs 为 [科目, 金额]；suppliers 为对象数组，含 supplier,type,amount,status；tasks 为 [节点, 进度百分比]。"
+      content: "你是广告项目经营中台的文件解析和自动归档助手。你要把合同、报价单、执行表、排期表、供应商结算表中的关键信息归类到项目中台。只返回 JSON，不要 Markdown。字段包括 projectName, client, partyA, partyB, contract, paid, receivable, advancePayment, advanceInterest, executionCost, executionBudget, internalLabor, overhead, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, suppliers, tasks, archiveTags, confidence, missingFields, hasCostSheet。金额返回数字，日期保留原文。遇到合同约定按季度/每季/季付/季度回款，或付款后附带承兑汇票、汇票期限、兑付周期时，必须把完整付款方式写入 paymentDue 或 summary，例如“按季度回款，项目完成并验收合格后支付6个月承兑汇票”。项目利润口径固定为：项目总金额 - 实时执行支出 - 项目垫款 - 垫款利息 - 内部人力 - 公摊费用（水电、办公室租金及其他公摊）= 项目利润。executionBudget 是项目预留预算上限，通常来自合同金额占比；执行表中的执行支出请写入 executionCost。只有文件明确是成本表、供应商结算表、费用明细表时，hasCostSheet 才为 true，并尽量返回 advancePayment、advanceInterest、executionCost、internalLabor、overhead；合同或报价单中的合同金额、服务费用、付款金额不要写入成本字段。costs 为 [科目, 金额]；suppliers 为对象数组，含 supplier,type,amount,status；tasks 为 [节点, 进度百分比]。"
     },
     {
       role: "user",
@@ -1313,8 +1310,122 @@ function extractSuppliers(text) {
   return rows.slice(0, 10);
 }
 
-function inferRisk({ contract = 0, costBudget = 0, costUsed = 0, receivable = 0 }) {
-  if (contract && (costUsed / contract > 0.75 || receivable / contract > 0.8)) return "高";
-  if (costBudget && costUsed / costBudget > 0.8) return "中";
-  return "低";
+function applyProjectRisk(project) {
+  const alerts = projectRiskAlerts(project);
+  project.alerts = alerts;
+  project.risk = alerts.some((alert) => alert.severity === "高") ? "高" : alerts.length ? "中" : "低";
+  return project.risk;
+}
+
+function parseProjectDate(text) {
+  const match = String(text || "").match(/(20\d{2})[年./-]\s*(\d{1,2})(?:[月./-]\s*(\d{1,2}))?/);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3] || 1));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function addMonths(date, months) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function monthSpan(start, end) {
+  return Math.max(1, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth() + 1);
+}
+
+function projectPaymentSchedule(project = {}) {
+  const fields = project.extractedFields || {};
+  const text = [
+    project.paymentDue,
+    project.nextMilestone,
+    project.aiSummary,
+    fields.paymentDue,
+    fields.servicePeriod,
+    fields.summary
+  ].filter(Boolean).join(" ");
+  if (!/季度|每季|按季|季付|季度回款/.test(text)) return null;
+  const dates = Array.from(text.matchAll(/20\d{2}[年./-]\s*\d{1,2}(?:[月./-]\s*\d{1,2})?/g)).map((match) => parseProjectDate(match[0])).filter(Boolean);
+  const start = dates[0] || parseProjectDate(fields.servicePeriod || project.nextMilestone || "");
+  const end = dates[1] || parseProjectDate(project.paymentDue || "");
+  if (!start) return null;
+  const months = end && end > start ? monthSpan(start, end) : 12;
+  const quarters = Math.max(1, Math.ceil(months / 3));
+  const elapsedQuarters = Math.max(0, Math.floor(monthSpan(start, new Date()) / 3));
+  const firstQuarterAmount = parseMoney(project.contract) / quarters;
+  const billMatch = text.match(/(\d+)\s*个?月[^，。；;]*?(承兑|汇票)/);
+  return {
+    quarters,
+    elapsedQuarters,
+    firstQuarterAmount,
+    firstQuarterEnd: addMonths(start, 3),
+    secondQuarterEnd: addMonths(start, 6),
+    billMonths: billMatch ? Number(billMatch[1]) : 0
+  };
+}
+
+function projectRiskAlerts(project = {}) {
+  const contract = parseMoney(project.contract);
+  const paid = parseMoney(project.paid);
+  const receivable = parseMoney(project.receivable) || Math.max(contract - paid, 0);
+  const paymentRate = contract ? paid / contract : 1;
+  const breakdown = project.extractedFields?.profitBreakdown || {};
+  const executionBudget = parseMoney(project.extractedFields?.executionBudget)
+    || parseMoney(breakdown.executionBudget)
+    || (project.extractedFields?.profitBreakdown ? 0 : parseMoney(project.costBudget));
+  const costUsed = parseMoney(project.costUsed);
+  const costRate = executionBudget ? costUsed / executionBudget : 0;
+  const alerts = [];
+
+  const schedule = projectPaymentSchedule(project);
+  if (schedule && contract && paid < schedule.firstQuarterAmount && schedule.elapsedQuarters >= 2) {
+    alerts.push({
+      role: "销售",
+      type: "季度回款逾期",
+      severity: "高",
+      text: `项目已执行到第 ${schedule.elapsedQuarters} 个季度，但第 1 季度应回款约 ${Math.round(schedule.firstQuarterAmount)} 尚未到账；请销售立即跟进合同季度回款${schedule.billMonths ? `及 ${schedule.billMonths} 个月汇票周期` : ""}。`
+    });
+  } else if (schedule && contract && paid < schedule.firstQuarterAmount && schedule.elapsedQuarters >= 1) {
+    alerts.push({
+      role: "销售",
+      type: "季度回款提醒",
+      severity: "中",
+      text: `第 1 季度已执行完成，应回款约 ${Math.round(schedule.firstQuarterAmount)}；请销售关注合同季度回款${schedule.billMonths ? `及 ${schedule.billMonths} 个月汇票周期` : ""}。`
+    });
+  } else if (!schedule && contract && receivable > 0 && paymentRate < 0.5) {
+    alerts.push({
+      role: "销售",
+      type: "回款进度过慢",
+      severity: "高",
+      text: `项目已回款 ${paid}，待回款 ${receivable}，回款进度 ${Math.round(paymentRate * 100)}%，请销售跟进客户付款。`
+    });
+  }
+  if (executionBudget && costUsed >= executionBudget) {
+    alerts.push({
+      role: "PM",
+      type: "执行成本已超支",
+      severity: "高",
+      text: `执行成本 ${costUsed} 已达到预算上限 ${executionBudget} 的 ${Math.round(costRate * 100)}%，请 PM 立即复盘执行成本。`
+    });
+  } else if (executionBudget && costRate >= 0.8) {
+    alerts.push({
+      role: "PM",
+      type: "执行成本即将超支",
+      severity: "高",
+      text: `执行成本 ${costUsed} 已达到预算上限 ${executionBudget} 的 ${Math.round(costRate * 100)}%，请 PM 控制后续支出。`
+    });
+  }
+  return alerts;
+}
+
+function inferRisk(values = {}) {
+  const alerts = projectRiskAlerts({
+    contract: values.contract,
+    paid: parseMoney(values.contract) - parseMoney(values.receivable),
+    receivable: values.receivable,
+    costBudget: values.costBudget,
+    costUsed: values.costUsed,
+    extractedFields: { executionBudget: values.costBudget }
+  });
+  return alerts.some((alert) => alert.severity === "高") ? "高" : alerts.length ? "中" : "低";
 }

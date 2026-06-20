@@ -39,7 +39,7 @@ export async function readPostgresDb() {
       cost_budget::float as "costBudget", cost_used::float as "costUsed",
       paid::float, receivable::float, status, risk, ai_summary as "aiSummary",
       next_milestone as "nextMilestone", payment_due as "paymentDue",
-      margin::float, tasks, costs, extracted_fields as "extractedFields",
+      margin::float, tasks, costs, alerts, extracted_fields as "extractedFields",
       created_by as "createdBy", created_at as "createdAt"
       from projects order by created_at desc`),
     db.query("select project_id as \"projectId\", project_name as \"projectName\", name, size, mime_type as type, storage_url as \"storageUrl\", uploaded_at as \"uploadedAt\" from project_files order by uploaded_at desc"),
@@ -102,8 +102,8 @@ export async function writePostgresDbFromSnapshot(snapshot) {
         `insert into projects (
           id, name, client, owner, contract, cost_budget, cost_used, paid,
           receivable, status, risk, ai_summary, next_milestone, payment_due,
-          margin, tasks, costs, extracted_fields, created_by, created_at
-        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+          margin, tasks, costs, alerts, extracted_fields, created_by, created_at
+        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
         [
           project.id,
           project.name,
@@ -122,6 +122,7 @@ export async function writePostgresDbFromSnapshot(snapshot) {
           project.margin || 0,
           JSON.stringify(project.tasks || []),
           JSON.stringify(project.costs || []),
+          JSON.stringify(project.alerts || []),
           JSON.stringify(project.extractedFields || {}),
           project.createdBy || null,
           project.createdAt || new Date().toISOString()

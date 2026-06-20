@@ -31,6 +31,7 @@ create table if not exists projects (
   margin numeric not null default 0,
   tasks jsonb not null default '[]'::jsonb,
   costs jsonb not null default '[]'::jsonb,
+  alerts jsonb not null default '[]'::jsonb,
   extracted_fields jsonb not null default '{}'::jsonb,
   created_by text references users(id),
   created_at timestamptz not null default now()
@@ -46,6 +47,7 @@ alter table projects add column if not exists payment_due text;
 alter table projects add column if not exists margin numeric not null default 0;
 alter table projects add column if not exists tasks jsonb not null default '[]'::jsonb;
 alter table projects add column if not exists costs jsonb not null default '[]'::jsonb;
+alter table projects add column if not exists alerts jsonb not null default '[]'::jsonb;
 alter table projects add column if not exists extracted_fields jsonb not null default '{}'::jsonb;
 
 create table if not exists project_files (
