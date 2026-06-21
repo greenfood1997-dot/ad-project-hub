@@ -522,8 +522,12 @@
       }
       function alertCenterProjects() {
         return reminderProjects().map((project) => {
-          const alerts = [...(project.alerts || [])];
-          if (displayRisk(project) === "高" && !alerts.length) {
+          const alerts = [...(project.alerts || [])].filter(alert => alert?.role && alert?.type && alert?.text);
+          const addAlert = (alert) => {
+            const exists = alerts.some(item => item.role === alert.role && item.type === alert.type);
+            if (!exists) alerts.push(alert);
+          };
+          if (displayRisk(project) === "高" || project.risk === "高") {
             const contract = Number(project.contract || 0);
             const paid = Number(project.paid || 0);
             const receivable = Number(project.receivable || Math.max(contract - paid, 0));
@@ -531,7 +535,7 @@
             const costUsed = Number(project.costUsed || 0);
             const status = String(project.status || "");
             if (receivable > 0) {
-              alerts.push({
+              addAlert({
                 role: "销售",
                 type: "高风险回款跟进",
                 severity: "高",
@@ -539,7 +543,7 @@
               });
             }
             if ((budget && costUsed >= budget * 0.8) || !/已完成|结案|完成/.test(status)) {
-              alerts.push({
+              addAlert({
                 role: "PM",
                 type: "高风险执行跟进",
                 severity: "高",
@@ -547,7 +551,7 @@
               });
             }
             if (!alerts.length) {
-              alerts.push({
+              addAlert({
                 role: "PM",
                 type: "高风险项目复核",
                 severity: "高",
