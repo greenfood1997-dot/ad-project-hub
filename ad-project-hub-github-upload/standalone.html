@@ -874,7 +874,7 @@
           <div class="summary"><span>AI</span><p>${p.aiSummary || "文件已记录，等待 AI 解析任务生成结构化字段。"}</p></div>
           <div class="detail-metrics"><div class="mini"><span>项目总金额</span><strong>${money(p.contract || 0)}</strong></div><div class="mini"><span>执行总成本</span><strong>${hasCostData ? money(p.costUsed || 0) : "待上传"}</strong></div><div class="mini"><span>项目利润</span><strong>${hasCostData ? money(projectProfit) : "待成本表"}</strong></div><div class="mini"><span>项目毛利</span><strong>${marginText}</strong></div></div>
           <div class="split"><div><h3>回款进度</h3><div class="payment-progress"><div class="payment-progress-track"><i style="width:${paymentRate}%"></i></div><div class="payment-progress-meta"><span>已回款 ${money(paidAmount)}</span><b>${paymentRate}%</b></div><div class="payment-progress-meta"><span>项目总金额 ${money(paymentTotal)}</span><span>待回款 ${money(Math.max(paymentTotal - paidAmount, 0))}</span></div></div></div><div><h3>利润测算结构</h3>${hasCostData ? (p.costs || []).map(([name,value]) => `<div class="cost-row"><span>${name}</span><b>${money(value)}</b></div>`).join("") : `<p class="focus-note">尚未上传本项目月度成本表，暂不计算项目利润和毛利率。</p>`}${hasCostData ? `<div class="cost-row"><span>项目利润</span><b>${money(projectProfit)}</b></div>` : ""}</div></div>
-          <div class="focus-card job-box"><div class="panel-row"><h3>AI 解析进度</h3>${parseJob && parseJob.status !== "已完成" ? `<button class="tiny-btn" data-refresh-job="${parseJob.id}">刷新解析进度</button>` : parseJob ? `<button class="tiny-btn" data-refresh-job="${parseJob.id}">查看最新结果</button>` : ""}</div>${parseJob ? `<p class="focus-note">${parseJob.status} · ${parseJob.progress}%${parseJob.status !== "已完成" ? "，关闭窗口后也可在项目台账继续查看。" : "，结构化字段已写入项目。"}</p><div class="job-progress"><i style="width:${parseJob.progress}%"></i></div><div class="job-steps">${parseJob.steps.map(step => `<div class="job-step"><strong>${step.name}</strong>${step.status}</div>`).join("")}</div>${parseJob.extractedFields?.summary ? `<div class="summary" style="margin-bottom:0"><span>结果</span><p>${parseJob.extractedFields.summary}</p></div>` : ""}` : `<p class="focus-note">暂无解析任务。上传合同或执行表后会显示解析进度。</p>`}</div>
+          <div class="focus-card job-box"><div class="panel-row"><h3>AI 解析进度</h3><div class="project-actions">${parseJob && parseJob.status !== "已完成" ? `<button class="tiny-btn" data-refresh-job="${parseJob.id}">刷新解析进度</button>` : parseJob ? `<button class="tiny-btn" data-refresh-job="${parseJob.id}">查看最新结果</button>` : ""}${(p.files || []).length ? `<button class="tiny-btn" data-reparse-project="${p.id}">重新解析</button>` : ""}</div></div>${parseJob ? `<p class="focus-note">${parseJob.status} · ${parseJob.progress}%${parseJob.status !== "已完成" ? "，关闭窗口后也可在项目台账继续查看。" : "，结构化字段已写入项目。AI 配置为服务端团队共享，重新解析会直接复用已保存连接。"}</p><div class="job-progress"><i style="width:${parseJob.progress}%"></i></div><div class="job-steps">${parseJob.steps.map(step => `<div class="job-step"><strong>${step.name}</strong>${step.status}</div>`).join("")}</div>${parseJob.extractedFields?.summary ? `<div class="summary" style="margin-bottom:0"><span>结果</span><p>${parseJob.extractedFields.summary}</p></div>` : ""}` : `<p class="focus-note">暂无解析任务。上传合同或执行表后会显示解析进度。</p>`}</div>
           <div class="focus-card" style="margin-top:16px"><h3>供应商费用归属</h3>${relatedSuppliers.length ? relatedSuppliers.map(item => `<div class="cost-row"><span>${item.supplier} · ${item.type}</span><b>${money(item.amount)} / ${item.status}</b></div>`).join("") : `<p class="focus-note">暂无供应商费用。</p>`}</div>
           <div class="timeline"><div><span>下一节点</span><strong>${p.nextMilestone || "暂无"}</strong></div><div><span>回款节点</span><strong>${p.paymentDue || "暂无"}</strong></div></div>`;
         document.querySelectorAll("[data-refresh-job]").forEach(btn => btn.addEventListener("click", async () => {
@@ -890,6 +890,25 @@
             showToast("解析进度已更新，可在台账继续查看");
           } catch (error) {
             showToast(error.message);
+          }
+        }));
+        document.querySelectorAll("[data-reparse-project]").forEach(btn => btn.addEventListener("click", async () => {
+          try {
+            btn.disabled = true;
+            btn.textContent = "重新解析中...";
+            await apiPost("/api/projects/reparse", { id: btn.dataset.reparseProject }, true);
+            await loadState();
+            renderDetail();
+            renderRows();
+            renderDashboard();
+            renderCash();
+            renderSuppliers();
+            showToast("已使用共享 AI 配置重新解析并同步项目");
+          } catch (error) {
+            showToast(error.message);
+          } finally {
+            btn.disabled = false;
+            btn.textContent = "重新解析";
           }
         }));
       }
@@ -1201,7 +1220,7 @@
               <div class="field"><label>模型名称</label><input placeholder="系统自动匹配，也可手动修改" /></div>
               <div class="field"><label>启用能力</label><select><option>合同解析 + Excel 解析 + 风险判断</option><option>仅合同解析</option><option>仅项目问数</option><option>仅风险预警</option></select></div>
               <div class="summary"><span>AI</span><p>保存后，配置会写入服务端数据库并作为全员共享配置；同事上传文件会复用同一个已校验 AI 服务。</p></div>
-              <div id="aiConnectionStatus" class="connection-status">尚未校验连接。请点击“校验配置”，确认真实连通后再保存。</div>
+              <div id="aiConnectionStatus" class="connection-status">AI 配置保存在服务端并团队共享；保存成功后，同事登录和项目重新解析都会自动复用，无需每次重新连接。</div>
             </div><div class="drawer-actions"><button class="ghost" data-test-ai data-submit="AI 配置校验通过">校验配置</button><button class="primary" data-setting="aiService" data-submit="AI 服务配置已保存">保存配置</button></div>`
           },
           interestRate: {

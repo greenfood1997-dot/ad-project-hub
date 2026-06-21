@@ -298,6 +298,40 @@ export async function advanceParseJob(db, idOrProjectId) {
   return job;
 }
 
+export async function reparseProject(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  validateAiSettings(db.settings?.aiService || {});
+  const files = project.files?.length
+    ? project.files
+    : (db.parseJobs || []).find((item) => item.projectId === project.id)?.files || [];
+  if (!files.length) throw new Error("当前项目没有可重新解析的原始文件，请重新上传合同或执行表。");
+  const now = new Date().toISOString();
+  let job = (db.parseJobs || []).find((item) => item.projectId === project.id);
+  if (!job) {
+    job = createParseJob(project, files, {}, projectToValues(project));
+    db.parseJobs.unshift(job);
+  }
+  job.files = files;
+  job.sourceValues = projectToValues(project);
+  job.status = "重新解析中";
+  job.progress = 35;
+  job.extractedFields = {};
+  job.updatedAt = now;
+  job.steps = [
+    { name: "文件接收", status: "完成" },
+    { name: "字段识别", status: "进行中" },
+    { name: "人工确认", status: "等待" },
+    { name: "写入项目", status: "等待" }
+  ];
+  project.status = "AI解析中";
+  project.aiSummary = "已使用服务端共享 AI 配置重新解析原始文件，请稍候查看最新结果。";
+  project.updatedAt = now;
+  await analyzeAndApplyProjectFiles(db, project, job);
+  db.auditLogs.unshift({ type: "project", target: project.name, action: "reparse", user: user.name, at: now });
+  return { project, parseJob: job };
+}
+
 function setStepStatus(steps, name, status) {
   return steps.map((step) => step.name === name ? { ...step, status } : step);
 }

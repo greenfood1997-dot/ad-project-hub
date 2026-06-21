@@ -6,6 +6,7 @@ import {
   createProject,
   deleteProject,
   recordFiles,
+  reparseProject,
   refreshInterestRate,
   saveSetting,
   supplierCsv,
@@ -64,6 +65,13 @@ export async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/projects/delete") {
     const body = await readBody(req);
     const data = await mutateDb((db) => deleteProject(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/projects/reparse") {
+    const body = await readBody(req);
+    const data = await mutateDb((db) => reparseProject(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }
