@@ -5,7 +5,7 @@ const service = "ocr";
 const version = "2018-11-19";
 
 export function tencentOcrConfigured() {
-  return Boolean(process.env.TENCENT_SECRET_ID && process.env.TENCENT_SECRET_KEY);
+  return Boolean(envValue("TENCENT_SECRET_ID") && envValue("TENCENT_SECRET_KEY"));
 }
 
 export async function recognizeFileWithTencentOcr(file, options = {}) {
@@ -46,7 +46,7 @@ function isPdfFile(file) {
 }
 
 async function recognizePage(imageBase64, { isPdf, page = 1 }) {
-  const action = process.env.TENCENT_OCR_ACTION || "GeneralAccurateOCR";
+  const action = envValue("TENCENT_OCR_ACTION") || "GeneralAccurateOCR";
   const payload = {
     ImageBase64: imageBase64,
     IsPdf: isPdf,
@@ -61,7 +61,7 @@ async function recognizePage(imageBase64, { isPdf, page = 1 }) {
 }
 
 async function callTencentApi(action, payload) {
-  const region = process.env.TENCENT_OCR_REGION || "ap-guangzhou";
+  const region = envValue("TENCENT_OCR_REGION") || "ap-guangzhou";
   const timestamp = Math.floor(Date.now() / 1000);
   const body = JSON.stringify(payload);
   const headers = signRequest({
@@ -69,8 +69,8 @@ async function callTencentApi(action, payload) {
     body,
     region,
     timestamp,
-    secretId: process.env.TENCENT_SECRET_ID,
-    secretKey: process.env.TENCENT_SECRET_KEY
+    secretId: envValue("TENCENT_SECRET_ID"),
+    secretKey: envValue("TENCENT_SECRET_KEY")
   });
 
   const res = await fetch(`https://${endpoint}`, {
@@ -123,6 +123,12 @@ function signRequest({ action, body, region, timestamp, secretId, secretKey }) {
     "X-TC-Version": version,
     "X-TC-Region": region
   };
+}
+
+function envValue(key) {
+  return String(process.env[key] || "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
 }
 
 function sha256(value) {
