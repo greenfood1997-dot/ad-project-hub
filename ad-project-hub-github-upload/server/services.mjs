@@ -430,6 +430,9 @@ export async function uploadProjectVerificationSheet(db, body, user) {
     id: `VR-${Date.now()}`,
     month: inferVerificationMonth(files) || monthKey(new Date(now)),
     amount: recognizedRevenue,
+    paidAmount: 0,
+    unpaidAmount: recognizedRevenue,
+    paymentStatus: "未回款",
     status: matchedItems.some((item) => item.status !== "自动通过") ? "待复核" : "自动通过",
     uploadedAt: now,
     uploadedBy: user.id,
@@ -1155,7 +1158,7 @@ function parseTableLines(files = []) {
   return files.flatMap((file) => {
     if (Array.isArray(file.tableRows) && file.tableRows.length) {
       return file.tableRows
-        .map((row) => ({ file: file.name, cells: row.cells || [] }))
+        .map((row) => ({ file: file.name, sheetName: row.sheetName || "", cells: row.cells || [] }))
         .filter((row) => row.cells.some((cell) => String(cell || "").trim()));
     }
     return String(file.text || "")
@@ -1227,13 +1230,27 @@ function extractQuoteRules(files = []) {
 
 function extractVerificationItems(files = []) {
   const items = [];
-  for (const row of parseTableLines(files)) {
+  const rows = parseTableLines(files);
+  const headerBySheet = new Map();
+  for (const row of rows) {
     const cells = row.cells.filter(Boolean);
     const line = cells.join(" ");
-    if (!line || /服务类别|服务内容|详细描述|合计/.test(line)) continue;
+    if (!line) continue;
+    const sheetKey = `${row.file || ""}::${row.sheetName || ""}`;
+    if (looksLikeVerificationHeader(cells)) {
+      headerBySheet.set(sheetKey, buildVerificationColumnMap(cells));
+      continue;
+    }
+    if (/^(合计|总计|备注|项目最终优惠)/.test(line)) continue;
+    const mapped = extractVerificationItemByHeader(row, headerBySheet.get(sheetKey));
+    if (mapped) {
+      items.push(mapped);
+      continue;
+    }
+    if (headerBySheet.get(sheetKey)?.hasMonthlyAmount) continue;
     const month = inferVerificationMonth([{ name: row.file, text: line }]);
     const quantityMatch = line.match(/(\d+(?:\.\d+)?)\s*(支|条|篇|次|个|项)/);
-    const amount = guessAmount(line, ["核销金额", "金额", "小计", "收入"]) || 0;
+    const amount = guessAmount(line, ["核销金额", "本月核销", "确认收入", "核销收入", "结算金额", "验收金额", "金额", "小计", "收入"]) || 0;
     const quantity = quantityMatch ? Number(quantityMatch[1]) : parseMoney(cells.find((cell) => /^\d+(\.\d+)?$/.test(cell)) || 0);
     if (!quantity && !amount) continue;
     items.push({
@@ -1247,6 +1264,71 @@ function extractVerificationItems(files = []) {
     });
   }
   return items;
+}
+
+function looksLikeVerificationHeader(cells = []) {
+  const normalized = cells.map(normalizeHeaderText).join(" ");
+  const hasService = /(服务|内容|项目|资源|达人|账号|平台|刊例|报价)/.test(normalized);
+  const hasMetric = /(数量|条数|篇数|次数|支数|本月|核销|确认|收入|金额|结算|验收|小计)/.test(normalized);
+  return hasService && hasMetric;
+}
+
+function buildVerificationColumnMap(cells = []) {
+  const normalized = cells.map(normalizeHeaderText);
+  const monthlyAmount = findHeaderIndex(normalized, [
+    /(?:本月|当月|月度|[一二三四五六七八九十\d]+月).*(?:收入|金额|费用|结算|验收)/,
+    /(?:确认|收入|金额|费用|结算|验收).*(?:本月|当月|月度|[一二三四五六七八九十\d]+月)/
+  ]);
+  const monthlyQuantity = findHeaderIndex(normalized, [
+    /(?:本月|当月|月度|[一二三四五六七八九十\d]+月).*(?:数量|条数|篇数|次数|支数)/,
+    /(?:核销|确认|执行).*(?:数量|条数|篇数|次数|支数)/
+  ]);
+  return {
+    service: findHeaderIndex(normalized, [/服务.*(内容|项目|名称|类别)?/, /项目.*(内容|名称)/, /资源.*(名称|位)/, /达人|账号|平台/, /刊例|报价项/]),
+    description: findHeaderIndex(normalized, [/详细|描述|备注|说明/]),
+    quantity: monthlyQuantity >= 0 ? monthlyQuantity : findHeaderIndex(normalized, [/核销.*(数量|条数|篇数|次数|支数)/, /本月.*(数量|条数|篇数|次数|支数)/, /(条数|篇数|次数|支数)$/]),
+    unit: findHeaderIndex(normalized, [/单位|计量/]),
+    amount: monthlyAmount >= 0 ? monthlyAmount : findHeaderIndex(normalized, [/核销.*(金额|收入|费用)/, /确认.*(收入|金额|费用)/, /结算.*金额/, /验收.*金额/]),
+    month: findHeaderIndex(normalized, [/月份|月度|周期|期间|日期|时间|[一二三四五六七八九十\d]+月/]),
+    hasMonthlyAmount: monthlyAmount >= 0,
+    hasMonthlyQuantity: monthlyQuantity >= 0
+  };
+}
+
+function normalizeHeaderText(value) {
+  return String(value || "").replace(/\s+/g, "").replace(/[：:()（）【】\[\]]/g, "").trim();
+}
+
+function findHeaderIndex(headers = [], patterns = []) {
+  return headers.findIndex((header) => patterns.some((pattern) => pattern.test(header)));
+}
+
+function extractVerificationItemByHeader(row, columnMap) {
+  if (!columnMap) return null;
+  const cells = row.cells || [];
+  const cell = (index) => index >= 0 ? String(cells[index] || "").trim() : "";
+  const serviceParts = [cell(columnMap.service), cell(columnMap.description)].filter(Boolean);
+  const serviceName = serviceParts.join(" ");
+  const quantityText = cell(columnMap.quantity);
+  const unitText = cell(columnMap.unit);
+  const amountText = cell(columnMap.amount);
+  const monthText = cell(columnMap.month);
+  const line = cells.filter(Boolean).join(" ");
+  const quantityMatch = `${quantityText} ${unitText}`.match(/(\d+(?:\.\d+)?)\s*(支|条|篇|次|个|项)/);
+  const quantity = columnMap.hasMonthlyQuantity || !columnMap.hasMonthlyAmount
+    ? (quantityMatch ? Number(quantityMatch[1]) : parseMoney(quantityText))
+    : 0;
+  const amount = parseMoney(amountText);
+  if ((!serviceName && !line) || (!quantity && !amount)) return null;
+  return {
+    serviceName: serviceName || cells.slice(0, Math.min(cells.length, 4)).filter(Boolean).join(" "),
+    quantity,
+    unit: quantityMatch?.[2] || unitText,
+    amount,
+    month: inferVerificationMonth([{ name: row.file, text: `${monthText} ${line}` }]),
+    sourceFile: row.file,
+    rawText: line
+  };
 }
 
 function matchVerificationItems(items = [], quoteRules = [], context = {}) {

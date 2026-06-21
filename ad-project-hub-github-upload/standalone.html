@@ -774,7 +774,8 @@
         return records.length ? records.map((record) => {
           const pending = (record.items || []).filter(item => item.status !== "自动通过");
           const note = pending[0]?.reason || `${(record.items || []).length} 条核销明细`;
-          return `<div class="cost-row"><span>${record.month || "未识别月份"} · ${record.status}<br><small>${note}</small><br><small>${record.uploadedByName || "未知上传人"} · ${record.uploadedAt ? new Date(record.uploadedAt).toLocaleString("zh-CN") : ""}</small></span><b>${money(record.amount || 0)}</b></div>`;
+          const paymentStatus = record.paymentStatus || (Number(record.unpaidAmount || record.amount || 0) > 0 ? "未回款" : "已回款");
+          return `<div class="cost-row"><span>${record.month || "未识别月份"} · ${record.status} · ${paymentStatus}<br><small>${note}</small><br><small>${record.uploadedByName || "未知上传人"} · ${record.uploadedAt ? new Date(record.uploadedAt).toLocaleString("zh-CN") : ""}</small></span><b>${money(record.amount || 0)}</b></div>`;
         }).join("") : `<p class="focus-note">暂无核销记录。</p>`;
       }
       function costFileRows(files = []) {
