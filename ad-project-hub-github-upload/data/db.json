@@ -1,10 +1,28 @@
 {
   "users": [
     {
+      "id": "u-shareholder",
+      "name": "公司股东",
+      "email": "owner@company.local",
+      "role": "shareholder",
+      "department": "管理层",
+      "status": "active",
+      "pin": "123456"
+    },
+    {
       "id": "u-admin",
       "name": "中台管理员",
       "role": "admin",
       "department": "中台"
+    },
+    {
+      "id": "u-director",
+      "name": "项目总监",
+      "email": "director@company.local",
+      "role": "director",
+      "department": "项目部",
+      "status": "active",
+      "pin": "123456"
     },
     {
       "id": "u-pm",
@@ -23,6 +41,25 @@
       "name": "财务成员",
       "role": "finance",
       "department": "财务部"
+    },
+    {
+      "id": "u-member",
+      "name": "普通员工",
+      "email": "member@company.local",
+      "role": "member",
+      "department": "执行部",
+      "status": "active",
+      "pin": "123456"
+    },
+    {
+      "id": "u-mqn8yab0-inety",
+      "name": "Codex测试成员",
+      "email": "codex-test-1782013709480@company.local",
+      "role": "member",
+      "department": "测试部",
+      "status": "disabled",
+      "pin": "654321",
+      "createdAt": "2026-06-21T03:48:29.484Z"
     }
   ],
   "settings": {
@@ -40,13 +77,568 @@
       "term": "1Y",
       "updatedAt": null,
       "note": "默认使用 1 年期 LPR；联网刷新失败时使用兜底年化利率。"
+    },
+    "members": {
+      "items": [
+        {
+          "id": "m-member",
+          "name": "普通员工",
+          "role": "PM",
+          "project": "普通员工可见项目",
+          "feishuName": "普通员工",
+          "contact": "member@company.local"
+        }
+      ],
+      "connection": null,
+      "savedAt": "2026-06-21T04:37:21.719Z",
+      "savedBy": "u-admin"
     }
   },
-  "projects": [],
-  "suppliers": [],
-  "files": [],
-  "parseJobs": [],
-  "alertUpdates": [],
+  "projects": [
+    {
+      "id": "P-1782016641713",
+      "name": "管理员专属项目",
+      "client": "测试客户B",
+      "owner": "中台管理员",
+      "contract": 3000000,
+      "costBudget": 0,
+      "costUsed": 0,
+      "paid": 0,
+      "receivable": 3000000,
+      "status": "草稿",
+      "risk": "低",
+      "aiSummary": "",
+      "nextMilestone": "",
+      "paymentDue": "",
+      "margin": 0,
+      "tasks": [],
+      "costs": [],
+      "extractedFields": {},
+      "createdAt": "2026-06-21T04:37:21.713Z",
+      "createdBy": "u-admin",
+      "files": [],
+      "alerts": [
+        {
+          "role": "销售",
+          "type": "回款进度过慢",
+          "severity": "高",
+          "text": "项目已回款 0，待回款 3000000，回款进度 0%，请销售跟进客户付款。"
+        }
+      ]
+    },
+    {
+      "id": "P-1782016641703",
+      "name": "项目A",
+      "client": "测试客户A",
+      "owner": "普通员工",
+      "contract": 2000000,
+      "costBudget": 120,
+      "costUsed": 120,
+      "paid": 0,
+      "receivable": 2000000,
+      "status": "解析完成",
+      "risk": "高",
+      "aiSummary": "已读取 1 个文件，抽取到 1 个金额字段、0 个日期字段。提取状态：文本文件读取成功",
+      "nextMilestone": "",
+      "paymentDue": "",
+      "margin": 100,
+      "tasks": [],
+      "costs": [
+        [
+          "项目垫款",
+          0
+        ],
+        [
+          "垫款利息",
+          0
+        ],
+        [
+          "项目执行总成本",
+          120
+        ],
+        [
+          "项目执行预算上限",
+          120
+        ],
+        [
+          "内部人力",
+          0
+        ],
+        [
+          "公摊费用",
+          0
+        ]
+      ],
+      "extractedFields": {
+        "projectName": "项目A",
+        "client": "测试客户A",
+        "contract": 2000000,
+        "projectRevenue": 0,
+        "executionBudgetRatio": "",
+        "paid": 0,
+        "receivable": 2000000,
+        "costBudget": 120,
+        "costUsed": 120,
+        "advancePayment": 0,
+        "advanceInterest": 0,
+        "advanceStartDate": "",
+        "advanceEndDate": "",
+        "executionCost": 120,
+        "executionBudget": 120,
+        "internalLabor": 0,
+        "overhead": 0,
+        "hasCostSheet": true,
+        "partyA": "",
+        "partyB": "",
+        "servicePeriod": "",
+        "nextMilestone": "",
+        "paymentDue": "",
+        "risk": "高",
+        "summary": "已读取 1 个文件，抽取到 1 个金额字段、0 个日期字段。提取状态：文本文件读取成功",
+        "costs": [
+          [
+            "项目垫款",
+            0
+          ],
+          [
+            "垫款利息",
+            0
+          ],
+          [
+            "项目执行总成本",
+            120
+          ],
+          [
+            "项目执行预算上限",
+            120
+          ],
+          [
+            "内部人力",
+            0
+          ],
+          [
+            "公摊费用",
+            0
+          ]
+        ],
+        "suppliers": [
+          {
+            "supplier": "项目A,100000,30000",
+            "type": "项目费用",
+            "amount": 120,
+            "status": "待结算"
+          }
+        ],
+        "tasks": [],
+        "profit": 1999880,
+        "profitBreakdown": {
+          "advancePayment": 0,
+          "advanceInterest": 0,
+          "executionCost": 120,
+          "executionBudget": 120,
+          "internalLabor": 0,
+          "overhead": 0,
+          "totalDeduction": 120,
+          "profit": 1999880,
+          "margin": 100,
+          "interestRate": 3.45,
+          "interestDays": 0,
+          "interestSource": "无垫款",
+          "costs": [
+            [
+              "项目垫款",
+              0
+            ],
+            [
+              "垫款利息",
+              0
+            ],
+            [
+              "项目执行总成本",
+              120
+            ],
+            [
+              "项目执行预算上限",
+              120
+            ],
+            [
+              "内部人力",
+              0
+            ],
+            [
+              "公摊费用",
+              0
+            ]
+          ]
+        },
+        "archiveTags": [],
+        "confidence": "",
+        "missingFields": []
+      },
+      "createdAt": "2026-06-21T04:37:21.701Z",
+      "createdBy": "u-admin",
+      "files": [
+        {
+          "name": "2026-06执行成本表.csv",
+          "type": "text/csv",
+          "size": 52,
+          "text": "项目名称,执行预算,媒介采买,设计制作,供应商\n项目A,100000,30000,12000,测试供应商",
+          "base64": "6aG555uu5ZCN56ewLOaJp+ihjOmihOeulyzlqpLku4vph4fkubAs6K6+6K6h5Yi25L2cLOS+m+W6lOWVhgrpobnnm65BLDEwMDAwMCwzMDAwMCwxMjAwMCzmtYvor5XkvpvlupTllYY=",
+          "dataUrl": "data:text/csv;base64,6aG555uu5ZCN56ewLOaJp+ihjOmihOeulyzlqpLku4vph4fkubAs6K6+6K6h5Yi25L2cLOS+m+W6lOWVhgrpobnnm65BLDEwMDAwMCwzMDAwMCwxMjAwMCzmtYvor5XkvpvlupTllYY=",
+          "category": "execution-cost",
+          "uploadedAt": "2026-06-21T05:10:29.527Z",
+          "uploadedBy": "u-member",
+          "uploadedByName": "普通员工"
+        }
+      ],
+      "alerts": [
+        {
+          "role": "销售",
+          "type": "回款进度过慢",
+          "severity": "高",
+          "text": "项目已回款 0，待回款 2000000，回款进度 0%，请销售跟进客户付款。"
+        },
+        {
+          "role": "PM",
+          "type": "执行成本已超支",
+          "severity": "高",
+          "text": "执行成本 120 已达到预算上限 120 的 100%，请 PM 立即复盘执行成本。"
+        }
+      ],
+      "updatedAt": "2026-06-21T05:05:55.328Z"
+    }
+  ],
+  "suppliers": [
+    {
+      "supplier": "项目A,100000,30000",
+      "project": "项目A",
+      "type": "项目费用",
+      "amount": 120,
+      "status": "待结算"
+    }
+  ],
+  "files": [
+    {
+      "files": [
+        {
+          "name": "2026-06执行成本表.csv",
+          "type": "text/csv",
+          "size": 52,
+          "text": "项目名称,执行预算,媒介采买,设计制作,供应商\n项目A,100000,30000,12000,测试供应商",
+          "base64": "6aG555uu5ZCN56ewLOaJp+ihjOmihOeulyzlqpLku4vph4fkubAs6K6+6K6h5Yi25L2cLOS+m+W6lOWVhgrpobnnm65BLDEwMDAwMCwzMDAwMCwxMjAwMCzmtYvor5XkvpvlupTllYY=",
+          "dataUrl": "data:text/csv;base64,6aG555uu5ZCN56ewLOaJp+ihjOmihOeulyzlqpLku4vph4fkubAs6K6+6K6h5Yi25L2cLOS+m+W6lOWVhgrpobnnm65BLDEwMDAwMCwzMDAwMCwxMjAwMCzmtYvor5XkvpvlupTllYY=",
+          "category": "execution-cost",
+          "uploadedAt": "2026-06-21T05:10:29.527Z",
+          "uploadedBy": "u-member",
+          "uploadedByName": "普通员工"
+        }
+      ],
+      "projectId": "P-1782016641703",
+      "projectName": "项目A",
+      "type": "execution-cost",
+      "user": "普通员工",
+      "at": "2026-06-21T05:10:29.527Z"
+    }
+  ],
+  "parseJobs": [
+    {
+      "id": "J-1782018629537",
+      "projectId": "P-1782016641703",
+      "projectName": "项目A",
+      "status": "已完成",
+      "progress": 100,
+      "steps": [
+        {
+          "name": "文件接收",
+          "status": "完成"
+        },
+        {
+          "name": "字段识别",
+          "status": "完成"
+        },
+        {
+          "name": "人工确认",
+          "status": "完成"
+        },
+        {
+          "name": "写入项目",
+          "status": "完成"
+        }
+      ],
+      "files": [
+        {
+          "name": "2026-06执行成本表.csv",
+          "type": "text/csv",
+          "size": 52,
+          "text": "项目名称,执行预算,媒介采买,设计制作,供应商\n项目A,100000,30000,12000,测试供应商",
+          "base64": "6aG555uu5ZCN56ewLOaJp+ihjOmihOeulyzlqpLku4vph4fkubAs6K6+6K6h5Yi25L2cLOS+m+W6lOWVhgrpobnnm65BLDEwMDAwMCwzMDAwMCwxMjAwMCzmtYvor5XkvpvlupTllYY=",
+          "dataUrl": "data:text/csv;base64,6aG555uu5ZCN56ewLOaJp+ihjOmihOeulyzlqpLku4vph4fkubAs6K6+6K6h5Yi25L2cLOS+m+W6lOWVhgrpobnnm65BLDEwMDAwMCwzMDAwMCwxMjAwMCzmtYvor5XkvpvlupTllYY=",
+          "category": "execution-cost",
+          "uploadedAt": "2026-06-21T05:10:29.527Z",
+          "uploadedBy": "u-member",
+          "uploadedByName": "普通员工"
+        }
+      ],
+      "sourceValues": {
+        "项目名称": "项目A",
+        "客户 / 品牌": "测试客户A",
+        "合同金额": 2000000,
+        "文件类型": "月度执行成本表",
+        "上传人": "普通员工"
+      },
+      "extractedFields": {
+        "projectName": "项目A",
+        "client": "测试客户A",
+        "contract": 2000000,
+        "projectRevenue": 0,
+        "executionBudgetRatio": "",
+        "paid": 0,
+        "receivable": 2000000,
+        "costBudget": 120,
+        "costUsed": 120,
+        "advancePayment": 0,
+        "advanceInterest": 0,
+        "advanceStartDate": "",
+        "advanceEndDate": "",
+        "executionCost": 120,
+        "executionBudget": 120,
+        "internalLabor": 0,
+        "overhead": 0,
+        "hasCostSheet": true,
+        "partyA": "",
+        "partyB": "",
+        "servicePeriod": "",
+        "nextMilestone": "",
+        "paymentDue": "",
+        "risk": "高",
+        "summary": "已读取 1 个文件，抽取到 1 个金额字段、0 个日期字段。提取状态：文本文件读取成功",
+        "costs": [
+          [
+            "项目垫款",
+            0
+          ],
+          [
+            "垫款利息",
+            0
+          ],
+          [
+            "项目执行总成本",
+            120
+          ],
+          [
+            "项目执行预算上限",
+            120
+          ],
+          [
+            "内部人力",
+            0
+          ],
+          [
+            "公摊费用",
+            0
+          ]
+        ],
+        "suppliers": [
+          {
+            "supplier": "项目A,100000,30000",
+            "type": "项目费用",
+            "amount": 120,
+            "status": "待结算"
+          }
+        ],
+        "tasks": [],
+        "profit": 1999880,
+        "profitBreakdown": {
+          "advancePayment": 0,
+          "advanceInterest": 0,
+          "executionCost": 120,
+          "executionBudget": 120,
+          "internalLabor": 0,
+          "overhead": 0,
+          "totalDeduction": 120,
+          "profit": 1999880,
+          "margin": 100,
+          "interestRate": 3.45,
+          "interestDays": 0,
+          "interestSource": "无垫款",
+          "costs": [
+            [
+              "项目垫款",
+              0
+            ],
+            [
+              "垫款利息",
+              0
+            ],
+            [
+              "项目执行总成本",
+              120
+            ],
+            [
+              "项目执行预算上限",
+              120
+            ],
+            [
+              "内部人力",
+              0
+            ],
+            [
+              "公摊费用",
+              0
+            ]
+          ]
+        },
+        "archiveTags": [],
+        "confidence": "",
+        "missingFields": []
+      },
+      "createdAt": "2026-06-21T05:10:29.537Z",
+      "updatedAt": "2026-06-21T05:10:29.539Z",
+      "kind": "execution-cost",
+      "uploadedBy": "u-member",
+      "uploadedByName": "普通员工"
+    },
+    {
+      "id": "J-1782016641713",
+      "projectId": "P-1782016641713",
+      "projectName": "管理员专属项目",
+      "status": "等待文件",
+      "progress": 0,
+      "steps": [
+        {
+          "name": "文件接收",
+          "status": "等待"
+        },
+        {
+          "name": "字段识别",
+          "status": "等待"
+        },
+        {
+          "name": "人工确认",
+          "status": "等待"
+        },
+        {
+          "name": "写入项目",
+          "status": "等待"
+        }
+      ],
+      "files": [],
+      "sourceValues": {
+        "项目名称": "管理员专属项目",
+        "客户 / 品牌": "测试客户B",
+        "负责人": "中台管理员",
+        "合同金额": "300万",
+        "已回款": "100万"
+      },
+      "extractedFields": {},
+      "createdAt": "2026-06-21T04:37:21.713Z",
+      "updatedAt": "2026-06-21T04:37:21.713Z"
+    },
+    {
+      "id": "J-1782016641704",
+      "projectId": "P-1782016641703",
+      "projectName": "项目A",
+      "status": "等待文件",
+      "progress": 0,
+      "steps": [
+        {
+          "name": "文件接收",
+          "status": "等待"
+        },
+        {
+          "name": "字段识别",
+          "status": "等待"
+        },
+        {
+          "name": "人工确认",
+          "status": "等待"
+        },
+        {
+          "name": "写入项目",
+          "status": "等待"
+        }
+      ],
+      "files": [],
+      "sourceValues": {
+        "项目名称": "普通员工可见项目",
+        "客户 / 品牌": "测试客户A",
+        "负责人": "普通员工",
+        "合同金额": "200万",
+        "已回款": "80万"
+      },
+      "extractedFields": {},
+      "createdAt": "2026-06-21T04:37:21.704Z",
+      "updatedAt": "2026-06-21T04:37:21.704Z"
+    }
+  ],
+  "alertUpdates": [
+    {
+      "action": "assign",
+      "project": "管理员专属项目",
+      "type": "回款进度过慢",
+      "mentions": "",
+      "note": "",
+      "user": "中台管理员",
+      "at": "2026-06-21T05:06:02.823Z"
+    }
+  ],
   "comments": [],
-  "auditLogs": []
+  "auditLogs": [
+    {
+      "type": "upload",
+      "target": "项目A",
+      "action": "execution-cost",
+      "count": 1,
+      "user": "普通员工",
+      "at": "2026-06-21T05:10:29.527Z"
+    },
+    {
+      "type": "alert",
+      "target": "管理员专属项目",
+      "action": "assign",
+      "user": "中台管理员",
+      "at": "2026-06-21T05:06:02.823Z"
+    },
+    {
+      "type": "project",
+      "target": "项目A",
+      "action": "update",
+      "user": "中台管理员",
+      "at": "2026-06-21T05:05:55.328Z"
+    },
+    {
+      "type": "settings",
+      "target": "members",
+      "user": "中台管理员",
+      "at": "2026-06-21T04:37:21.719Z"
+    },
+    {
+      "type": "project",
+      "target": "管理员专属项目",
+      "action": "create",
+      "user": "中台管理员",
+      "at": "2026-06-21T04:37:21.713Z"
+    },
+    {
+      "type": "project",
+      "target": "普通员工可见项目",
+      "action": "create",
+      "user": "中台管理员",
+      "at": "2026-06-21T04:37:21.701Z"
+    },
+    {
+      "type": "member",
+      "target": "codex-test-1782013709480@company.local",
+      "action": "disabled",
+      "user": "中台管理员",
+      "at": "2026-06-21T03:48:29.498Z"
+    },
+    {
+      "type": "member",
+      "target": "codex-test-1782013709480@company.local",
+      "action": "create",
+      "user": "中台管理员",
+      "at": "2026-06-21T03:48:29.484Z"
+    }
+  ]
 }

@@ -84,6 +84,11 @@ nav a.active {
   color: #ffffff;
 }
 
+nav a[aria-disabled="true"] {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
 .integration {
   margin-top: auto;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
@@ -185,6 +190,11 @@ h1 {
   background: #2563eb;
   color: #ffffff;
   border-color: #2563eb;
+}
+
+.primary:disabled {
+  opacity: 0.68;
+  cursor: progress;
 }
 
 .metrics {
@@ -501,6 +511,173 @@ select {
   gap: 6px;
 }
 
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(15, 118, 110, 0.08)),
+    #eef2f6;
+}
+
+.login-panel,
+.member-form,
+.member-table {
+  background: #ffffff;
+  border: 1px solid #dce3ed;
+  border-radius: 8px;
+  box-shadow: 0 12px 34px rgba(20, 33, 61, 0.08);
+}
+
+.login-panel {
+  width: min(440px, 100%);
+  padding: 28px;
+}
+
+.login-panel .logo {
+  margin-bottom: 24px;
+  color: #172033;
+}
+
+.login-panel .logo span {
+  color: #66758a;
+}
+
+.login-panel form,
+.member-form {
+  display: grid;
+  gap: 14px;
+}
+
+label {
+  display: grid;
+  gap: 7px;
+}
+
+label span {
+  color: #526176;
+  font-size: 13px;
+}
+
+.input-row,
+.member-form input,
+.member-form select {
+  min-height: 40px;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.input-row input,
+.member-form input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+}
+
+.form-error,
+.form-message,
+.login-hint {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.form-error {
+  color: #b91c1c;
+}
+
+.form-message {
+  color: #0f766e;
+}
+
+.login-hint {
+  color: #66758a;
+  margin-top: 14px;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.member-form,
+.member-table {
+  padding: 16px;
+}
+
+.member-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 92px 78px 72px 72px;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  border-top: 1px solid #edf1f6;
+  padding: 10px 0;
+}
+
+.member-row strong,
+.member-row span {
+  display: block;
+}
+
+.member-row span,
+.member-table .section-head span {
+  color: #66758a;
+  font-size: 13px;
+}
+
+.role-pill,
+.status-pill {
+  display: inline-flex;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.role-pill.admin {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.role-pill.pm,
+.role-pill.sales {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.role-pill.finance {
+  color: #a16207;
+  background: #fef3c7;
+}
+
+.role-pill.member,
+.role-pill.viewer {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.status-pill.active {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.status-pill.disabled {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
 @media (max-width: 1180px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -521,7 +698,8 @@ select {
   }
 
   .dashboard-grid,
-  .workspace {
+  .workspace,
+  .admin-grid {
     grid-template-columns: 1fr;
   }
 
@@ -566,5 +744,10 @@ select {
   .row-right {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .member-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 }

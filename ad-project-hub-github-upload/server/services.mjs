@@ -332,6 +332,149 @@ export async function reparseProject(db, body, user) {
   return { project, parseJob: job };
 }
 
+export async function uploadProjectCostSheet(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  const now = new Date().toISOString();
+  const files = (Array.isArray(body.files) ? body.files : []).map((file) => ({
+    ...file,
+    category: "execution-cost",
+    coveredMonths: Array.isArray(file.coveredMonths) && file.coveredMonths.length
+      ? file.coveredMonths
+      : inferCoveredMonths(`${file.name || ""} ${file.text || ""}`, new Date(now)),
+    uploadedAt: file.uploadedAt || now,
+    uploadedBy: file.uploadedBy || user.id,
+    uploadedByName: user.name
+  }));
+  if (!files.length) throw new Error("请先上传月度执行成本表");
+
+  project.files = [...(project.files || []), ...files];
+  const sourceValues = {
+    ...projectToValues(project),
+    "文件类型": "月度执行成本表",
+    "上传人": user.name
+  };
+  let parsed = {};
+  try {
+    parsed = await analyzeProjectFiles(db.settings?.aiService, sourceValues, files, db.settings?.interestRate);
+  } catch {
+    parsed = {};
+  }
+  const parsedMonths = inferCoveredMonths(JSON.stringify(parsed || {}), new Date(now));
+  if (parsedMonths.length) {
+    files.forEach((file) => {
+      file.coveredMonths = Array.from(new Set([...(file.coveredMonths || []), ...parsedMonths])).sort();
+    });
+  }
+  const parseJob = createParseJob(project, files, parsed, sourceValues);
+  parseJob.kind = "execution-cost";
+  parseJob.uploadedBy = user.id;
+  parseJob.uploadedByName = user.name;
+  db.parseJobs.unshift(parseJob);
+  if (parsed.summary || parsed.hasCostSheet || parsed.costs || parsed.suppliers) {
+    applyParsedFields(db, project, parseJob, { ...parsed, hasCostSheet: true });
+  } else {
+    project.status = "AI解析中";
+    project.aiSummary = "月度执行成本表已上传，等待 AI 解析并归并到项目成本。";
+  }
+  db.files.unshift({ files, projectId: project.id, projectName: project.name, type: "execution-cost", user: user.name, at: now });
+  db.auditLogs.unshift({ type: "upload", target: project.name, action: "execution-cost", count: files.length, user: user.name, at: now });
+  return { project, parseJob, files };
+}
+
+export async function uploadProjectQuoteSheet(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  const now = new Date().toISOString();
+  const files = await normalizeUploadedFiles(body.files || [], "quote-sheet", user, now);
+  if (!files.length) throw new Error("请先上传合同报价表");
+  const rules = extractQuoteRules(files);
+  if (!rules.length) throw new Error("未识别到可核销的报价项，请检查报价表是否包含服务内容、数量、单位、单价、小计等字段。");
+  project.files = [...(project.files || []), ...files];
+  project.extractedFields = {
+    ...(project.extractedFields || {}),
+    revenueRecognition: {
+      ...(project.extractedFields?.revenueRecognition || {}),
+      quoteRules: rules,
+      quoteFiles: files.map((file) => ({ name: file.name, uploadedAt: file.uploadedAt, uploadedByName: file.uploadedByName })),
+      updatedAt: now
+    }
+  };
+  project.aiSummary = `${project.aiSummary || "文件已解析。"} 已识别 ${rules.length} 条报价核销规则，可用于月度核销表自动匹配。`;
+  project.updatedAt = now;
+  db.files.unshift({ files, projectId: project.id, projectName: project.name, type: "quote-sheet", user: user.name, at: now });
+  db.auditLogs.unshift({ type: "upload", target: project.name, action: "quote-sheet", count: files.length, user: user.name, at: now });
+  return { project, rules, files };
+}
+
+export async function uploadProjectVerificationSheet(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  const now = new Date().toISOString();
+  const files = await normalizeUploadedFiles(body.files || [], "verification-sheet", user, now);
+  if (!files.length) throw new Error("请先上传月度核销表");
+  const revenue = project.extractedFields?.revenueRecognition || {};
+  const quoteRules = Array.isArray(revenue.quoteRules) ? revenue.quoteRules : [];
+  if (!quoteRules.length) throw new Error("当前项目还没有报价规则库，请先上传合同报价表。");
+  const verificationItems = extractVerificationItems(files);
+  if (!verificationItems.length) throw new Error("未识别到核销条数或核销金额，请检查核销表是否包含服务项、数量、月份等字段。");
+  const matchedItems = matchVerificationItems(verificationItems, quoteRules, {
+    recognizedRevenue: Number(revenue.recognizedRevenue || 0),
+    contract: Number(project.contract || 0),
+    records: revenue.verificationRecords || []
+  });
+  const recognizedRevenue = matchedItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const recognizedTotal = Number(revenue.recognizedRevenue || 0) + recognizedRevenue;
+  const paid = Number(project.paid || 0);
+  const record = {
+    id: `VR-${Date.now()}`,
+    month: inferVerificationMonth(files) || monthKey(new Date(now)),
+    amount: recognizedRevenue,
+    status: matchedItems.some((item) => item.status !== "自动通过") ? "待复核" : "自动通过",
+    uploadedAt: now,
+    uploadedBy: user.id,
+    uploadedByName: user.name,
+    files: files.map((file) => ({ name: file.name, uploadedAt: file.uploadedAt })),
+    items: matchedItems
+  };
+  project.files = [...(project.files || []), ...files];
+  project.extractedFields = {
+    ...(project.extractedFields || {}),
+    revenueRecognition: {
+      ...revenue,
+      quoteRules,
+      recognizedRevenue: recognizedTotal,
+      recognizedUnpaid: Math.max(recognizedTotal - paid, 0),
+      unrecognizedContract: Math.max(Number(project.contract || 0) - recognizedTotal, 0),
+      verificationRecords: [record, ...(revenue.verificationRecords || [])],
+      updatedAt: now
+    }
+  };
+  project.receivable = Math.max(Number(project.contract || 0) - paid, 0);
+  project.aiSummary = `${project.aiSummary || "文件已解析。"} 本次核销确认收入 ${recognizedRevenue}，状态：${record.status}。`;
+  project.updatedAt = now;
+  db.files.unshift({ files, projectId: project.id, projectName: project.name, type: "verification-sheet", user: user.name, at: now });
+  db.auditLogs.unshift({ type: "upload", target: project.name, action: "verification-sheet", amount: recognizedRevenue, user: user.name, at: now });
+  return { project, record, files };
+}
+
+async function normalizeUploadedFiles(files, category, user, now) {
+  return Promise.all((Array.isArray(files) ? files : []).map(async (file) => {
+    const shouldExtract = file.base64 && (/\.(xlsx|xls|xlsm)$/i.test(file.name || "") || String(file.type || "").includes("spreadsheet"));
+    const extracted = shouldExtract || !file.text ? await extractFileContent(file) : file;
+    return {
+      ...file,
+      text: extracted.text || file.text || "",
+      tableRows: extracted.tableRows || file.tableRows || [],
+      extractionStatus: extracted.extractionStatus || file.extractionStatus || "",
+      category,
+      uploadedAt: file.uploadedAt || now,
+      uploadedBy: file.uploadedBy || user.id,
+      uploadedByName: user.name
+    };
+  }));
+}
+
 function setStepStatus(steps, name, status) {
   return steps.map((step) => step.name === name ? { ...step, status } : step);
 }
@@ -831,12 +974,15 @@ async function extractFileContent(file) {
     if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsm") || type.includes("spreadsheet")) {
       const XLSX = await import("xlsx");
       const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+      const tableRows = [];
       const text = workbook.SheetNames.map((sheetName) => {
         const sheet = workbook.Sheets[sheetName];
-        const csv = XLSX.utils.sheet_to_csv(sheet);
-        return `工作表：${sheetName}\n${csv}`;
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+        rows.forEach((row) => tableRows.push({ sheetName, cells: row.map((cell) => String(cell ?? "").replace(/\r?\n/g, " ")) }));
+        const tsv = rows.map((row) => row.map((cell) => String(cell ?? "").replace(/\r?\n/g, " ")).join("\t")).join("\n");
+        return `工作表：${sheetName}\n${tsv}`;
       }).join("\n\n");
-      return { ...file, text, extractionStatus: text ? "Excel 表格提取成功" : "Excel 未提取到表格内容" };
+      return { ...file, text, tableRows, extractionStatus: text ? "Excel 表格提取成功" : "Excel 未提取到表格内容" };
     }
 
     if (lowerName.endsWith(".csv") || lowerName.endsWith(".txt") || lowerName.endsWith(".md") || lowerName.endsWith(".tsv") || type.startsWith("text/")) {
@@ -1003,6 +1149,221 @@ function calculateProfitBreakdown(contract, parsed = {}, interestRateSettings) {
       ["公摊费用", overhead]
     ]
   };
+}
+
+function parseTableLines(files = []) {
+  return files.flatMap((file) => {
+    if (Array.isArray(file.tableRows) && file.tableRows.length) {
+      return file.tableRows
+        .map((row) => ({ file: file.name, cells: row.cells || [] }))
+        .filter((row) => row.cells.some((cell) => String(cell || "").trim()));
+    }
+    return String(file.text || "")
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter((line) => line && !/^工作表[:：]/.test(line))
+      .map((line) => ({ file: file.name, cells: splitTableLine(line) }));
+  });
+}
+
+function splitTableLine(line) {
+  if (line.includes("\t")) return line.split("\t").map((cell) => cell.trim());
+  const cells = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === "\"" && next === "\"") {
+      current += "\"";
+      index += 1;
+      continue;
+    }
+    if (char === "\"") {
+      quoted = !quoted;
+      continue;
+    }
+    if (char === "," && !quoted) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function extractQuoteRules(files = []) {
+  const rules = [];
+  for (const row of parseTableLines(files)) {
+    const cells = row.cells;
+    if (cells.length < 6) continue;
+    if (/服务类别|服务内容|详细描述/.test(cells.join(""))) continue;
+    const unitPrice = parseMoney(cells[6]);
+    const totalAmount = parseMoney(cells[7]);
+    const quantity = parseMoney(cells[4]);
+    const unit = cells[5] || "";
+    if (!unitPrice || !totalAmount || !quantity) continue;
+    const serviceName = cells[2] || cells[1] || cells[3] || "";
+    if (!serviceName || /^(合计|备注|项目最终优惠)/.test(serviceName)) continue;
+    rules.push({
+      id: `QR-${rules.length + 1}`,
+      category: cells[0] || cells[1] || "",
+      serviceName,
+      description: cells[3] || "",
+      quantity,
+      unit,
+      unitPrice,
+      totalAmount,
+      remainingQuantity: quantity,
+      recognitionMethod: /(支|条|篇|次|个|项)/.test(unit) ? "按数量核销" : "按金额核销",
+      sourceFile: row.file,
+      confidence: "规则识别"
+    });
+  }
+  return rules;
+}
+
+function extractVerificationItems(files = []) {
+  const items = [];
+  for (const row of parseTableLines(files)) {
+    const cells = row.cells.filter(Boolean);
+    const line = cells.join(" ");
+    if (!line || /服务类别|服务内容|详细描述|合计/.test(line)) continue;
+    const month = inferVerificationMonth([{ name: row.file, text: line }]);
+    const quantityMatch = line.match(/(\d+(?:\.\d+)?)\s*(支|条|篇|次|个|项)/);
+    const amount = guessAmount(line, ["核销金额", "金额", "小计", "收入"]) || 0;
+    const quantity = quantityMatch ? Number(quantityMatch[1]) : parseMoney(cells.find((cell) => /^\d+(\.\d+)?$/.test(cell)) || 0);
+    if (!quantity && !amount) continue;
+    items.push({
+      serviceName: cells.slice(0, Math.min(cells.length, 4)).join(" "),
+      quantity,
+      unit: quantityMatch?.[2] || "",
+      amount,
+      month,
+      sourceFile: row.file,
+      rawText: line
+    });
+  }
+  return items;
+}
+
+function matchVerificationItems(items = [], quoteRules = [], context = {}) {
+  const usedQuantityByRule = new Map();
+  for (const record of context.records || []) {
+    for (const item of record.items || []) {
+      if (!item.matchedRuleId) continue;
+      usedQuantityByRule.set(item.matchedRuleId, (usedQuantityByRule.get(item.matchedRuleId) || 0) + Number(item.quantity || 0));
+    }
+  }
+  const recognizedRevenue = Number(context.recognizedRevenue || 0);
+  const contractRemaining = Math.max(Number(context.contract || 0) - recognizedRevenue, 0);
+  return items.map((item) => {
+    const scored = quoteRules.map((rule) => ({
+      rule,
+      score: quoteMatchScore(item.serviceName, `${rule.serviceName} ${rule.description}`)
+    })).sort((a, b) => b.score - a.score);
+    const best = scored[0];
+    if (!best || best.score < 0.18) {
+      return { ...item, matchedRuleId: "", matchedServiceName: "", amount: item.amount || 0, status: "待复核", reason: "未匹配到报价项" };
+    }
+    const quantity = Number(item.quantity || 0);
+    const amount = item.amount || Math.round(quantity * Number(best.rule.unitPrice || 0));
+    const usedQuantity = usedQuantityByRule.get(best.rule.id) || 0;
+    const remainingQuantity = Math.max(Number(best.rule.quantity || 0) - usedQuantity, 0);
+    const overLimit = quantity && quantity > remainingQuantity;
+    const replacementCandidates = overLimit ? quoteRules
+      .filter((rule) => rule.id !== best.rule.id)
+      .map((rule) => {
+        const used = usedQuantityByRule.get(rule.id) || 0;
+        const remaining = Math.max(Number(rule.quantity || 0) - used, 0);
+        return {
+          ruleId: rule.id,
+          serviceName: rule.serviceName,
+          remainingQuantity: remaining,
+          remainingAmount: Math.round(remaining * Number(rule.unitPrice || 0))
+        };
+      })
+      .filter((rule) => rule.remainingAmount > 0)
+      .sort((a, b) => b.remainingAmount - a.remainingAmount)
+      .slice(0, 5) : [];
+    const replacementAvailable = replacementCandidates.reduce((sum, rule) => sum + rule.remainingAmount, 0);
+    const canReplace = overLimit && amount <= contractRemaining && replacementAvailable > 0;
+    const lowConfidence = best.score < 0.35;
+    return {
+      ...item,
+      matchedRuleId: best.rule.id,
+      matchedServiceName: best.rule.serviceName,
+      unitPrice: best.rule.unitPrice,
+      amount,
+      matchScore: Number(best.score.toFixed(2)),
+      remainingQuantity,
+      replacementCandidates,
+      status: canReplace ? "置换待确认" : overLimit || lowConfidence ? "待复核" : "自动通过",
+      reason: canReplace
+        ? "核销数量超过本类目剩余额度，但合同内其他类目仍有可置换余额，需总监确认置换"
+        : overLimit
+          ? "核销数量超过报价类目剩余额度，且未找到足够可置换余额"
+          : lowConfidence
+            ? "服务项为模糊匹配"
+            : "报价项、数量和单价已匹配"
+    };
+  });
+}
+
+function quoteMatchScore(itemName = "", ruleText = "") {
+  const item = normalizeProjectText(expandServiceAliases(itemName));
+  const rule = normalizeProjectText(expandServiceAliases(ruleText));
+  if (!item || !rule) return 0;
+  let score = similarity(item, rule);
+  if (rule.includes(item) || item.includes(rule.slice(0, Math.min(rule.length, item.length)))) score += 0.35;
+  const itemTerms = importantTerms(expandServiceAliases(itemName));
+  const ruleTerms = new Set(importantTerms(expandServiceAliases(ruleText)));
+  const hits = itemTerms.filter((term) => ruleTerms.has(term) || rule.includes(normalizeProjectText(term)));
+  if (itemTerms.length) score += Math.min(0.5, hits.length / itemTerms.length * 0.5);
+  return Math.max(0, Math.min(1, score));
+}
+
+function expandServiceAliases(text = "") {
+  return String(text || "")
+    .replace(/二创/g, "二创 二次创作 素材混剪")
+    .replace(/混剪/g, "混剪 二创 二次创作")
+    .replace(/探店/g, "探店 达人探店")
+    .replace(/笔记/g, "笔记 图文笔记 图文")
+    .replace(/图文/g, "图文 图文笔记 笔记")
+    .replace(/种草/g, "种草 种草短片 种草内容")
+    .replace(/短片/g, "短片 短视频 视频")
+    .replace(/投流/g, "投流 投放 加热 推流")
+    .replace(/加热/g, "加热 投放 投流 推流")
+    .replace(/TVC/gi, "TVC 高品质广告片");
+}
+
+function importantTerms(text = "") {
+  const source = String(text || "")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[0-9]+(?:\.[0-9]+)?\s*(支|条|篇|次|个|项|月|年|天|s|秒)?/gi, " ");
+  const explicit = source.match(/[\p{Script=Han}A-Za-z]{2,12}/gu) || [];
+  const terms = new Set();
+  for (const word of explicit) {
+    const normalized = normalizeProjectText(word);
+    if (normalized.length < 2) continue;
+    if (/汽车|项目|服务|内容|视频|短视频|发布|制作|执行|客户|品牌|核销|月度|本月/.test(normalized) && normalized.length <= 3) continue;
+    terms.add(word);
+    for (let size = 2; size <= Math.min(4, normalized.length); size += 1) {
+      for (let index = 0; index <= normalized.length - size; index += 1) terms.add(normalized.slice(index, index + size));
+    }
+  }
+  return Array.from(terms).slice(0, 80);
+}
+
+function inferVerificationMonth(files = []) {
+  const months = inferCoveredMonths(files.map((file) => `${file.name || ""} ${file.text || ""}`).join("\n"));
+  return months[0] || "";
+}
+
+function monthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function calculateAdvanceInterest(advancePayment, parsed = {}, interestRateSettings = {}) {
@@ -1351,8 +1712,43 @@ function parseProjectDate(text) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function monthsBetween(year, startMonth, endMonth) {
+  const start = Math.max(1, Math.min(12, Number(startMonth)));
+  const end = Math.max(start, Math.min(12, Number(endMonth)));
+  return Array.from({ length: end - start + 1 }, (_, index) => `${year}-${String(start + index).padStart(2, "0")}`);
+}
+
+function inferCoveredMonths(input, fallbackDate = new Date()) {
+  const text = String(input || "");
+  const months = new Set();
+  Array.from(text.matchAll(/(20\d{2})[-年./_ ]\s*(\d{1,2})\s*(?:[-至到~—]\s*(?:(20\d{2})[-年./_ ]\s*)?(\d{1,2}))?\s*月?/g)).forEach((match) => {
+    const year = Number(match[1]);
+    const startMonth = Number(match[2]);
+    const endMonth = Number(match[4] || match[2]);
+    monthsBetween(year, startMonth, endMonth).forEach((item) => months.add(item));
+  });
+  Array.from(text.matchAll(/(?<!\d)(\d{1,2})\s*[-至到~—]\s*(\d{1,2})\s*月/g)).forEach((match) => {
+    monthsBetween(fallbackDate.getFullYear(), Number(match[1]), Number(match[2])).forEach((item) => months.add(item));
+  });
+  Array.from(text.matchAll(/(?<!\d)(\d{1,2})\s*月/g)).forEach((match) => {
+    const month = Number(match[1]);
+    if (month >= 1 && month <= 12) months.add(`${fallbackDate.getFullYear()}-${String(month).padStart(2, "0")}`);
+  });
+  return Array.from(months).sort();
+}
+
 function projectNamePeriod(project = {}) {
-  const text = String(project.name || "");
+  const text = [
+    project.name,
+    project.aiSummary,
+    project.extractedFields?.servicePeriod,
+    project.extractedFields?.summary
+  ].filter(Boolean).join(" ");
+  const fullYear = text.match(/(20\d{2})年[^，。；;]*?(全年|整年|年度)/);
+  if (fullYear) {
+    const year = Number(fullYear[1]);
+    return [new Date(year, 0, 1), new Date(year, 11, 31)];
+  }
   const match = text.match(/(20\d{2})年\s*(\d{1,2})\s*[-至到]\s*(\d{1,2})月/);
   if (!match) return [];
   const year = Number(match[1]);
@@ -1382,8 +1778,9 @@ function projectTimeline(project = {}) {
   ].filter(Boolean).join(" ");
   const dates = Array.from(text.matchAll(/20\d{2}[年./-]\s*\d{1,2}(?:[月./-]\s*\d{1,2})?/g)).map((match) => parseProjectDate(match[0])).filter(Boolean);
   const allDates = [...dates, ...projectNamePeriod(project)].sort((a, b) => a - b);
+  const start = allDates[0] || null;
   const end = allDates.length > 1 ? allDates[allDates.length - 1] : allDates[0] || null;
-  return { text, dates: allDates, end };
+  return { text, dates: allDates, start, end };
 }
 
 function projectPaymentSchedule(project = {}) {
@@ -1478,7 +1875,37 @@ function projectRiskAlerts(project = {}) {
       text: `执行成本 ${costUsed} 已达到预算上限 ${executionBudget} 的 ${Math.round(costRate * 100)}%，请 PM 控制后续支出。`
     });
   }
+  const revenue = project.extractedFields?.revenueRecognition || {};
+  const quoteRules = revenue.quoteRules || [];
+  const hasPm = Boolean(project.pm || project.owner);
+  if (quoteRules.length && !hasPm) {
+    alerts.push({
+      role: "管理层",
+      type: "待分配项目PM",
+      severity: "中",
+      text: `销售已上传报价规则库，AI 已识别 ${quoteRules.length} 条可核销服务项；请总监分配项目 PM。`
+    });
+  }
+  const targetText = monthlyTargetSummaryFromRules(quoteRules);
+  const currentMonth = monthKey(new Date());
+  const hasVerification = (revenue.verificationRecords || []).some((record) => record.month === currentMonth);
+  if (quoteRules.length && targetText && !hasVerification) {
+    alerts.push({
+      role: "PM",
+      type: "本月核销表待上传",
+      severity: "中",
+      text: `AI 已从报价表识别本月核销目标：${targetText}。请 PM 完成后上传核销表。`
+    });
+  }
   return alerts;
+}
+
+function monthlyTargetSummaryFromRules(rules = []) {
+  return rules.map((rule) => {
+    const text = `${rule.description || ""} ${rule.serviceName || ""}`;
+    const match = text.match(/每月(?:不少于|至少|不低于)?\s*(\d+(?:\.\d+)?)\s*(支|条|篇|次|个|项)/);
+    return match ? `${String(rule.serviceName || "").slice(0, 14)}：${match[1]}${match[2]}/月` : "";
+  }).filter(Boolean).slice(0, 3).join("；");
 }
 
 function inferRisk(values = {}) {

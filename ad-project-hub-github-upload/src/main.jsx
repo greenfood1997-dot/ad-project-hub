@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as echarts from "echarts";
 import {
@@ -14,15 +14,33 @@ import {
   FileText,
   Filter,
   LayoutDashboard,
+  LockKeyhole,
+  LogOut,
+  Mail,
   MessageSquareText,
   Plus,
   Search,
   Settings2,
   ShieldAlert,
   UploadCloud,
+  UserCog,
   UsersRound,
 } from "lucide-react";
 import "./styles.css";
+
+const SESSION_KEY = "ad-project-hub-session";
+const roleOptions = [
+  ["admin", "管理员"],
+  ["pm", "项目经理"],
+  ["sales", "销售"],
+  ["finance", "财务"],
+  ["member", "普通成员"],
+  ["viewer", "只读成员"],
+];
+
+function roleLabel(role) {
+  return roleOptions.find(([value]) => value === role)?.[1] || role;
+}
 
 const projects = [
   {
@@ -187,9 +205,10 @@ function useChart(option) {
   };
 }
 
-function App() {
+function ProjectDashboard({ session, view, setView, onLogout }) {
   const [selectedId, setSelectedId] = useState(projects[0].id);
   const [role, setRole] = useState("全部角色");
+  const isAdmin = session?.role === "admin";
   const selected = projects.find((project) => project.id === selectedId) || projects[0];
   const stats = useMemo(() => {
     const contract = projects.reduce((sum, item) => sum + item.contract, 0);
@@ -264,12 +283,19 @@ function App() {
           <a><FileSpreadsheet size={18} />文件解析</a>
           <a><BellRing size={18} />预警中心</a>
           <a><UsersRound size={18} />协作空间</a>
-          <a><Settings2 size={18} />接口配置</a>
+          <a
+            className={view === "admin" ? "active" : ""}
+            onClick={() => isAdmin && setView("admin")}
+            aria-disabled={!isAdmin}
+          >
+            <Settings2 size={18} />后台管理
+          </a>
         </nav>
         <div className="integration">
-          <p>通知通道</p>
+          <p>{session.name} · {roleLabel(session.role)}</p>
           <button><MessageSquareText size={16} />飞书机器人</button>
           <button><MessageSquareText size={16} />企业微信</button>
+          <button onClick={onLogout}><LogOut size={16} />退出登录</button>
         </div>
       </aside>
 
@@ -282,6 +308,7 @@ function App() {
           <div className="actions">
             <div className="search"><Search size={16} /><input placeholder="搜索项目、客户、负责人" /></div>
             <button className="ghost"><Filter size={16} />筛选</button>
+            {isAdmin && <button className="ghost" onClick={() => setView("admin")}><UserCog size={16} />成员管理</button>}
             <button className="primary"><Plus size={16} />新建项目</button>
           </div>
         </header>
@@ -444,4 +471,230 @@ function Mini({ label, value }) {
   return <div className="mini"><span>{label}</span><strong>{value}</strong></div>;
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+function LoginScreen({ onLogin }) {
+  const [email, setEmail] = useState("admin@company.local");
+  const [pin, setPin] = useState("123456");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, pin }),
+      });
+      const payload = await res.json();
+      if (!payload.ok) throw new Error(payload.error || "登录失败");
+      localStorage.setItem(SESSION_KEY, JSON.stringify(payload.data));
+      onLogin(payload.data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="login-page">
+      <section className="login-panel">
+        <div className="logo">
+          <div className="logo-mark">A</div>
+          <div>
+            <strong>广告项目中台 OA</strong>
+            <span>内部项目协作与智能分析</span>
+          </div>
+        </div>
+        <form onSubmit={submit}>
+          <label>
+            <span>邮箱</span>
+            <div className="input-row"><Mail size={16} /><input value={email} onChange={(event) => setEmail(event.target.value)} /></div>
+          </label>
+          <label>
+            <span>PIN</span>
+            <div className="input-row"><LockKeyhole size={16} /><input value={pin} type="password" onChange={(event) => setPin(event.target.value)} /></div>
+          </label>
+          {error && <p className="form-error">{error}</p>}
+          <button className="primary" disabled={loading}>{loading ? "登录中" : "进入系统"}</button>
+        </form>
+        <p className="login-hint">默认管理员：admin@company.local / 123456。上线后请在成员管理里修改 PIN。</p>
+      </section>
+    </main>
+  );
+}
+
+function AdminMembers({ session, setView, onLogout }) {
+  const [members, setMembers] = useState([]);
+  const [editingId, setEditingId] = useState("");
+  const [message, setMessage] = useState("");
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    role: "member",
+    department: "",
+    status: "active",
+    pin: "123456",
+  });
+
+  async function api(path, options = {}) {
+    const res = await fetch(path, {
+      ...options,
+      headers: {
+        "content-type": "application/json",
+        "x-user-id": session.id,
+        ...(options.headers || {}),
+      },
+    });
+    const payload = await res.json();
+    if (!payload.ok) throw new Error(payload.error || "请求失败");
+    return payload.data;
+  }
+
+  async function loadMembers() {
+    setMembers(await api("/api/members"));
+  }
+
+  useEffect(() => {
+    loadMembers().catch((err) => setMessage(err.message));
+  }, []);
+
+  function edit(member) {
+    setEditingId(member.id);
+    setForm({
+      name: member.name || "",
+      email: member.email || "",
+      role: member.role || "member",
+      department: member.department || "",
+      status: member.status || "active",
+      pin: "",
+    });
+    setMessage("");
+  }
+
+  function resetForm() {
+    setEditingId("");
+    setForm({ name: "", email: "", role: "member", department: "", status: "active", pin: "123456" });
+  }
+
+  async function save(event) {
+    event.preventDefault();
+    try {
+      await api("/api/members", {
+        method: "POST",
+        body: JSON.stringify({ id: editingId || undefined, ...form }),
+      });
+      await loadMembers();
+      resetForm();
+      setMessage("成员已保存");
+    } catch (err) {
+      setMessage(err.message);
+    }
+  }
+
+  async function toggle(member) {
+    try {
+      await api("/api/members/status", {
+        method: "POST",
+        body: JSON.stringify({ id: member.id, status: member.status === "disabled" ? "active" : "disabled" }),
+      });
+      await loadMembers();
+    } catch (err) {
+      setMessage(err.message);
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="logo">
+          <div className="logo-mark">A</div>
+          <div>
+            <strong>后台管理</strong>
+            <span>成员 / 权限 / 设置</span>
+          </div>
+        </div>
+        <nav>
+          <a onClick={() => setView("app")}><LayoutDashboard size={18} />返回员工端</a>
+          <a className="active"><UsersRound size={18} />成员管理</a>
+          <a><Settings2 size={18} />产品设置</a>
+          <a><ShieldAlert size={18} />权限策略</a>
+        </nav>
+        <div className="integration">
+          <p>{session.name} · {roleLabel(session.role)}</p>
+          <button onClick={onLogout}><LogOut size={16} />退出登录</button>
+        </div>
+      </aside>
+      <main>
+        <header className="topbar">
+          <div>
+            <h1>成员管理</h1>
+            <p>维护内部账号、角色和后台访问权限</p>
+          </div>
+          <button className="ghost" onClick={resetForm}><Plus size={16} />新增成员</button>
+        </header>
+
+        <section className="admin-grid">
+          <form className="member-form" onSubmit={save}>
+            <div className="section-head"><h2>{editingId ? "编辑成员" : "新增成员"}</h2></div>
+            <label><span>姓名</span><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+            <label><span>邮箱</span><input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
+            <label>
+              <span>角色</span>
+              <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
+                {roleOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+              </select>
+            </label>
+            <label><span>部门</span><input value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} /></label>
+            <label><span>临时 PIN</span><input value={form.pin} placeholder="留空则保持不变" onChange={(event) => setForm({ ...form, pin: event.target.value })} /></label>
+            {message && <p className="form-message">{message}</p>}
+            <button className="primary">保存成员</button>
+          </form>
+
+          <div className="member-table">
+            <div className="section-head"><h2>成员列表</h2><span>{members.length} 人</span></div>
+            {members.map((member) => (
+              <div className="member-row" key={member.id}>
+                <div>
+                  <strong>{member.name}</strong>
+                  <span>{member.email} · {member.department || "未分组"}</span>
+                </div>
+                <b className={`role-pill ${member.role}`}>{roleLabel(member.role)}</b>
+                <b className={`status-pill ${member.status}`}>{member.status === "disabled" ? "已停用" : "启用中"}</b>
+                <button className="ghost" onClick={() => edit(member)}>编辑</button>
+                <button className="ghost" onClick={() => toggle(member)}>{member.status === "disabled" ? "启用" : "停用"}</button>
+              </div>
+            ))}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function AppShell() {
+  const [session, setSession] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(SESSION_KEY));
+    } catch {
+      return null;
+    }
+  });
+  const [view, setView] = useState("app");
+
+  function logout() {
+    localStorage.removeItem(SESSION_KEY);
+    setSession(null);
+    setView("app");
+  }
+
+  if (!session) return <LoginScreen onLogin={setSession} />;
+  if (view === "admin" && session.role === "admin") {
+    return <AdminMembers session={session} setView={setView} onLogout={logout} />;
+  }
+  return <ProjectDashboard session={session} view={view} setView={setView} onLogout={logout} />;
+}
+
+createRoot(document.getElementById("root")).render(<AppShell />);

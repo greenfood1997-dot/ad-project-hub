@@ -1,10 +1,18 @@
 create table if not exists users (
   id text primary key,
   name text not null,
+  email text,
   role text not null,
   department text,
+  status text not null default 'active',
+  pin text not null default '123456',
   created_at timestamptz not null default now()
 );
+
+alter table users add column if not exists email text;
+alter table users add column if not exists status text not null default 'active';
+alter table users add column if not exists pin text not null default '123456';
+create unique index if not exists users_email_unique on users (lower(email)) where email is not null;
 
 create table if not exists settings (
   type text primary key,
@@ -58,9 +66,14 @@ create table if not exists project_files (
   size bigint not null default 0,
   mime_type text,
   storage_url text,
+  data_url text,
+  category text,
   uploaded_by text references users(id),
   uploaded_at timestamptz not null default now()
 );
+
+alter table project_files add column if not exists data_url text;
+alter table project_files add column if not exists category text;
 
 create table if not exists parse_jobs (
   id text primary key,
@@ -120,10 +133,13 @@ create table if not exists audit_logs (
   created_at timestamptz not null default now()
 );
 
-insert into users (id, name, role, department)
+insert into users (id, name, email, role, department, status, pin)
 values
-  ('u-admin', '中台管理员', 'admin', '中台'),
-  ('u-pm', '项目经理', 'pm', '项目部'),
-  ('u-sales', '销售成员', 'sales', '销售部'),
-  ('u-finance', '财务成员', 'finance', '财务部')
+  ('u-shareholder', '公司股东', 'owner@company.local', 'shareholder', '管理层', 'active', '123456'),
+  ('u-admin', '中台管理员', 'admin@company.local', 'admin', '中台', 'active', '123456'),
+  ('u-director', '项目总监', 'director@company.local', 'director', '项目部', 'active', '123456'),
+  ('u-pm', '项目经理', 'pm@company.local', 'pm', '项目部', 'active', '123456'),
+  ('u-sales', '销售成员', 'sales@company.local', 'sales', '销售部', 'active', '123456'),
+  ('u-finance', '财务成员', 'finance@company.local', 'finance', '财务部', 'active', '123456'),
+  ('u-member', '普通员工', 'member@company.local', 'member', '执行部', 'active', '123456')
 on conflict (id) do nothing;
