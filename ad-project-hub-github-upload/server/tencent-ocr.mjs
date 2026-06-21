@@ -12,6 +12,7 @@ export async function recognizeFileWithTencentOcr(file, options = {}) {
   if (!tencentOcrConfigured()) {
     throw new Error("未配置腾讯云 OCR 密钥，请在 Render Environment 设置 TENCENT_SECRET_ID 和 TENCENT_SECRET_KEY");
   }
+  logTencentOcrCredentialShape();
 
   const base64 = file.base64 || "";
   if (!base64) throw new Error("文件缺少 base64 内容，无法调用 OCR");
@@ -129,6 +130,22 @@ function envValue(key) {
   return String(process.env[key] || "")
     .trim()
     .replace(/^["']|["']$/g, "");
+}
+
+let credentialShapeLogged = false;
+
+function logTencentOcrCredentialShape() {
+  if (credentialShapeLogged) return;
+  credentialShapeLogged = true;
+  const secretId = envValue("TENCENT_SECRET_ID");
+  const secretKey = envValue("TENCENT_SECRET_KEY");
+  console.log(`[OCR] Tencent credentials loaded: SecretId=${maskSecretId(secretId)}, SecretKeyLength=${secretKey.length}`);
+}
+
+function maskSecretId(value) {
+  if (!value) return "empty";
+  if (value.length <= 8) return `${value.slice(0, 2)}***`;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
 }
 
 function sha256(value) {
