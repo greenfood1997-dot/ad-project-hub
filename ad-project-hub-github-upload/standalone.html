@@ -195,6 +195,7 @@
       .eye-btn { border: 1px solid #d7dee8; background: #fff; border-radius: 8px; min-height: 40px; }
       .field textarea { min-height: 86px; resize: vertical; }
       .dropzone { border: 1px dashed #8db3f7; background: #f4f8ff; border-radius: 8px; padding: 22px; text-align: center; color: #24415f; }
+      .execution-quick-upload.dragging { background: #eaf2ff; border-color: #2563eb; }
       .drawer-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
       .module-banner { display: none; margin-bottom: 14px; background: #fff; border: 1px solid #dce3ed; border-radius: 8px; padding: 13px 16px; color: #344256; }
       .module-banner.show { display: block; }
@@ -1339,7 +1340,7 @@
           </div>
           <div class="execution-strip-body">
             <label class="execution-quick-upload" for="executionQuickUpload">
-              <span><strong>上传合同 / 执行表</strong><span>可连续拖拽多个文件，AI 会按报价、核销、执行成本自动归类。</span></span>
+              <span><strong>上传报价 / 核销 / 执行表</strong><span>可点击选择或拖拽多个文件，AI 会按报价、核销、执行成本自动归类。</span></span>
               <input id="executionQuickUpload" type="file" multiple accept=".xlsx,.xls,.csv,.pdf,.doc,.docx,.txt" />
             </label>
             ${workCards}
@@ -1465,6 +1466,39 @@
         if (grouped.cost.length) await apiPost("/api/projects/cost-sheet", { id: projectId, files: grouped.cost });
         await refreshAfterProjectUpload(projectId);
         showToast(`AI 已归类 ${files.length} 个文件：报价 ${grouped.quote.length}，核销 ${grouped.verification.length}，成本 ${grouped.cost.length}`);
+      }
+      function bindExecutionQuickDropzone(projectId) {
+        const zone = document.querySelector(".execution-quick-upload");
+        const input = document.getElementById("executionQuickUpload");
+        if (!zone || !input) return;
+        const upload = async (files) => {
+          const list = Array.from(files || []);
+          if (!list.length) return;
+          try {
+            await uploadExecutionQuickFiles(projectId, list, zone.querySelector("strong"));
+          } catch (error) {
+            showToast(error.message);
+          } finally {
+            zone.classList.remove("dragging");
+            input.value = "";
+          }
+        };
+        ["dragenter", "dragover"].forEach((type) => zone.addEventListener(type, (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          zone.classList.add("dragging");
+        }));
+        ["dragleave", "dragend"].forEach((type) => zone.addEventListener(type, (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          zone.classList.remove("dragging");
+        }));
+        zone.addEventListener("drop", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          upload(event.dataTransfer?.files);
+        });
+        input.addEventListener("change", (event) => upload(event.target.files));
       }
       async function refreshAfterProjectUpload(projectId) {
         dismissedAiSummaries.delete(projectId);
@@ -1674,18 +1708,7 @@
           openWorkDrawer(type === "quote" ? "quote" : type === "verification" ? "verification" : "cost");
           showToast("可在抽屉内查看记录；手动改价、改类目会接入下一步审批留痕。");
         }));
-        document.getElementById("executionQuickUpload")?.addEventListener("change", async (event) => {
-          const input = event.target;
-          const files = Array.from(input.files || []);
-          if (!files.length) return;
-          try {
-            await uploadExecutionQuickFiles(p.id, files, document.querySelector(".execution-quick-upload strong"));
-          } catch (error) {
-            showToast(error.message);
-          } finally {
-            input.value = "";
-          }
-        });
+        bindExecutionQuickDropzone(p.id);
         document.getElementById("costSheetInput")?.addEventListener("change", async (event) => {
           const input = event.target;
           const files = Array.from(input.files || []);
