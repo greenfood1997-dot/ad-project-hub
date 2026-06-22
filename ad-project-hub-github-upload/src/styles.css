@@ -975,6 +975,272 @@ label span {
   }
 }
 
+/* Feishu-like visual tuning */
+:root {
+  --bg: #f7f8fb;
+  --surface: #ffffff;
+  --surface-soft: #f7f9fc;
+  --line: #e6eaf2;
+  --line-strong: #d9e0eb;
+  --text: #1f2937;
+  --muted: #697386;
+  --brand: #3370ff;
+  --brand-soft: #eef4ff;
+  --shadow: 0 8px 22px rgba(31, 41, 55, 0.045);
+}
+
+body {
+  font-family: Inter, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.85;
+}
+
+.logo-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  font-size: 16px;
+  background: #101828;
+}
+
+.logo strong {
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.logo span {
+  font-size: 11px;
+}
+
+nav a,
+.integration button {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+nav a svg,
+.integration button svg {
+  color: #5f6f85;
+}
+
+nav a.active svg {
+  color: var(--brand);
+}
+
+.topbar {
+  min-height: 128px;
+  align-items: flex-start;
+}
+
+h1 {
+  font-size: 22px;
+  line-height: 1.28;
+  letter-spacing: 0;
+}
+
+.topbar p {
+  max-width: 520px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.actions {
+  max-width: 680px;
+}
+
+.search {
+  height: 38px;
+  min-width: 292px;
+  font-size: 14px;
+}
+
+.primary,
+.ghost,
+.section-head button {
+  height: 38px;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.metric,
+.panel,
+.project-list,
+.detail,
+.feature-panel {
+  border-radius: 8px;
+}
+
+.metric {
+  min-height: 104px;
+  padding: 15px 16px;
+}
+
+.metric svg,
+.panel-title svg,
+.summary svg {
+  width: 16px;
+  height: 16px;
+}
+
+.metric span {
+  font-size: 12px;
+}
+
+.metric strong {
+  font-size: 22px;
+  line-height: 1.1;
+  margin: 11px 0 6px;
+}
+
+.metric p {
+  font-size: 12px;
+}
+
+.panel {
+  min-height: 228px;
+  padding: 15px 16px;
+}
+
+.panel-title {
+  gap: 7px;
+}
+
+.panel-title h2,
+.section-head h2,
+.detail h2 {
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.chart {
+  height: 184px;
+}
+
+.project-list,
+.detail {
+  padding: 15px 16px;
+}
+
+.section-head {
+  margin-bottom: 10px;
+}
+
+.project-row {
+  min-height: 68px;
+  padding: 11px 12px;
+}
+
+.project-row strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.project-row span,
+.row-right span {
+  font-size: 12px;
+}
+
+.risk {
+  min-width: 54px;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.detail-head h2 {
+  font-size: 17px;
+}
+
+.detail-head p,
+.id {
+  font-size: 12px;
+}
+
+.summary {
+  margin: 14px 0;
+  padding: 11px 12px;
+  font-size: 13px;
+}
+
+.mini {
+  padding: 11px;
+}
+
+.mini span {
+  font-size: 12px;
+}
+
+.mini strong {
+  font-size: 17px;
+}
+
+.health-card {
+  padding: 11px 12px;
+}
+
+.health-card strong {
+  font-size: 16px;
+}
+
+.health-card p,
+.progress-row,
+.cost-row,
+.timeline {
+  font-size: 12px;
+}
+
+.alert-list {
+  max-height: 198px;
+}
+
+.alert-item {
+  padding: 10px 11px;
+}
+
+.alert-item strong {
+  font-size: 13px;
+}
+
+.alert-item p {
+  font-size: 12px;
+}
+
+.feature-panel {
+  padding: 15px 16px;
+}
+
+.chat-card,
+.idea-card,
+.logic-item,
+.approval-card {
+  border-radius: 8px;
+}
+
+.chat-card p,
+.idea-card p,
+.logic-item p,
+.muted {
+  font-size: 12px;
+}
+
+.prompt-list button {
+  min-height: 32px;
+  font-size: 12px;
+}
+
+.approval-card {
+  grid-template-columns: minmax(180px, 1fr) 96px 112px 68px;
+}
+
+.approval-card b {
+  font-size: 16px;
+}
+
 /* Clean workspace refresh */
 :root {
   --bg: #f6f7fb;
