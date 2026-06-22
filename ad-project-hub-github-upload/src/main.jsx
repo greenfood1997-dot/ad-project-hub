@@ -388,12 +388,55 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     })
     .filter((alert) => role === "全部角色" || alert.role === role);
 
-  const navItems = [
-    ["dashboard", LayoutDashboard, "项目工作台"],
-    ["ai", Bot, "AI 助手"],
-    ["approvals", BellRing, "审批与备用金"],
-    ["closeout", FileSpreadsheet, "成本复盘"],
-    ...(isManagement ? [["management", BarChart3, "经营舱"]] : []),
+  const navGroups = [
+    {
+      key: "dashboard",
+      icon: LayoutDashboard,
+      label: "项目工作台",
+      children: [
+        ["dashboard", "项目大盘"],
+        ["my-projects", "我的项目"]
+      ]
+    },
+    {
+      key: "ai",
+      icon: Bot,
+      label: "AI 助手",
+      children: [
+        ["ai", "项目问答"],
+        ["ai", "内容创意"],
+        ["ai", "文件登记"]
+      ]
+    },
+    {
+      key: "approvals",
+      icon: BellRing,
+      label: "审批与备用金",
+      children: [
+        ["approvals", "待我审批"],
+        ["approvals", "项目备用金"],
+        ["approvals", "报销"]
+      ]
+    },
+    {
+      key: "closeout",
+      icon: FileSpreadsheet,
+      label: "成本复盘",
+      children: [
+        ["closeout", "结案复盘"],
+        ["closeout", "支出排行"]
+      ]
+    },
+    ...(isManagement ? [{
+      key: "management",
+      icon: BarChart3,
+      label: "经营舱",
+      children: [
+        ["management", "公司大盘"],
+        ["management", "现金流压力"],
+        ["management", "AI 商业顾问"]
+      ]
+    }] : []),
   ];
 
   return (
@@ -407,10 +450,23 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           </div>
         </div>
         <nav>
-          {navItems.map(([key, Icon, label]) => (
-            <a className={activeView === key ? "active" : ""} onClick={() => setActiveView(key)} key={key}>
-              <Icon size={18} />{label}
-            </a>
+          {navGroups.map(({ key, icon: Icon, label, children }) => (
+            <div className={`nav-group ${activeView === key ? "open" : ""}`} key={key}>
+              <button className={`nav-parent ${activeView === key ? "active" : ""}`} onClick={() => setActiveView(key)}>
+                <Icon size={18} />{label}
+              </button>
+              <div className="nav-children">
+                {children.map(([target, child]) => (
+                  <button
+                    className={activeView === target ? "active" : ""}
+                    key={`${key}-${child}`}
+                    onClick={() => setActiveView(target)}
+                  >
+                    {child}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
           <a
             className={view === "admin" ? "active" : ""}

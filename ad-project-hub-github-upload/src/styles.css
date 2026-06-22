@@ -1024,6 +1024,73 @@ nav a,
   font-weight: 600;
 }
 
+.nav-group {
+  display: grid;
+  gap: 4px;
+}
+
+.nav-parent,
+.nav-children button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #4b5b72;
+  text-align: left;
+}
+
+.nav-parent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.nav-parent:hover,
+.nav-children button:hover {
+  background: #f1f5f9;
+  color: var(--text);
+}
+
+.nav-parent.active {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.nav-parent svg {
+  color: #5f6f85;
+}
+
+.nav-parent.active svg {
+  color: var(--brand);
+}
+
+.nav-children {
+  display: none;
+  gap: 2px;
+  padding: 1px 0 4px 39px;
+}
+
+.nav-group.open .nav-children {
+  display: grid;
+}
+
+.nav-children button {
+  min-height: 28px;
+  border-radius: 7px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nav-children button.active {
+  color: var(--brand);
+  background: rgba(51, 112, 255, 0.08);
+}
+
 nav a svg,
 .integration button svg {
   color: #5f6f85;
