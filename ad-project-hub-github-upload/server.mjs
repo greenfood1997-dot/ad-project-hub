@@ -13,7 +13,8 @@ const server = createServer(async (req, res) => {
     if (req.url.startsWith("/api/")) await handleApi(req, res);
     else await handleStatic(req, res);
   } catch (error) {
-    sendJson(res, 500, { ok: false, error: error.message });
+    const status = Number(error.statusCode || 500);
+    sendJson(res, status, { ok: false, error: error.message });
   }
 });
 
