@@ -186,6 +186,19 @@
       .drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
       .drawer-head h2 { font-size: 20px; }
       .drawer-head p { color: #66758a; margin-top: 6px; line-height: 1.5; }
+      .preview-mask { position: fixed; inset: 0; z-index: 45; display: none; place-items: center; background: rgba(15,23,42,.46); padding: 22px; }
+      .preview-mask.show { display: grid; }
+      .preview-modal { width: min(980px, 100%); max-height: min(760px, 92vh); background: #fff; border-radius: 8px; box-shadow: 0 22px 60px rgba(15,23,42,.26); display: grid; grid-template-rows: auto minmax(0,1fr); overflow: hidden; }
+      .preview-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 18px 20px; border-bottom: 1px solid #e5e8ee; }
+      .preview-head h2 { font-size: 18px; word-break: break-word; }
+      .preview-head p { color: #66758a; margin-top: 4px; font-size: 13px; }
+      .preview-body { padding: 16px 20px 20px; overflow: auto; min-height: 0; }
+      .preview-frame { width: 100%; height: 68vh; border: 1px solid #e5e8ee; border-radius: 8px; background: #f8fafc; }
+      .preview-image { max-width: 100%; max-height: 68vh; display: block; margin: 0 auto; border-radius: 8px; }
+      .preview-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 680px; }
+      .preview-table th, .preview-table td { border: 1px solid #e5e8ee; padding: 8px 10px; text-align: left; vertical-align: top; white-space: pre-wrap; }
+      .preview-table th { background: #f8fafc; color: #526070; font-weight: 700; position: sticky; top: 0; }
+      .preview-text { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; background: #f8fafc; border: 1px solid #e5e8ee; border-radius: 8px; padding: 14px; }
       .close-btn { width: 34px; height: 34px; border-radius: 8px; border: 1px solid #d7dee8; background: #fff; }
       .form-grid { display: grid; gap: 12px; }
       .field { display: grid; gap: 6px; }
@@ -524,6 +537,15 @@
         <div id="drawerBody"></div>
       </aside>
     </div>
+    <div class="preview-mask" id="filePreviewMask">
+      <section class="preview-modal" role="dialog" aria-modal="true">
+        <div class="preview-head">
+          <div><h2 id="filePreviewTitle">文件预览</h2><p id="filePreviewMeta"></p></div>
+          <button class="close-btn" id="filePreviewClose">×</button>
+        </div>
+        <div class="preview-body" id="filePreviewBody"></div>
+      </section>
+    </div>
     <script>
       const SESSION_KEY = "ad-project-hub-session";
       if (new URLSearchParams(location.search).has("logout")) localStorage.removeItem(SESSION_KEY);
@@ -779,9 +801,15 @@
       function quotePreviewRows(rules = []) {
         return rules.length ? rules.slice(0, 10).map((rule) => `<div class="cost-row"><span>${rule.serviceName}<br><small>${rule.unit || "项"} · ${rule.recognitionMethod || "按数量核销"}</small></span><b>${money(rule.unitPrice || 0)} / ${rule.unit || "项"}</b></div>`).join("") : `<p class="focus-note">暂无报价规则。</p>`;
       }
+      const previewFileStore = new Map();
+      let previewFileSeq = 0;
       function fileActionLinks(file) {
         const url = fileDataUrl(file);
-        return url ? `<a href="${url}" target="_blank" rel="noopener">预览</a> · <a href="${url}" download="${file.name || "文件"}">下载</a>` : "待归档";
+        const previewId = `fp-${++previewFileSeq}`;
+        previewFileStore.set(previewId, file);
+        const preview = `<button class="tiny-btn" data-file-preview-id="${previewId}">预览</button>`;
+        const download = url ? `<a href="${url}" download="${escapeHtml(file.name || "文件")}">下载</a>` : "";
+        return `${preview}${download ? ` · ${download}` : ""}`;
       }
       function uploadedFileRows(files = [], emptyText = "暂无上传文件。") {
         return files.length ? files.map((file) => `<div class="cost-row"><span>${file.name || "未命名文件"}<br><small>${file.uploadedByName || file.uploadedBy || "未知上传人"} · ${file.uploadedAt ? new Date(file.uploadedAt).toLocaleString("zh-CN") : "未记录时间"}</small></span><b>${fileActionLinks(file)}</b></div>`).join("") : `<p class="focus-note">${emptyText}</p>`;
@@ -840,6 +868,68 @@
         if (file.dataUrl) return file.dataUrl;
         if (file.base64) return `data:${file.type || "application/octet-stream"};base64,${file.base64}`;
         return "";
+      }
+      function escapeHtml(value = "") {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+      function previewRowsFromFile(file = {}) {
+        if (Array.isArray(file.tableRows) && file.tableRows.length) return file.tableRows.map((row) => row.cells || []).filter((row) => row.length);
+        const text = String(file.text || "");
+        if (!text.trim()) return [];
+        return text.split(/\n+/)
+          .map((line) => line.trim())
+          .filter((line) => line && !/^工作表[:：]/.test(line))
+          .map((line) => line.includes("\t") ? line.split("\t") : line.split(","))
+          .filter((row) => row.length > 1);
+      }
+      function previewTableHtml(rows = []) {
+        const limitedRows = rows.slice(0, 80);
+        const maxCols = Math.min(16, Math.max(...limitedRows.map((row) => row.length), 0));
+        if (!limitedRows.length || !maxCols) return "";
+        const head = limitedRows[0];
+        const bodyRows = limitedRows.slice(1);
+        const th = Array.from({ length: maxCols }, (_, index) => `<th>${escapeHtml(head[index] || `列 ${index + 1}`)}</th>`).join("");
+        const body = bodyRows.map((row) => `<tr>${Array.from({ length: maxCols }, (_, index) => `<td>${escapeHtml(row[index] || "")}</td>`).join("")}</tr>`).join("");
+        return `<div class="table-scroll"><table class="preview-table"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
+      }
+      function openFilePreview(file) {
+        if (!file) return showToast("未找到文件内容");
+        const url = fileDataUrl(file);
+        const name = file.name || "未命名文件";
+        const type = file.type || "unknown";
+        document.getElementById("filePreviewTitle").textContent = name;
+        document.getElementById("filePreviewMeta").textContent = `${type} · ${file.uploadedByName || file.uploadedBy || "未知上传人"} · ${file.uploadedAt ? new Date(file.uploadedAt).toLocaleString("zh-CN") : "未记录时间"}`;
+        const rows = previewRowsFromFile(file);
+        const table = previewTableHtml(rows);
+        const lowerName = name.toLowerCase();
+        let body = "";
+        if (table) {
+          body = table;
+        } else if (url && (type === "application/pdf" || lowerName.endsWith(".pdf"))) {
+          body = `<iframe class="preview-frame" src="${url}"></iframe>`;
+        } else if (url && (type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(lowerName))) {
+          body = `<img class="preview-image" src="${url}" alt="${escapeHtml(name)}" />`;
+        } else if (file.text) {
+          body = `<pre class="preview-text">${escapeHtml(file.text)}</pre>`;
+        } else {
+          body = `<p class="focus-note">当前文件没有可在线预览的文本或表格内容，可使用下载查看原文件。</p>`;
+        }
+        document.getElementById("filePreviewBody").innerHTML = body;
+        document.getElementById("filePreviewMask").classList.add("show");
+      }
+      function closeFilePreview() {
+        document.getElementById("filePreviewMask").classList.remove("show");
+        document.getElementById("filePreviewBody").innerHTML = "";
+      }
+      function bindFilePreviewLinks(root = document) {
+        root.querySelectorAll("[data-file-preview-id]").forEach((btn) => {
+          btn.addEventListener("click", () => openFilePreview(previewFileStore.get(btn.dataset.filePreviewId)));
+        });
       }
       function alertTarget(project, role) {
         const matched = projectMembers(project, role)[0];
@@ -1566,6 +1656,7 @@
         document.getElementById("drawerBody").innerHTML = body;
         document.getElementById("drawerMask").classList.add("show");
         bindWorkDrawerActions(type, p.id);
+        bindFilePreviewLinks(document.getElementById("drawerBody"));
       }
       async function filesToPayloads(files, category) {
         return await Promise.all(files.map(async (file) => {
@@ -2386,7 +2477,8 @@
           size: file.size,
           type: file.type || "unknown",
           text: await readFilePreviewText(file),
-          base64: await readFileBase64(file)
+          base64: await readFileBase64(file),
+          dataUrl: await readFileDataUrl(file)
         })));
         updateParsePreview(selectedFilePayloads);
         return selectedFilePayloads;
@@ -2497,6 +2589,10 @@
         document.getElementById("drawerClose").addEventListener("click", closeDrawer);
         document.getElementById("drawerMask").addEventListener("click", event => {
           if (event.target.id === "drawerMask") closeDrawer();
+        });
+        document.getElementById("filePreviewClose").addEventListener("click", closeFilePreview);
+        document.getElementById("filePreviewMask").addEventListener("click", event => {
+          if (event.target.id === "filePreviewMask") closeFilePreview();
         });
         document.querySelectorAll(".nav-item").forEach(item => item.addEventListener("click", () => switchView(item.dataset.view)));
         document.getElementById("logoutBtn")?.addEventListener("click", () => {
