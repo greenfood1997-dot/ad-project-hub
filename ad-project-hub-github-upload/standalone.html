@@ -152,6 +152,8 @@
       .cost-donut-empty-ring { fill: none; stroke: #e8eef6; stroke-width: 26; }
       .cost-row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #edf1f6; padding: 9px 0; font-size: 13px; }
       .cost-row span:first-child { min-width: 0; }
+      .nested-files { margin-top: 8px; padding-left: 10px; border-left: 2px solid #e4ebf5; }
+      .nested-files .cost-row { padding: 6px 0; border-bottom: 0; }
       .cost-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 7px; vertical-align: 1px; background: var(--dot-color, #cbd5e1); }
       .execution-strip { border: 1px solid #dbe3ee; border-radius: 8px; background: #fff; margin: 12px 0; overflow: hidden; }
       .execution-strip-head { min-height: 42px; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 9px 12px; background: #f8fafc; }
@@ -776,16 +778,23 @@
       function quotePreviewRows(rules = []) {
         return rules.length ? rules.slice(0, 10).map((rule) => `<div class="cost-row"><span>${rule.serviceName}<br><small>${rule.unit || "项"} · ${rule.recognitionMethod || "按数量核销"}</small></span><b>${money(rule.unitPrice || 0)} / ${rule.unit || "项"}</b></div>`).join("") : `<p class="focus-note">暂无报价规则。</p>`;
       }
+      function fileActionLinks(file) {
+        const url = fileDataUrl(file);
+        return url ? `<a href="${url}" target="_blank" rel="noopener">预览</a> · <a href="${url}" download="${file.name || "文件"}">下载</a>` : "待归档";
+      }
+      function uploadedFileRows(files = [], emptyText = "暂无上传文件。") {
+        return files.length ? files.map((file) => `<div class="cost-row"><span>${file.name || "未命名文件"}<br><small>${file.uploadedByName || file.uploadedBy || "未知上传人"} · ${file.uploadedAt ? new Date(file.uploadedAt).toLocaleString("zh-CN") : "未记录时间"}</small></span><b>${fileActionLinks(file)}</b></div>`).join("") : `<p class="focus-note">${emptyText}</p>`;
+      }
       function verificationRows(records = []) {
         return records.length ? records.map((record) => {
           const pending = (record.items || []).filter(item => item.status !== "自动通过");
           const note = pending[0]?.reason || `${(record.items || []).length} 条核销明细`;
           const paymentStatus = record.paymentStatus || (Number(record.unpaidAmount || record.amount || 0) > 0 ? "未回款" : "已回款");
-          return `<div class="cost-row"><span>${record.month || "未识别月份"} · ${record.status} · ${paymentStatus}<br><small>${note}</small><br><small>${record.uploadedByName || "未知上传人"} · ${record.uploadedAt ? new Date(record.uploadedAt).toLocaleString("zh-CN") : ""}</small></span><b>${money(record.amount || 0)}</b></div>`;
+          return `<div class="cost-row"><span>${record.month || "未识别月份"} · ${record.status} · ${paymentStatus}<br><small>${note}</small><br><small>${record.uploadedByName || "未知上传人"} · ${record.uploadedAt ? new Date(record.uploadedAt).toLocaleString("zh-CN") : ""}</small>${(record.files || []).length ? `<div class="nested-files">${uploadedFileRows(record.files, "")}</div>` : ""}</span><b>${money(record.amount || 0)}</b></div>`;
         }).join("") : `<p class="focus-note">暂无核销记录。</p>`;
       }
       function costFileRows(files = []) {
-        return files.length ? files.map((file) => { const url = fileDataUrl(file); return `<div class="cost-row"><span>${file.name}<br><small>${file.uploadedByName || file.uploadedBy || "未知上传人"} · ${file.uploadedAt ? new Date(file.uploadedAt).toLocaleString("zh-CN") : "未记录时间"}</small></span><b>${url ? `<a href="${url}" target="_blank">预览</a> · <a href="${url}" download="${file.name}">下载</a>` : "待归档"}</b></div>`; }).join("") : `<p class="focus-note">暂无执行成本表。</p>`;
+        return uploadedFileRows(files, "暂无执行成本表。");
       }
       function workCardsHtml({ quoteRules, verificationRecords, recognizedRevenue, costFiles, hasCostData, costUsed, latestCostFile, inspectionText, costNeedsAttention, monthlyTargets }) {
         const cards = [
@@ -1500,6 +1509,7 @@
         if (!p) return;
         const revenue = p.extractedFields?.revenueRecognition || {};
         const quoteRules = revenue.quoteRules || [];
+        const quoteFiles = revenue.quoteFiles || [];
         const records = revenue.verificationRecords || [];
         const files = p.files || [];
         const costFiles = files.filter((file) => file.category === "execution-cost" || /成本|执行|费用|cost/i.test(file.name || ""));
@@ -1513,9 +1523,9 @@
         document.getElementById("drawerTitle").textContent = title;
         document.getElementById("drawerDesc").textContent = desc;
         const body = type === "quote"
-          ? `<div class="summary" style="margin-top:0"><span>AI</span><p>${monthlyTargetSummary(quoteRules)}</p></div><div class="table-scroll">${quotePreviewRows(quoteRules)}</div>`
+          ? `<div class="summary" style="margin-top:0"><span>AI</span><p>${monthlyTargetSummary(quoteRules)}</p></div><h3 style="margin-top:14px">原始报价表</h3><div class="table-scroll">${uploadedFileRows(quoteFiles, "暂无报价文件。")}</div><h3 style="margin-top:14px">报价规则</h3><div class="table-scroll">${quotePreviewRows(quoteRules)}</div>`
           : type === "quoteUpload"
-            ? `${fileInputBlock("workQuoteInput")}<div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-upload-work="quote">上传并识别</button></div><div class="table-scroll" style="margin-top:14px">${quotePreviewRows(quoteRules)}</div>`
+            ? `${fileInputBlock("workQuoteInput")}<div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-upload-work="quote">上传并识别</button></div><div class="table-scroll" style="margin-top:14px">${uploadedFileRows(quoteFiles, "暂无报价文件。")}${quotePreviewRows(quoteRules)}</div>`
             : type === "verification"
               ? `${fileInputBlock("workVerificationInput")}<div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-upload-work="verification">上传并核销</button></div><div class="table-scroll" style="margin-top:14px">${verificationRows(records)}</div>`
               : `${fileInputBlock("workCostInput")}<div class="drawer-actions"><button class="ghost" data-close>取消</button><button class="primary" data-upload-work="cost">上传并解析</button></div><div class="table-scroll" style="margin-top:14px">${costFileRows(costFiles)}</div>`;

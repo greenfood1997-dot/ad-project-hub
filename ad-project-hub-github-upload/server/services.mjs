@@ -396,7 +396,7 @@ export async function uploadProjectQuoteSheet(db, body, user) {
     revenueRecognition: {
       ...(project.extractedFields?.revenueRecognition || {}),
       quoteRules: rules,
-      quoteFiles: files.map((file) => ({ name: file.name, uploadedAt: file.uploadedAt, uploadedByName: file.uploadedByName })),
+      quoteFiles: files.map(fileReference),
       updatedAt: now
     }
   };
@@ -417,13 +417,14 @@ export async function uploadProjectVerificationSheet(db, body, user) {
   const quoteRules = Array.isArray(revenue.quoteRules) ? revenue.quoteRules : [];
   if (!quoteRules.length) throw new Error("当前项目还没有报价规则库，请先上传合同报价表。");
   const verificationItems = extractVerificationItems(files);
-  if (!verificationItems.length) throw new Error("未识别到核销条数或核销金额，请检查核销表是否包含服务项、数量、月份等字段。");
+  const verificationSummary = verificationItems.summary || {};
+  if (!verificationItems.length && !verificationSummary.totalAmount) throw new Error("未识别到核销条数或核销金额，请检查核销表是否包含服务项、数量、月份等字段。");
   const matchedItems = matchVerificationItems(verificationItems, quoteRules, {
     recognizedRevenue: Number(revenue.recognizedRevenue || 0),
     contract: Number(project.contract || 0),
     records: revenue.verificationRecords || []
   });
-  const recognizedRevenue = matchedItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const recognizedRevenue = verificationSummary.totalAmount || matchedItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const recognizedTotal = Number(revenue.recognizedRevenue || 0) + recognizedRevenue;
   const paid = Number(project.paid || 0);
   const record = {
@@ -437,7 +438,8 @@ export async function uploadProjectVerificationSheet(db, body, user) {
     uploadedAt: now,
     uploadedBy: user.id,
     uploadedByName: user.name,
-    files: files.map((file) => ({ name: file.name, uploadedAt: file.uploadedAt })),
+    files: files.map(fileReference),
+    summary: verificationSummary.totalAmount ? verificationSummary : undefined,
     items: matchedItems
   };
   project.files = [...(project.files || []), ...files];
@@ -459,6 +461,20 @@ export async function uploadProjectVerificationSheet(db, body, user) {
   db.files.unshift({ files, projectId: project.id, projectName: project.name, type: "verification-sheet", user: user.name, at: now });
   db.auditLogs.unshift({ type: "upload", target: project.name, action: "verification-sheet", amount: recognizedRevenue, user: user.name, at: now });
   return { project, record, files };
+}
+
+function fileReference(file = {}) {
+  return {
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    category: file.category,
+    uploadedAt: file.uploadedAt,
+    uploadedBy: file.uploadedBy,
+    uploadedByName: file.uploadedByName,
+    dataUrl: file.dataUrl,
+    base64: file.base64
+  };
 }
 
 async function normalizeUploadedFiles(files, category, user, now) {
@@ -1231,10 +1247,11 @@ function extractQuoteRules(files = []) {
 function extractVerificationItems(files = []) {
   const items = [];
   const rows = parseTableLines(files);
+  const summary = extractVerificationSummary(rows);
   const headerBySheet = new Map();
   for (const row of rows) {
-    const cells = row.cells.filter(Boolean);
-    const line = cells.join(" ");
+    const cells = row.cells || [];
+    const line = cells.filter(Boolean).join(" ");
     if (!line) continue;
     const sheetKey = `${row.file || ""}::${row.sheetName || ""}`;
     if (looksLikeVerificationHeader(cells)) {
@@ -1244,6 +1261,7 @@ function extractVerificationItems(files = []) {
     if (/^(合计|总计|备注|项目最终优惠)/.test(line)) continue;
     const mapped = extractVerificationItemByHeader(row, headerBySheet.get(sheetKey));
     if (mapped) {
+      if (mapped.amount === 0 && mapped.quantity === 0) continue;
       items.push(mapped);
       continue;
     }
@@ -1264,7 +1282,36 @@ function extractVerificationItems(files = []) {
       rawText: line
     });
   }
+  items.summary = summary;
   return items;
+}
+
+function extractVerificationSummary(rows = []) {
+  const breakdown = [];
+  let totalAmount = 0;
+  for (const row of rows) {
+    const cells = row.cells || [];
+    for (let index = 0; index < cells.length - 1; index += 1) {
+      const label = String(cells[index] || "").replace(/\s+/g, "").trim();
+      const amount = parseMoney(cells[index + 1]);
+      if (!amount) continue;
+      if (/^(视频|视频收入|投流|投放|垫款|垫款应收)$/.test(label)) {
+        breakdown.push({
+          type: label,
+          amount,
+          sourceFile: row.file,
+          rawText: cells.filter(Boolean).join(" ")
+        });
+      }
+      if (/^(总数|总计|应核销款项|应核销金额)$/.test(label)) {
+        totalAmount = amount;
+      }
+    }
+  }
+  return {
+    totalAmount,
+    breakdown
+  };
 }
 
 function looksLikeVerificationHeader(cells = []) {
@@ -1278,7 +1325,9 @@ function buildVerificationColumnMap(cells = []) {
   const normalized = cells.map(normalizeHeaderText);
   const monthlyAmount = findHeaderIndex(normalized, [
     /(?:本月|当月|月度|[一二三四五六七八九十\d]+月).*(?:收入|金额|费用|结算|验收)/,
-    /(?:确认|收入|金额|费用|结算|验收).*(?:本月|当月|月度|[一二三四五六七八九十\d]+月)/
+    /(?:本月|当月|月度|[一二三四五六七八九十\d]+月).*核销(?!.*(?:数量|条数|篇数|次数|支数))/,
+    /(?:确认|收入|金额|费用|结算|验收).*(?:本月|当月|月度|[一二三四五六七八九十\d]+月)/,
+    /核销.*(?:本月|当月|月度|[一二三四五六七八九十\d]+月)(?!.*(?:数量|条数|篇数|次数|支数))/
   ]);
   const monthlyQuantity = findHeaderIndex(normalized, [
     /(?:本月|当月|月度|[一二三四五六七八九十\d]+月).*(?:数量|条数|篇数|次数|支数)/,
