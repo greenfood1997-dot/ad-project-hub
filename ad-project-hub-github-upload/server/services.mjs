@@ -53,6 +53,7 @@ export async function createProject(db, values, files, user) {
   if (files.length) {
     try {
       await analyzeAndApplyProjectFiles(db, project, parseJob);
+      await applyInitialQuoteSheets(db, project, files, user, now);
       assertUniqueProject(db, projectToValues(project), project.files || files, project.contract, project.id);
     } catch (error) {
       removeCreatedProject(db, project.id, parseJob.id);
@@ -162,6 +163,30 @@ function hasContractLikeFile(files = [], parsed = {}) {
     const source = `${file.name || ""}\n${file.text || ""}`;
     return /(合同|协议|甲方|乙方|委托方|受托方|合同金额|服务费用|付款方式)/.test(source)
       && !/(成本表|利润测算|执行支出|人力|公摊|月度成本|供应商结算)/.test(file.name || "");
+  });
+}
+
+function isPotentialQuoteSheetFile(file = {}) {
+  const source = `${file.name || ""}\n${file.type || ""}\n${file.text || ""}`;
+  const lowerName = String(file.name || "").toLowerCase();
+  if (/(成本表|利润测算|执行支出|供应商结算|月度核销|核销表|验收表)/.test(source)) return false;
+  return /(报价|报价单|报价表|刊例|报价规则|核销规则)/.test(source)
+    || /\.(xlsx|xls|xlsm|csv|tsv)$/i.test(lowerName)
+    || String(file.type || "").includes("spreadsheet");
+}
+
+function looksLikeQuoteSheetFile(file = {}) {
+  const source = `${file.name || ""}\n${file.text || ""}`;
+  if (/(成本表|利润测算|执行支出|供应商结算|月度核销|核销表|验收表)/.test(source)) return false;
+  if (/(报价|报价单|报价表|刊例|报价规则|核销规则)/.test(source)) return true;
+  const rows = parseTableLines([file]);
+  return rows.some((row) => {
+    const normalized = (row.cells || []).map(normalizeHeaderText).join(" ");
+    const hasService = /(服务|内容|项目|资源|达人|账号|平台|刊例|报价)/.test(normalized);
+    const hasPrice = /(单价|报价|金额|小计|总价|合计金额)/.test(normalized);
+    const hasQuantity = /(数量|条数|篇数|次数|支数|单位)/.test(normalized);
+    const hasMonthlyVerification = /(本月|当月|月度|核销|确认收入|验收金额)/.test(normalized);
+    return hasService && hasPrice && hasQuantity && !hasMonthlyVerification;
   });
 }
 
@@ -390,7 +415,34 @@ export async function uploadProjectQuoteSheet(db, body, user) {
   if (!files.length) throw new Error("请先上传合同报价表");
   const rules = extractQuoteRules(files);
   if (!rules.length) throw new Error("未识别到可核销的报价项，请检查报价表是否包含服务内容、数量、单位、单价、小计等字段。");
-  project.files = [...(project.files || []), ...files];
+  syncQuoteRulesToProject(project, files, rules, now);
+  db.files.unshift({ files, projectId: project.id, projectName: project.name, type: "quote-sheet", user: user.name, at: now });
+  db.auditLogs.unshift({ type: "upload", target: project.name, action: "quote-sheet", count: files.length, user: user.name, at: now });
+  return { project, rules, files };
+}
+
+async function applyInitialQuoteSheets(db, project, files = [], user, now = new Date().toISOString()) {
+  const candidateFiles = files.filter(isPotentialQuoteSheetFile);
+  if (!candidateFiles.length) return null;
+
+  const quoteFiles = (await normalizeUploadedFiles(candidateFiles, "quote-sheet", user, now))
+    .filter(looksLikeQuoteSheetFile);
+  const rules = extractQuoteRules(quoteFiles);
+  if (!rules.length) return null;
+
+  syncQuoteRulesToProject(project, quoteFiles, rules, now);
+  db.files.unshift({ files: quoteFiles, projectId: project.id, projectName: project.name, type: "quote-sheet", user: user.name, at: now });
+  db.auditLogs.unshift({ type: "upload", target: project.name, action: "quote-sheet-auto", count: quoteFiles.length, user: user.name, at: now });
+  return { files: quoteFiles, rules };
+}
+
+function syncQuoteRulesToProject(project, files, rules, now) {
+  const existingFiles = project.files || [];
+  const fileKeys = new Set(files.map(uploadedFileKey));
+  project.files = [
+    ...existingFiles.filter((file) => !fileKeys.has(uploadedFileKey(file))),
+    ...files
+  ];
   project.extractedFields = {
     ...(project.extractedFields || {}),
     revenueRecognition: {
@@ -402,9 +454,10 @@ export async function uploadProjectQuoteSheet(db, body, user) {
   };
   project.aiSummary = `${project.aiSummary || "文件已解析。"} 已识别 ${rules.length} 条报价核销规则，可用于月度核销表自动匹配。`;
   project.updatedAt = now;
-  db.files.unshift({ files, projectId: project.id, projectName: project.name, type: "quote-sheet", user: user.name, at: now });
-  db.auditLogs.unshift({ type: "upload", target: project.name, action: "quote-sheet", count: files.length, user: user.name, at: now });
-  return { project, rules, files };
+}
+
+function uploadedFileKey(file = {}) {
+  return `${file.name || ""}:${file.size || 0}:${file.type || ""}`;
 }
 
 export async function uploadProjectVerificationSheet(db, body, user) {
