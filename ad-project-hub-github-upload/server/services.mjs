@@ -361,16 +361,12 @@ export async function uploadProjectCostSheet(db, body, user) {
   const project = (db.projects || []).find((item) => item.id === body?.id);
   if (!project) throw new Error("项目不存在");
   const now = new Date().toISOString();
-  const files = (Array.isArray(body.files) ? body.files : []).map((file) => ({
-    ...file,
-    category: "execution-cost",
-    coveredMonths: Array.isArray(file.coveredMonths) && file.coveredMonths.length
+  const files = await normalizeUploadedFiles(body.files || [], "execution-cost", user, now);
+  files.forEach((file) => {
+    file.coveredMonths = Array.isArray(file.coveredMonths) && file.coveredMonths.length
       ? file.coveredMonths
-      : inferCoveredMonths(`${file.name || ""} ${file.text || ""}`, new Date(now)),
-    uploadedAt: file.uploadedAt || now,
-    uploadedBy: file.uploadedBy || user.id,
-    uploadedByName: user.name
-  }));
+      : inferCoveredMonths(`${file.name || ""} ${file.text || ""}`, new Date(now));
+  });
   if (!files.length) throw new Error("请先上传月度执行成本表");
 
   project.files = [...(project.files || []), ...files];
@@ -534,10 +530,13 @@ async function normalizeUploadedFiles(files, category, user, now) {
   return Promise.all((Array.isArray(files) ? files : []).map(async (file) => {
     const shouldExtract = file.base64 && (/\.(xlsx|xls|xlsm)$/i.test(file.name || "") || String(file.type || "").includes("spreadsheet"));
     const extracted = shouldExtract || !file.text ? await extractFileContent(file) : file;
+    const tableRows = extracted.tableRows || file.tableRows || [];
+    const tableText = tableRowsToText(tableRows);
+    const extractedText = extracted.extractionStatus === "仅记录文件信息" ? "" : extracted.text;
     return {
       ...file,
-      text: extracted.text || file.text || "",
-      tableRows: extracted.tableRows || file.tableRows || [],
+      text: extractedText || file.text || tableText || extracted.text || "",
+      tableRows,
       extractionStatus: extracted.extractionStatus || file.extractionStatus || "",
       category,
       uploadedAt: file.uploadedAt || now,
@@ -545,6 +544,16 @@ async function normalizeUploadedFiles(files, category, user, now) {
       uploadedByName: user.name
     };
   }));
+}
+
+function tableRowsToText(tableRows = []) {
+  if (!Array.isArray(tableRows) || !tableRows.length) return "";
+  return tableRows
+    .map((row) => {
+      const cells = Array.isArray(row.cells) ? row.cells : [];
+      return `${row.sheetName ? `工作表：${row.sheetName}\n` : ""}${cells.map((cell) => String(cell ?? "").replace(/\r?\n/g, " ")).join("\t")}`;
+    })
+    .join("\n");
 }
 
 function setStepStatus(steps, name, status) {
@@ -562,6 +571,8 @@ async function analyzeAndApplyProjectFiles(db, project, job) {
 }
 
 function applyParsedFields(db, project, job, parsed) {
+  const existingExtractedFields = project.extractedFields || {};
+  const existingRevenueRecognition = existingExtractedFields.revenueRecognition || {};
   const parsedContract = parseMoney(parsed.contract);
   const existingContract = parseMoney(project.contract);
   const hasCostSheet = Boolean(parsed.hasCostSheet);
@@ -593,7 +604,12 @@ function applyParsedFields(db, project, job, parsed) {
     margin: contract ? profitMargin(contract, contract - costUsed) : 0,
     tasks: parsed.tasks || [],
     costs: hasCostSheet ? profitBreakdown.costs : (project.costs || []),
-    extractedFields: hasCostSheet ? { ...parsed, profitBreakdown, profit: contract - costUsed } : parsed
+    extractedFields: mergeProjectExtractedFields(existingExtractedFields, parsed, {
+      hasCostSheet,
+      profitBreakdown,
+      profit: contract - costUsed,
+      revenueRecognition: existingRevenueRecognition
+    })
   });
   project.alerts = projectRiskAlerts(project);
 
@@ -617,6 +633,19 @@ function applyParsedFields(db, project, job, parsed) {
   for (const supplier of db.suppliers || []) {
     if (supplier.project === oldName) supplier.project = project.name;
   }
+}
+
+function mergeProjectExtractedFields(existing = {}, parsed = {}, options = {}) {
+  const revenueRecognition = {
+    ...(existing.revenueRecognition || {}),
+    ...(parsed.revenueRecognition || {}),
+    ...(options.revenueRecognition || {})
+  };
+  const merged = options.hasCostSheet
+    ? { ...existing, ...parsed, profitBreakdown: options.profitBreakdown, profit: options.profit }
+    : { ...existing, ...parsed };
+  if (Object.keys(revenueRecognition).length) merged.revenueRecognition = revenueRecognition;
+  return merged;
 }
 
 export function validateAiSettings(values) {
@@ -1094,7 +1123,7 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
     ? parseMoney(values["合同金额"])
     : (parseMoney(values["合同金额"]) || extractContractAmount(text) || amounts[0] || 0);
   const explicitPaid = guessAmount(text, ["已回款", "已付款", "首付款", "预付款", "已收款"]) || 0;
-  const paid = explicitPaid || tableMetrics.projectRevenue || 0;
+  const paid = explicitPaid || 0;
   const advancePayment = hasCostSheet ? pickTableMetric(tableMetrics, "advancePayment", guessAmount(text, ["项目垫款", "垫款本金", "垫款", "代垫"])) : 0;
   const advanceInterest = hasCostSheet ? guessAmount(text, ["垫款利息", "资金占用费", "利息"]) || 0 : 0;
   const executionCost = hasCostSheet ? pickTableMetric(tableMetrics, "executionCost", guessAmount(text, ["执行支出", "执行成本", "供应商", "应结", "结算金额"])) : 0;
@@ -1151,7 +1180,7 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
 
 function normalizeParsedFields(parsed, values, files, interestRateSettings) {
   const contract = parseMoney(parsed.contract) || parseMoney(values["合同金额"]);
-  const paid = parseMoney(parsed.paid) || parseMoney(parsed.projectRevenue);
+  const paid = parseMoney(parsed.paid);
   const hasCostSheet = Boolean(parsed.hasCostSheet) || isCostSheet(files, files.map((file) => file.text || "").join("\n"));
   const profitBreakdown = hasCostSheet ? calculateProfitBreakdown(contract, parsed, interestRateSettings) : null;
   const costUsed = profitBreakdown?.totalDeduction || 0;
@@ -1194,7 +1223,7 @@ function calculateProfitBreakdown(contract, parsed = {}, interestRateSettings) {
   const explicitAdvanceInterest = pick("advanceInterest", ["垫款利息", "资金占用费", "利息"]);
   const interestMeta = calculateAdvanceInterest(advancePayment, parsed, interestRateSettings);
   const advanceInterest = explicitAdvanceInterest || interestMeta.amount;
-  const executionCost = pick("executionCost", ["执行支出", "执行成本", "供应商", "媒介", "达人", "制作", "投放", "结算"]);
+  const executionCost = pick("executionCost", ["执行支出", "执行成本", "供应商", "媒介", "达人", "制作", "投放", "应结", "实付", "支出", "成本"]);
   const internalLabor = pick("internalLabor", ["内部人力", "人力成本", "人力", "内部工时", "工时"]);
   const overhead = pick("overhead", ["公摊费用", "公摊", "水电", "办公室租金", "房租", "租金", "其他费用", "管理公摊"]);
   const totalDeduction = advancePayment + advanceInterest + executionCost + internalLabor + overhead;
@@ -1590,8 +1619,12 @@ function parseDateValue(value) {
 
 function sumCostLabels(costs, labels) {
   return costs
-    .filter(([name]) => labels.some((label) => String(name).includes(label)))
+    .filter(([name]) => labels.some((label) => String(name).includes(label)) && !isRevenueCostLabel(name))
     .reduce((sum, [, value]) => sum + parseMoney(value), 0);
+}
+
+function isRevenueCostLabel(name = "") {
+  return /(收入|项目收入|确认收入|核销|应收|回款|客户|验收金额|销售额)/.test(String(name || ""));
 }
 
 function profitMargin(contract, profit) {
