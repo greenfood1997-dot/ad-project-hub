@@ -1247,7 +1247,8 @@ function extractVerificationItems(files = []) {
       items.push(mapped);
       continue;
     }
-    if (headerBySheet.get(sheetKey)?.hasMonthlyAmount) continue;
+    const headerMap = headerBySheet.get(sheetKey);
+    if (headerMap?.hasMonthlyAmount || headerMap?.looksLikeQuoteSheet) continue;
     const month = inferVerificationMonth([{ name: row.file, text: line }]);
     const quantityMatch = line.match(/(\d+(?:\.\d+)?)\s*(支|条|篇|次|个|项)/);
     const amount = guessAmount(line, ["核销金额", "本月核销", "确认收入", "核销收入", "结算金额", "验收金额", "金额", "小计", "收入"]) || 0;
@@ -1291,7 +1292,8 @@ function buildVerificationColumnMap(cells = []) {
     amount: monthlyAmount >= 0 ? monthlyAmount : findHeaderIndex(normalized, [/核销.*(金额|收入|费用)/, /确认.*(收入|金额|费用)/, /结算.*金额/, /验收.*金额/]),
     month: findHeaderIndex(normalized, [/月份|月度|周期|期间|日期|时间|[一二三四五六七八九十\d]+月/]),
     hasMonthlyAmount: monthlyAmount >= 0,
-    hasMonthlyQuantity: monthlyQuantity >= 0
+    hasMonthlyQuantity: monthlyQuantity >= 0,
+    looksLikeQuoteSheet: monthlyAmount < 0 && monthlyQuantity < 0 && normalized.some((header) => /单价/.test(header)) && normalized.some((header) => /小计|总价|合计金额/.test(header))
   };
 }
 

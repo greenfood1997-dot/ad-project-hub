@@ -85,4 +85,23 @@ assert.equal(quoteTailResult.record.items[0].quantity, 0);
 assert.equal(quoteTailResult.record.items[0].matchedRuleId, "QR-2");
 assert.equal(quoteTailResult.record.paymentStatus, "未回款");
 
+const quoteOnlyDb = createDb();
+await assert.rejects(
+  uploadProjectVerificationSheet(quoteOnlyDb, {
+    id: "P-1",
+    files: [{
+      name: "原始报价表.xlsx",
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      category: "verification-sheet",
+      tableRows: [
+        { sheetName: "报价明细", cells: ["服务类别", "服务内容", "详细描述", "数量", "单位", "单价（元）", "小计（元）", "备注"] },
+        { sheetName: "报价明细", cells: ["视频", "创意内容短视频", "创意内容短视频制作发布", "20", "支", "12000", "240000", ""] },
+        { sheetName: "报价明细", cells: ["视频", "短视频发布", "官方账号短视频内容发布", "30", "条", "10000", "300000", ""] }
+      ],
+      text: "工作表：报价明细\n服务类别\t服务内容\t详细描述\t数量\t单位\t单价（元）\t小计（元）\t备注"
+    }]
+  }, user),
+  /未识别到核销条数或核销金额/
+);
+
 console.log("verification parser regression passed");

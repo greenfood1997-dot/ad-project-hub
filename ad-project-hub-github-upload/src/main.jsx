@@ -191,8 +191,11 @@ const projects = [
 ];
 
 function money(value) {
-  if (value >= 10000) return `${(value / 10000).toFixed(0)}万`;
-  return value.toLocaleString("zh-CN");
+  const number = Number(value || 0);
+  if (Math.abs(number) >= 100000) {
+    return `${Number((number / 10000).toFixed(2)).toLocaleString("zh-CN")}万`;
+  }
+  return number.toLocaleString("zh-CN");
 }
 
 function useChart(option) {

@@ -585,7 +585,13 @@
           banner.classList.remove("show");
         }
       }
-      const money = value => value >= 10000 ? `${Math.round(value / 10000)}万` : value.toLocaleString("zh-CN");
+      const money = value => {
+        const number = Number(value || 0);
+        if (Math.abs(number) >= 100000) {
+          return `${Number((number / 10000).toFixed(2)).toLocaleString("zh-CN")}万`;
+        }
+        return number.toLocaleString("zh-CN");
+      };
       const riskClass = risk => risk === "高" ? "risk-high" : risk === "中" ? "risk-mid" : "risk-low";
       function members() {
         const bindings = Array.isArray(appState.settings?.members?.items) ? appState.settings.members.items : [];
