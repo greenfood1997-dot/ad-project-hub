@@ -27,11 +27,11 @@ export function sendCorsPreflight(res) {
 
 export function getCurrentUser(req, db) {
   const id = req.headers["x-user-id"] || "u-admin";
-  return db.users.find((user) => user.id === id) || db.users[0];
+  return db.users.find((user) => user.id === id && user.status !== "disabled") || db.users[0];
 }
 
 export function requireRole(user, roles, res) {
-  if (roles.includes(user.role)) return true;
+  if (user?.status !== "disabled" && roles.includes(user.role)) return true;
   sendJson(res, 403, { ok: false, error: "无权限执行该操作" });
   return false;
 }

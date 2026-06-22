@@ -33,7 +33,7 @@ export async function readPostgresDb() {
     comments,
     auditLogs
   ] = await Promise.all([
-    db.query("select id, name, role, department from users order by created_at asc"),
+    db.query("select id, name, email, role, department, status, pin, created_at as \"createdAt\" from users order by created_at asc"),
     db.query("select type, values from settings"),
     db.query(`select id, name, client, owner, contract::float,
       cost_budget::float as "costBudget", cost_used::float as "costUsed",
@@ -42,7 +42,7 @@ export async function readPostgresDb() {
       margin::float, tasks, costs, alerts, extracted_fields as "extractedFields",
       created_by as "createdBy", created_at as "createdAt"
       from projects order by created_at desc`),
-    db.query("select project_id as \"projectId\", project_name as \"projectName\", name, size, mime_type as type, storage_url as \"storageUrl\", uploaded_at as \"uploadedAt\" from project_files order by uploaded_at desc"),
+    db.query("select project_id as \"projectId\", project_name as \"projectName\", name, size, mime_type as type, storage_url as \"storageUrl\", data_url as \"dataUrl\", category, uploaded_at as \"uploadedAt\" from project_files order by uploaded_at desc"),
     db.query(`select id, project_id as "projectId", project_name as "projectName",
       status, progress, steps, files, source_values as "sourceValues",
       extracted_fields as "extractedFields", created_at as "createdAt",
@@ -87,6 +87,23 @@ export async function writePostgresDbFromSnapshot(snapshot) {
     await db.query("delete from project_files");
     await db.query("delete from projects");
     await db.query("delete from settings");
+    await db.query("delete from users");
+
+    for (const user of snapshot.users || defaultDb.users) {
+      await db.query(
+        "insert into users (id, name, email, role, department, status, pin, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8)",
+        [
+          user.id,
+          user.name,
+          user.email || `${user.id}@company.local`,
+          user.role,
+          user.department || "",
+          user.status || "active",
+          user.pin || "123456",
+          user.createdAt || new Date().toISOString()
+        ]
+      );
+    }
 
     for (const [type, values] of Object.entries(snapshot.settings || {})) {
       if (values) {
@@ -130,8 +147,8 @@ export async function writePostgresDbFromSnapshot(snapshot) {
       );
       for (const file of project.files || []) {
         await db.query(
-          "insert into project_files (project_id, project_name, name, size, mime_type, storage_url, uploaded_by, uploaded_at) values ($1,$2,$3,$4,$5,$6,$7,$8)",
-          [project.id, project.name, file.name, file.size || 0, file.type || null, file.storageUrl || null, project.createdBy || null, file.uploadedAt || new Date().toISOString()]
+          "insert into project_files (project_id, project_name, name, size, mime_type, storage_url, data_url, category, uploaded_by, uploaded_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+          [project.id, project.name, file.name, file.size || 0, file.type || null, file.storageUrl || null, file.dataUrl || null, file.category || null, file.uploadedBy || project.createdBy || null, file.uploadedAt || new Date().toISOString()]
         );
       }
     }
