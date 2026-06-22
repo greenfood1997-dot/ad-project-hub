@@ -206,6 +206,44 @@ function money(value) {
   return number.toLocaleString("zh-CN");
 }
 
+function fileSize(value) {
+  const number = Number(value || 0);
+  if (number >= 1024 * 1024) return `${Number((number / 1024 / 1024).toFixed(1))} MB`;
+  if (number >= 1024) return `${Number((number / 1024).toFixed(1))} KB`;
+  return `${number} B`;
+}
+
+function fileToPayload(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      resolve({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        base64: dataUrl.split(",")[1] || "",
+      });
+    };
+    reader.onerror = () => reject(new Error("文件读取失败，请重试"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function apiRequest(path, session, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      "content-type": "application/json",
+      "x-user-id": session.id,
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await res.json();
+  if (!payload.ok) throw new Error(payload.error || "请求失败");
+  return payload.data;
+}
+
 function normalizeProject(project) {
   const contract = Number(project.contract || 0);
   const paid = Number(project.paid || 0);
@@ -276,8 +314,10 @@ function useChart(option) {
 function ProjectDashboard({ session, view, setView, onLogout }) {
   const [state, setState] = useState(null);
   const [activeView, setActiveView] = useState("dashboard");
+  const [activeSubView, setActiveSubView] = useState("项目大盘");
   const [selectedId, setSelectedId] = useState(demoProjects[0].id);
   const [role, setRole] = useState("全部角色");
+  const [uploadOpen, setUploadOpen] = useState(false);
   const isAdmin = session?.role === "admin";
   const isManagement = canSeeManagement(session);
   const projects = useMemo(() => {
@@ -286,8 +326,8 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   }, [state]);
   const selected = projects.find((project) => project.id === selectedId) || projects[0];
 
-  useEffect(() => {
-    fetch("/api/state", { headers: { "x-user-id": session.id } })
+  function loadState() {
+    return fetch("/api/state", { headers: { "x-user-id": session.id } })
       .then((res) => res.json())
       .then((payload) => {
         if (!payload.ok) throw new Error(payload.error || "读取项目数据失败");
@@ -296,6 +336,10 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         if (first?.id) setSelectedId(first.id);
       })
       .catch(() => setState({ projects: [] }));
+  }
+
+  useEffect(() => {
+    loadState();
   }, [session.id]);
 
   const stats = useMemo(() => {
@@ -452,15 +496,24 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         <nav>
           {navGroups.map(({ key, icon: Icon, label, children }) => (
             <div className={`nav-group ${activeView === key ? "open" : ""}`} key={key}>
-              <button className={`nav-parent ${activeView === key ? "active" : ""}`} onClick={() => setActiveView(key)}>
+              <button
+                className={`nav-parent ${activeView === key ? "active" : ""}`}
+                onClick={() => {
+                  setActiveView(key);
+                  setActiveSubView(children[0]?.[1] || "");
+                }}
+              >
                 <Icon size={18} />{label}
               </button>
               <div className="nav-children">
                 {children.map(([target, child]) => (
                   <button
-                    className={activeView === target ? "active" : ""}
+                    className={activeView === key && activeSubView === child ? "active" : ""}
                     key={`${key}-${child}`}
-                    onClick={() => setActiveView(target)}
+                    onClick={() => {
+                      setActiveView(key);
+                      setActiveSubView(child);
+                    }}
                   >
                     {child}
                   </button>
@@ -494,7 +547,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             <div className="search"><Search size={16} /><input placeholder="搜索项目、客户、负责人" /></div>
             <button className="ghost"><Filter size={16} />筛选</button>
             {isAdmin && <button className="ghost" onClick={() => setView("admin")}><UserCog size={16} />成员管理</button>}
-            <button className="primary"><Plus size={16} />新建项目</button>
+            <button className="primary" onClick={() => setUploadOpen(true)}><Plus size={16} />新建项目</button>
           </div>
         </header>
 
@@ -505,53 +558,21 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
 
         {activeView === "dashboard" && <>
 
-        <section className="metrics">
-          <Metric icon={CircleDollarSign} label="合同总额" value={money(stats.contract)} sub="本年度已归档项目" />
-          <Metric icon={CheckCircle2} label="已回款" value={money(stats.paid)} sub={`回款率 ${Math.round((stats.paid / stats.contract) * 100)}%`} />
-          <Metric icon={Clock3} label="待回款" value={money(stats.receivable)} sub="含逾期与未到期" />
-          <Metric icon={ShieldAlert} label="成本消耗" value={money(stats.used)} sub="按执行表实时归集" />
-        </section>
-
-        <section className="dashboard-grid">
-          <div className="panel wide">
-            <PanelTitle icon={BarChart3} title="回款分布" />
-            <div className="chart" ref={cashRef}></div>
-          </div>
-          <div className="panel">
-            <PanelTitle icon={LayoutDashboard} title="进度结构" />
-            <div className="chart" ref={progressRef}></div>
-          </div>
-          <div className="panel">
-            <PanelTitle icon={AlertTriangle} title="PM 成本压力" />
-            <div className="chart" ref={costRef}></div>
-          </div>
-          <div className="panel alert-panel">
-            <div className="panel-row">
-              <PanelTitle icon={BellRing} title="智能预警" />
-              <select value={role} onChange={(event) => setRole(event.target.value)}>
-                <option>全部角色</option>
-                <option>PM</option>
-                <option>销售</option>
-                <option>管理层</option>
-              </select>
-            </div>
-            <div className="alert-list">
-              {visibleAlerts.map((alert, index) => (
-                <div className="alert-item" key={`${alert.project}-${index}`}>
-                  <strong>{alert.type}</strong>
-                  <span>{alert.role} · {alert.project}</span>
-                  <p>{alert.text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+        {activeSubView === "项目大盘" && <ProjectOverview
+          stats={stats}
+          cashRef={cashRef}
+          progressRef={progressRef}
+          costRef={costRef}
+          role={role}
+          setRole={setRole}
+          visibleAlerts={visibleAlerts}
+        />}
 
         <section className="workspace">
           <div className="project-list">
             <div className="section-head">
-              <h2>项目台账</h2>
-              <button><UploadCloud size={16} />上传合同/执行表</button>
+              <h2>{activeSubView === "我的项目" ? "我的项目" : "项目台账"}</h2>
+              <button onClick={() => setUploadOpen(true)}><UploadCloud size={16} />上传合同/执行表</button>
             </div>
             {projects.map((project) => (
               <button
@@ -575,6 +596,13 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           <ProjectDetail project={selected} isManagement={isManagement} />
         </section>
         </>}
+        {uploadOpen && <UploadDialog
+          session={session}
+          projects={projects}
+          selected={selected}
+          onClose={() => setUploadOpen(false)}
+          onDone={() => loadState()}
+        />}
       </main>
     </div>
   );
@@ -588,6 +616,55 @@ function Metric({ icon: Icon, label, value, sub }) {
       <strong>{value}</strong>
       <p>{sub}</p>
     </div>
+  );
+}
+
+function ProjectOverview({ stats, cashRef, progressRef, costRef, role, setRole, visibleAlerts }) {
+  const payRate = stats.contract ? Math.round((stats.paid / stats.contract) * 100) : 0;
+  return (
+    <>
+      <section className="metrics">
+        <Metric icon={CircleDollarSign} label="合同总额" value={money(stats.contract)} sub="本年度已归档项目" />
+        <Metric icon={CheckCircle2} label="已回款" value={money(stats.paid)} sub={`回款率 ${payRate}%`} />
+        <Metric icon={Clock3} label="待回款" value={money(stats.receivable)} sub="含逾期与未到期" />
+        <Metric icon={ShieldAlert} label="成本消耗" value={money(stats.used)} sub="按执行表实时归集" />
+      </section>
+
+      <section className="dashboard-grid">
+        <div className="panel wide">
+          <PanelTitle icon={BarChart3} title="回款分布" />
+          <div className="chart" ref={cashRef}></div>
+        </div>
+        <div className="panel">
+          <PanelTitle icon={LayoutDashboard} title="进度结构" />
+          <div className="chart" ref={progressRef}></div>
+        </div>
+        <div className="panel">
+          <PanelTitle icon={AlertTriangle} title="PM 成本压力" />
+          <div className="chart" ref={costRef}></div>
+        </div>
+        <div className="panel alert-panel">
+          <div className="panel-row">
+            <PanelTitle icon={BellRing} title="智能预警" />
+            <select value={role} onChange={(event) => setRole(event.target.value)}>
+              <option>全部角色</option>
+              <option>PM</option>
+              <option>销售</option>
+              <option>管理层</option>
+            </select>
+          </div>
+          <div className="alert-list">
+            {visibleAlerts.map((alert, index) => (
+              <div className="alert-item" key={`${alert.project}-${index}`}>
+                <strong>{alert.type}</strong>
+                <span>{alert.role} · {alert.project}</span>
+                <p>{alert.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -835,6 +912,142 @@ function ManagementCockpit({ projects, stats }) {
 
 function LogicItem({ title, text }) {
   return <div className="logic-item"><strong>{title}</strong><p>{text}</p></div>;
+}
+
+function UploadDialog({ session, projects, selected, onClose, onDone }) {
+  const [type, setType] = useState("create-project");
+  const [projectId, setProjectId] = useState(selected?.id || projects[0]?.id || "");
+  const [values, setValues] = useState({
+    "项目名称": "",
+    "客户 / 品牌": "",
+    "负责人": session.name,
+    "合同金额": "",
+  });
+  const [files, setFiles] = useState([]);
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const targetProject = projects.find((project) => project.id === projectId) || selected || projects[0];
+  const needsProject = type !== "create-project";
+
+  async function pickFiles(event) {
+    const picked = Array.from(event.target.files || []);
+    setMessage("");
+    const payloads = await Promise.all(picked.map(fileToPayload));
+    const oversized = picked.find((file) => file.size > 40 * 1024 * 1024 && /pdf/i.test(file.type || file.name));
+    setFiles(payloads);
+    if (oversized) setMessage("已选择超过 40MB 的 PDF，完整 OCR 可能需要几分钟，请不要重复提交。");
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!files.length && type !== "create-project") {
+      setMessage("请先选择要上传的文件");
+      return;
+    }
+    setLoading(true);
+    setMessage("正在交给 AI 解析，请稍候...");
+    try {
+      if (type === "create-project") {
+        await apiRequest("/api/projects", session, {
+          method: "POST",
+          body: JSON.stringify({ values, files }),
+        });
+      }
+      if (type === "cost-sheet") {
+        await apiRequest("/api/projects/cost-sheet", session, {
+          method: "POST",
+          body: JSON.stringify({ id: targetProject.id, files }),
+        });
+      }
+      if (type === "quote-sheet") {
+        await apiRequest("/api/projects/quote-sheet", session, {
+          method: "POST",
+          body: JSON.stringify({ id: targetProject.id, files }),
+        });
+      }
+      if (type === "verification-sheet") {
+        await apiRequest("/api/projects/verification-sheet", session, {
+          method: "POST",
+          body: JSON.stringify({ id: targetProject.id, files }),
+        });
+      }
+      setMessage("上传成功，项目数据已刷新。");
+      await onDone();
+      setTimeout(onClose, 700);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <form className="upload-modal" onSubmit={submit}>
+        <div className="modal-head">
+          <div>
+            <h2>上传到项目中台</h2>
+            <p>沿用现有 AI 解析流程，不改动表格统计逻辑。</p>
+          </div>
+          <button type="button" className="ghost" onClick={onClose}>关闭</button>
+        </div>
+
+        <label>
+          <span>上传类型</span>
+          <select value={type} onChange={(event) => setType(event.target.value)}>
+            <option value="create-project">新项目：合同 / 报价表</option>
+            <option value="cost-sheet">已有项目：执行成本表</option>
+            <option value="quote-sheet">已有项目：合同报价表</option>
+            <option value="verification-sheet">已有项目：月度核销表</option>
+          </select>
+        </label>
+
+        {needsProject && (
+          <label>
+            <span>归属项目</span>
+            <select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+              {projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}
+            </select>
+          </label>
+        )}
+
+        {type === "create-project" && (
+          <div className="form-grid">
+            {Object.keys(values).map((key) => (
+              <label key={key}>
+                <span>{key}</span>
+                <input value={values[key]} onChange={(event) => setValues({ ...values, [key]: event.target.value })} placeholder={key === "项目名称" ? "可留空，由 AI 从合同识别" : ""} />
+              </label>
+            ))}
+          </div>
+        )}
+
+        <label className="file-drop">
+          <UploadCloud size={18} />
+          <strong>{files.length ? `已选择 ${files.length} 个文件` : "选择合同、报价表、成本表或核销表"}</strong>
+          <span>支持 PDF / Word / Excel / CSV / 图片。大 PDF 请耐心等待 OCR。</span>
+          <input type="file" multiple onChange={pickFiles} />
+        </label>
+
+        {files.length > 0 && (
+          <div className="file-list">
+            {files.map((file) => (
+              <div key={`${file.name}-${file.size}`}>
+                <strong>{file.name}</strong>
+                <span>{fileSize(file.size)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {message && <p className="form-message">{message}</p>}
+        <div className="modal-actions">
+          <button type="button" className="ghost" onClick={onClose}>取消</button>
+          <button className="primary" disabled={loading}>{loading ? "解析中" : "上传并解析"}</button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function Mini({ label, value }) {
