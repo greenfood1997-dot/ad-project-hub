@@ -1706,10 +1706,10 @@ function extractVerificationSummary(rows = []) {
 
 function looksLikeVerificationHeader(cells = []) {
   const normalized = cells.map(normalizeHeaderText).filter(Boolean);
-  const explicitExecutionHeaders = normalized.filter((header) => /^(执行价|执行单价|执行条数|执行数量|总价|执行总价|核销金额|核销数量|本月核销金额|本月确认收入)$/.test(header));
+  const explicitExecutionHeaders = normalized.filter((header) => /^(执行价|执行单价|执行条数|执行数量|总价|执行总价|核销金额|核销费用|核销数量|本月核销金额|本月确认收入)$/.test(header) || /核销费用$/.test(header) || /^[一二三四五六七八九十\d]+月核销$/.test(header));
   if (explicitExecutionHeaders.length >= 2) return true;
-  const hasServiceHeader = normalized.some((header) => /^(服务内容|服务项目|项目内容|报价项|名称|资源名称|达人|账号|平台)$/.test(header));
-  const hasMetricHeader = normalized.some((header) => /^(核销金额|核销数量|本月核销金额|本月核销数量|确认收入|本月确认收入|结算金额|验收金额)$/.test(header));
+  const hasServiceHeader = normalized.some((header) => /^(服务内容|服务项目|项目内容|项目|报价项|名称|资源名称|达人|账号|平台)$/.test(header));
+  const hasMetricHeader = normalized.some((header) => /^(核销金额|核销费用|核销数量|本月核销金额|本月核销数量|确认收入|本月确认收入|结算金额|验收金额)$/.test(header) || /核销费用$/.test(header) || /^[一二三四五六七八九十\d]+月核销$/.test(header));
   return hasServiceHeader && hasMetricHeader;
 }
 
@@ -1732,7 +1732,11 @@ function buildVerificationColumnMap(cells = []) {
     /^核销条数$/,
     /^核销数量$/,
     /^本次核销条数$/,
-    /^本月核销数量$/
+    /^本月核销数量$/,
+    /^本月核销条数$/,
+    /^本月核销篇数$/,
+    /^本月核销次数$/,
+    /^本月核销支数$/
   ]);
   const executionUnitPrice = findHeaderIndex(normalized, [
     /^执行价$/,
@@ -1751,7 +1755,7 @@ function buildVerificationColumnMap(cells = []) {
     /(?:核销|确认|执行).*(?:数量|条数|篇数|次数|支数)/
   ]);
   return {
-    service: findHeaderIndex(normalized, [/^名称$/, /服务.*(内容|项目|名称|类别)?/, /项目.*(内容|名称)/, /资源.*(名称|位)/, /刊例|报价项/, /达人|账号/]),
+    service: findHeaderIndex(normalized, [/^名称$/, /^项目$/, /服务.*(内容|项目|名称|类别)?/, /项目.*(内容|名称)/, /资源.*(名称|位)/, /刊例|报价项/, /达人|账号/]),
     description: findHeaderIndex(normalized, [/详细|描述|备注|说明/]),
     quantity: monthlyQuantity >= 0 ? monthlyQuantity : findHeaderIndex(normalized, [/核销.*(数量|条数|篇数|次数|支数)/, /本月.*(数量|条数|篇数|次数|支数)/, /(条数|篇数|次数|支数)$/]),
     unit: findHeaderIndex(normalized, [/单位|计量/]),

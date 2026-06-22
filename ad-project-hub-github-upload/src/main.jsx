@@ -445,12 +445,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     {
       key: "ai",
       icon: Bot,
-      label: "AI 助手",
-      children: [
-        ["ai", "项目问答"],
-        ["ai", "内容创意"],
-        ["ai", "文件登记"]
-      ]
+      label: "AI 助手"
     },
     {
       key: "approvals",
@@ -500,13 +495,13 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
                 className={`nav-parent ${activeView === key ? "active" : ""}`}
                 onClick={() => {
                   setActiveView(key);
-                  setActiveSubView(children[0]?.[1] || "");
+                  setActiveSubView(children?.[0]?.[1] || "");
                 }}
               >
                 <Icon size={18} />{label}
               </button>
-              <div className="nav-children">
-                {children.map(([target, child]) => (
+              {!!children?.length && <div className="nav-children">
+                {children.map(([, child]) => (
                   <button
                     className={activeView === key && activeSubView === child ? "active" : ""}
                     key={`${key}-${child}`}
@@ -518,16 +513,17 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
                     {child}
                   </button>
                 ))}
-              </div>
+              </div>}
             </div>
           ))}
-          <a
-            className={view === "admin" ? "active" : ""}
-            onClick={() => isAdmin && setView("admin")}
-            aria-disabled={!isAdmin}
-          >
-            <Settings2 size={18} />后台管理
-          </a>
+          {isAdmin && (
+            <a
+              className={view === "admin" ? "active" : ""}
+              onClick={() => setView("admin")}
+            >
+              <Settings2 size={18} />后台管理
+            </a>
+          )}
         </nav>
         <div className="integration">
           <p>{session.name} · {roleLabel(session.role)}</p>
@@ -552,7 +548,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         </header>
 
         {activeView === "ai" && <AiWorkbench session={session} projects={projects} selected={selected} />}
-        {activeView === "approvals" && <ApprovalFunds projects={projects} selected={selected} session={session} />}
+        {activeView === "approvals" && <ApprovalFunds projects={projects} selected={selected} session={session} subView={activeSubView} setSubView={setActiveSubView} />}
         {activeView === "closeout" && <CloseoutReview project={selected} isManagement={isManagement} />}
         {activeView === "management" && isManagement && <ManagementCockpit projects={projects} stats={stats} />}
 
@@ -753,44 +749,43 @@ function ProjectDetail({ project, isManagement }) {
 function AiWorkbench({ session, projects, selected }) {
   const visibleProjects = projects.slice(0, 4);
   return (
-    <section className="feature-grid">
-      <div className="feature-panel ai-panel">
-        <PanelTitle icon={Bot} title="AI 项目助手" />
-        <div className="chat-card">
-          <p>可以直接问项目、备用金、报销、进度，也可以把文件发给 AI 归档到项目。</p>
-          <div className="prompt-list">
-            <button>我的项目备用金还有多少？</button>
-            <button>帮我登记到我的项目里</button>
-            <button>这个月我还有哪些材料没补？</button>
-          </div>
-          <div className="chat-input">
-            <UploadCloud size={16} />
-            <span>拖入合同、报价表、成本表、票据或核销表</span>
-            <button>发送给 AI</button>
-          </div>
+    <section className="ai-workbench">
+      <div className="ai-chat-shell">
+        <div className="ai-chat-head">
+          <PanelTitle icon={Bot} title="AI 项目助手" />
+          <span>{session.name} 的项目上下文</span>
+        </div>
+        <div className="ai-message ai-message-assistant">
+          <strong>你可以直接把项目里的事情丢给我。</strong>
+          <p>问备用金、报销、进度、材料缺口，或者把合同、报价表、成本表、票据、核销表发过来，我会先识别你的账号和项目权限，再帮你归档或登记。</p>
+        </div>
+        <div className="prompt-list">
+          <button>我的项目备用金还有多少？</button>
+          <button>帮我登记到我的项目里</button>
+          <button>这个月我还有哪些材料没补？</button>
+          <button>给我生成一个更容易过稿的内容方向</button>
+        </div>
+        <div className="ai-context-strip">
+          {visibleProjects.map((project) => (
+            <div key={project.id}>
+              <span>{projectHealth(project).label}</span>
+              <strong>{project.name}</strong>
+            </div>
+          ))}
+        </div>
+        <div className="chat-input ai-main-input">
+          <UploadCloud size={16} />
+          <span>输入问题，或拖入文件让 AI 自动识别项目</span>
+          <button>发送</button>
         </div>
       </div>
 
-      <div className="feature-panel">
-        <PanelTitle icon={FileText} title="项目匹配方式" />
-        <div className="logic-list">
-          <LogicItem title="说得模糊" text="例如“帮我登记到我的项目里”，AI 会按你的账号和参与项目弹出选择框。" />
-          <LogicItem title="说得明确" text="例如“统计到捷途项目成本里”，AI 会直接匹配项目并登记，必要时轻确认。" />
-          <LogicItem title="权限保护" text="AI 只处理你有权限的项目，不向员工展示利润和公司级财务。" />
-        </div>
-      </div>
-
-      <div className="feature-panel">
-        <PanelTitle icon={MessageSquareText} title="内容创意助手" />
-        <p className="muted">基于客户偏好、历史雷区和项目资料生成更容易过稿的选题、脚本、Brief 和提案方向。</p>
+      <div className="ai-side-panel">
+        <PanelTitle icon={FileText} title="当前项目建议" />
         <div className="idea-card">
           <strong>{selected.client || selected.name} 内容建议</strong>
           <p>优先用“真实场景 + 明确卖点 + 可执行路径”，避免只给概念不落地。新 PM 接手时自动生成客户雷区和交接摘要。</p>
         </div>
-      </div>
-
-      <div className="feature-panel">
-        <PanelTitle icon={UsersRound} title={`${session.name} 的项目`} />
         <div className="compact-list">
           {visibleProjects.map((project) => (
             <div key={project.id}>
@@ -804,30 +799,105 @@ function AiWorkbench({ session, projects, selected }) {
   );
 }
 
-function ApprovalFunds({ projects, selected }) {
+function ApprovalFunds({ selected, subView, setSubView }) {
+  const [selectedApprovalKey, setSelectedApprovalKey] = useState("");
   const approvals = [
-    { type: "项目备用金", project: selected.name, amount: selected.pettyCashBudget, status: "待总监确认", user: selected.pm },
-    { type: "报销申请", project: selected.name, amount: 1280, status: "待财务复核", user: "执行成员" },
-    { type: "供应商付款", project: selected.name, amount: Math.round(selected.costUsed * 0.28), status: "待付款排期", user: "项目PM" },
+    {
+      type: "项目备用金",
+      project: selected.name,
+      amount: selected.pettyCashBudget,
+      status: "待总监确认",
+      user: selected.pm,
+      category: "项目备用金",
+      scope: "拍摄、差旅、现场小额支出",
+      steps: [["执行提交", "done"], ["PM确认", "done"], ["总监审批", "current"], ["财务打款", "todo"]]
+    },
+    {
+      type: "报销申请",
+      project: selected.name,
+      amount: 1280,
+      status: "待财务复核",
+      user: "执行成员",
+      category: "报销",
+      scope: "票据补齐后自动计入项目成本",
+      steps: [["成员提交", "done"], ["PM复核", "done"], ["财务复核", "current"], ["完成入账", "todo"]]
+    },
+    {
+      type: "供应商付款",
+      project: selected.name,
+      amount: Math.round(selected.costUsed * 0.28),
+      status: "待付款排期",
+      user: "项目PM",
+      category: "待我审批",
+      scope: "供应商付款不占用备用金，进入供应商支出",
+      steps: [["PM发起", "done"], ["总监确认", "current"], ["财务排期", "todo"], ["付款完成", "todo"]]
+    },
   ];
+  const categories = [
+    { label: "待我审批", desc: "需要当前角色处理的审批", count: approvals.filter((item) => item.category === "待我审批" || item.status.includes("待")).length },
+    { label: "项目备用金", desc: "项目预算、已用和剩余额度", count: approvals.filter((item) => item.category === "项目备用金").length },
+    { label: "报销", desc: "员工报销、票据和入账状态", count: approvals.filter((item) => item.category === "报销").length },
+  ];
+  const activeCategory = subView || "待我审批";
+  const visibleApprovals = activeCategory === "待我审批"
+    ? approvals.filter((item) => item.status.includes("待"))
+    : approvals.filter((item) => item.category === activeCategory);
+  const selectedApproval = visibleApprovals.find((item) => `${item.type}-${item.status}` === selectedApprovalKey) || visibleApprovals[0] || approvals[0];
   return (
-    <section className="feature-grid">
-      <div className="feature-panel wide-feature">
-        <PanelTitle icon={BellRing} title="审批中心" />
+    <section className="approval-workbench">
+      <div className="approval-type-row">
+        {categories.map((item) => (
+          <button
+            className={`approval-type ${activeCategory === item.label ? "active" : ""}`}
+            key={item.label}
+            onClick={() => {
+              setSubView(item.label);
+              setSelectedApprovalKey("");
+            }}
+          >
+            <strong>{item.label}</strong>
+            <span>{item.desc}</span>
+            <b>{item.count}</b>
+          </button>
+        ))}
+      </div>
+
+      <div className="feature-panel approval-main">
+        <PanelTitle icon={BellRing} title={activeCategory} />
         <div className="approval-list">
-          {approvals.map((item) => (
+          {visibleApprovals.map((item) => (
             <div className="approval-card" key={`${item.type}-${item.status}`}>
               <div>
                 <strong>{item.type}</strong>
-                <span>{item.project} · {item.user}</span>
+                <span>{item.project} · {item.user} · {item.scope}</span>
               </div>
               <b>{money(item.amount)}</b>
               <em>{item.status}</em>
-              <button>查看</button>
+              <button onClick={() => setSelectedApprovalKey(`${item.type}-${item.status}`)}>查看</button>
             </div>
           ))}
         </div>
       </div>
+
+      <div className="feature-panel approval-detail">
+        <PanelTitle icon={Clock3} title="流程进度" />
+        <div className="approval-detail-head">
+          <strong>{selectedApproval.type}</strong>
+          <span>{selectedApproval.project} · {money(selectedApproval.amount)}</span>
+        </div>
+        <div className="approval-steps">
+          {selectedApproval.steps.map(([name, status]) => (
+            <div className={`approval-step ${status}`} key={name}>
+              <i />
+              <div>
+                <strong>{name}</strong>
+                <span>{status === "done" ? "已完成" : status === "current" ? selectedApproval.status : "等待处理"}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="feature-panel">
         <PanelTitle icon={CircleDollarSign} title="项目备用金" />
         <Mini label="预算额度" value={money(selected.pettyCashBudget)} />
