@@ -64,6 +64,195 @@ export async function createProject(db, values, files, user) {
   return { project, parseJob };
 }
 
+export async function previewProjectUpload(db, body, user) {
+  const type = body?.type || "create-project";
+  const now = new Date().toISOString();
+  const targetProject = body?.id
+    ? (db.projects || []).find((item) => item.id === body.id)
+    : null;
+  if (type !== "create-project" && !targetProject) throw new Error("项目不存在");
+
+  const category = type === "cost-sheet"
+    ? "execution-cost"
+    : type === "quote-sheet"
+      ? "quote-sheet"
+      : type === "verification-sheet"
+        ? "verification-sheet"
+        : "project";
+  const files = await normalizeUploadedFiles(body.files || [], category, user, now);
+  if (!files.length && type !== "create-project") throw new Error("请先选择要上传的文件");
+
+  const values = body.values || {};
+  const warnings = [];
+  let parsed = {};
+  let preview = {
+    type,
+    targetProject: targetProject ? {
+      id: targetProject.id,
+      name: targetProject.name,
+      client: targetProject.client || "",
+      owner: targetProject.owner || "",
+      contract: Number(targetProject.contract || 0)
+    } : null,
+    files: files.map(fileReference),
+    fields: {},
+    sections: [],
+    warnings,
+    canConfirm: true,
+    previewedAt: now
+  };
+
+  if (type === "quote-sheet") {
+    const rules = extractQuoteRules(files);
+    if (!rules.length) warnings.push("未识别到报价核销规则，请检查是否包含服务内容、数量、单位、单价、小计等字段。");
+    preview.sections.push({
+      title: "报价规则",
+      rows: rules.slice(0, 12).map((rule) => ({
+        name: rule.serviceName,
+        quantity: rule.quantity,
+        unit: rule.unit,
+        unitPrice: rule.unitPrice,
+        amount: rule.amount,
+        status: "待确认"
+      })),
+      total: rules.reduce((sum, rule) => sum + Number(rule.amount || 0), 0)
+    });
+    preview.summary = rules.length ? `识别到 ${rules.length} 条报价规则，确认后会写入项目报价规则库。` : "报价规则识别不足，建议调整表格后再上传。";
+    preview.canConfirm = rules.length > 0;
+    return preview;
+  }
+
+  if (type === "verification-sheet") {
+    const revenue = targetProject.extractedFields?.revenueRecognition || {};
+    const quoteRules = Array.isArray(revenue.quoteRules) ? revenue.quoteRules : [];
+    if (!quoteRules.length) {
+      warnings.push("当前项目还没有报价规则库，请先上传合同报价表。");
+      preview.canConfirm = false;
+      preview.summary = "缺少报价规则，暂不能确认核销入库。";
+      return preview;
+    }
+    const verificationItems = extractVerificationItems(files);
+    const verificationSummary = verificationItems.summary || {};
+    const matchedItems = matchVerificationItems(verificationItems, quoteRules, {
+      recognizedRevenue: Number(revenue.recognizedRevenue || 0),
+      contract: Number(targetProject.contract || 0),
+      records: revenue.verificationRecords || []
+    });
+    const recognizedRevenue = verificationSummary.totalAmount || matchedItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    if (!verificationItems.length && !verificationSummary.totalAmount) {
+      warnings.push("未识别到核销条数或核销金额，请检查核销表是否包含服务项、数量、月份等字段。");
+      preview.canConfirm = false;
+    }
+    preview.fields = {
+      "核销月份": inferVerificationMonth(files) || monthKey(new Date(now)),
+      "确认收入": recognizedRevenue,
+      "匹配状态": matchedItems.some((item) => item.status !== "自动通过") ? "待复核" : "自动通过"
+    };
+    preview.sections.push({
+      title: "核销明细",
+      rows: matchedItems.slice(0, 12).map((item) => ({
+        name: item.serviceName,
+        quantity: item.quantity,
+        amount: item.amount,
+        matched: item.matchedServiceName || "未匹配",
+        status: item.status
+      })),
+      total: recognizedRevenue
+    });
+    if (verificationSummary.breakdown?.length) {
+      preview.sections.push({
+        title: "核销汇总",
+        rows: verificationSummary.breakdown.map((item) => ({
+          name: item.type,
+          amount: item.amount,
+          status: "汇总项"
+        })),
+        total: verificationSummary.totalAmount
+      });
+    }
+    preview.summary = `预计确认收入 ${recognizedRevenue}，确认后会生成一条月度核销记录。`;
+    return preview;
+  }
+
+  try {
+    const sourceValues = type === "cost-sheet"
+      ? { ...projectToValues(targetProject), "文件类型": "月度执行成本表", "上传人": user.name }
+      : values;
+    parsed = files.length ? await analyzeProjectFiles(db.settings?.aiService, sourceValues, files, db.settings?.interestRate) : {};
+  } catch (error) {
+    warnings.push(`AI 解析未完成：${error.message}`);
+    parsed = {};
+  }
+
+  if (type === "cost-sheet") {
+    const contract = Number(targetProject.contract || 0) || parseMoney(parsed.contract);
+    const profitBreakdown = calculateProfitBreakdown(contract, { ...parsed, hasCostSheet: true }, db.settings?.interestRate);
+    preview.fields = {
+      "项目名称": targetProject.name,
+      "执行预算": profitBreakdown.executionBudget,
+      "执行成本": profitBreakdown.executionCost,
+      "项目垫款": profitBreakdown.advancePayment,
+      "垫款利息": profitBreakdown.advanceInterest,
+      "总成本影响": profitBreakdown.totalDeduction
+    };
+    preview.sections.push({
+      title: "成本归集",
+      rows: profitBreakdown.costs.filter(([, amount]) => Number(amount || 0) > 0).map(([name, amount]) => ({
+        name,
+        amount,
+        status: "待入库"
+      })),
+      total: profitBreakdown.totalDeduction
+    });
+    if (Array.isArray(parsed.suppliers) && parsed.suppliers.length) {
+      preview.sections.push({
+        title: "供应商支出",
+        rows: parsed.suppliers.slice(0, 12).map((item) => ({
+          name: item.supplier || item.name || "未命名供应商",
+          amount: Number(item.amount || 0),
+          status: item.status || "待结算"
+        })),
+        total: parsed.suppliers.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+      });
+    }
+    preview.summary = parsed.summary || "成本表已完成预解析，确认后会合并到项目成本和利润测算。";
+    return preview;
+  }
+
+  const contract = parseMoney(parsed.contract) || parseMoney(values["合同金额"]);
+  const paid = parseMoney(parsed.paid);
+  preview.fields = {
+    "项目名称": parsed.projectName || parsed.name || values["项目名称"] || "",
+    "客户 / 品牌": parsed.client || values["客户 / 品牌"] || "",
+    "负责人": values["负责人"] || user.name,
+    "合同金额": contract,
+    "已回款": paid,
+    "待回款": parseMoney(parsed.receivable) || Math.max(contract - paid, 0),
+    "服务周期": parsed.servicePeriod || "",
+    "下一节点": parsed.nextMilestone || parsed.deliveryDate || ""
+  };
+  const quoteFiles = files.filter(isPotentialQuoteSheetFile).filter(looksLikeQuoteSheetFile);
+  const quoteRules = extractQuoteRules(quoteFiles);
+  if (quoteRules.length) {
+    preview.sections.push({
+      title: "自动识别报价规则",
+      rows: quoteRules.slice(0, 12).map((rule) => ({
+        name: rule.serviceName,
+        quantity: rule.quantity,
+        unit: rule.unit,
+        unitPrice: rule.unitPrice,
+        amount: rule.amount,
+        status: "待写入"
+      })),
+      total: quoteRules.reduce((sum, rule) => sum + Number(rule.amount || 0), 0)
+    });
+  }
+  if (!preview.fields["项目名称"]) warnings.push("项目名称未明确识别，确认前建议手动填写或检查合同。");
+  if (!contract) warnings.push("合同金额未明确识别，确认后可能需要在项目详情中补充。");
+  preview.summary = parsed.summary || "合同/报价文件已完成预解析，确认后会创建项目并写入项目台账。";
+  return preview;
+}
+
 export function updateProject(db, body, user) {
   const project = (db.projects || []).find((item) => item.id === body?.id);
   if (!project) throw new Error("项目不存在");

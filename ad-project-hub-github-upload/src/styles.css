@@ -1645,6 +1645,143 @@ h1 {
   color: var(--muted);
 }
 
+.upload-preview {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 14px;
+}
+
+.preview-head,
+.preview-target,
+.preview-section-head,
+.preview-table > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.preview-head strong,
+.preview-head span {
+  display: block;
+}
+
+.preview-head strong {
+  font-size: 15px;
+}
+
+.preview-head span,
+.preview-target span,
+.preview-fields span,
+.preview-section-head span,
+.preview-table span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.preview-head b {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.preview-head b.ok {
+  color: #0f766e;
+  background: #dcfce7;
+}
+
+.preview-head b.danger {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.preview-target {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 11px;
+}
+
+.preview-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.preview-fields div {
+  min-height: 64px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 9px 10px;
+}
+
+.preview-fields strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-warnings {
+  display: grid;
+  gap: 7px;
+}
+
+.preview-warnings p {
+  margin: 0;
+  border-left: 3px solid #f59e0b;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.preview-section {
+  display: grid;
+  gap: 8px;
+}
+
+.preview-section-head strong {
+  font-size: 13px;
+}
+
+.preview-table {
+  display: grid;
+  gap: 6px;
+}
+
+.preview-table > div {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.preview-table strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-table b {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
 .modal-actions {
   justify-content: flex-end;
   border-top: 1px solid var(--line);
@@ -1657,6 +1794,7 @@ h1 {
   }
 
   .form-grid,
+  .preview-fields,
   .modal-head,
   .modal-actions {
     grid-template-columns: 1fr;

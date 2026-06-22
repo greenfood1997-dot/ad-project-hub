@@ -5,6 +5,7 @@ import {
   advanceParseJob,
   createProject,
   deleteProject,
+  previewProjectUpload,
   recordFiles,
   reparseProject,
   refreshInterestRate,
@@ -263,6 +264,18 @@ export async function handleApi(req, res) {
     if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
     const body = await readBody(req);
     const data = await mutateDb((db) => createProject(db, body.values, body.files || [], user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/projects/upload-preview") {
+    if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
+    const body = await readBody(req);
+    if (body.type !== "create-project" && !canAccessProject(snapshot, user, body.id)) {
+      sendJson(res, 403, { ok: false, error: "无权限向该项目上传文件" });
+      return;
+    }
+    const data = await previewProjectUpload(snapshot, body, user);
     sendJson(res, 200, { ok: true, data });
     return;
   }

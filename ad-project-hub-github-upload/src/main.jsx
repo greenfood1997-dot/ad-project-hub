@@ -996,6 +996,8 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
   const [files, setFiles] = useState([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [confirmed, setConfirmed] = useState(false);
   const targetProject = projects.find((project) => project.id === projectId) || selected || projects[0];
   const needsProject = type !== "create-project";
 
@@ -1006,16 +1008,37 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
     const oversized = picked.find((file) => file.size > 40 * 1024 * 1024 && /pdf/i.test(file.type || file.name));
     setFiles(payloads);
     if (oversized) setMessage("已选择超过 40MB 的 PDF，完整 OCR 可能需要几分钟，请不要重复提交。");
+    setPreview(null);
+    setConfirmed(false);
   }
 
-  async function submit(event) {
-    event.preventDefault();
-    if (!files.length && type !== "create-project") {
-      setMessage("请先选择要上传的文件");
-      return;
-    }
+  function uploadBody() {
+    return type === "create-project"
+      ? { type, values, files }
+      : { type, id: targetProject.id, files };
+  }
+
+  async function requestPreview() {
     setLoading(true);
-    setMessage("正在交给 AI 解析，请稍候...");
+    setMessage("AI 正在预览识别结果，暂时不会写入项目...");
+    try {
+      const data = await apiRequest("/api/projects/upload-preview", session, {
+        method: "POST",
+        body: JSON.stringify(uploadBody()),
+      });
+      setPreview(data);
+      setConfirmed(false);
+      setMessage(data.canConfirm ? "请检查识别结果，确认无误后再入库。" : "识别结果需要处理后才能入库。");
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function confirmUpload() {
+    setLoading(true);
+    setMessage("正在确认入库，请稍候...");
     try {
       if (type === "create-project") {
         await apiRequest("/api/projects", session, {
@@ -1042,6 +1065,7 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
         });
       }
       setMessage("上传成功，项目数据已刷新。");
+      setConfirmed(true);
       await onDone();
       setTimeout(onClose, 700);
     } catch (error) {
@@ -1049,6 +1073,23 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!files.length && type !== "create-project") {
+      setMessage("请先选择要上传的文件");
+      return;
+    }
+    if (!preview) {
+      await requestPreview();
+      return;
+    }
+    if (!preview.canConfirm) {
+      setMessage("当前识别结果还不能确认入库，请先按提示补充或更换文件。");
+      return;
+    }
+    await confirmUpload();
   }
 
   return (
@@ -1064,7 +1105,12 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
 
         <label>
           <span>上传类型</span>
-          <select value={type} onChange={(event) => setType(event.target.value)}>
+          <select value={type} onChange={(event) => {
+            setType(event.target.value);
+            setPreview(null);
+            setConfirmed(false);
+            setMessage("");
+          }}>
             <option value="create-project">新项目：合同 / 报价表</option>
             <option value="cost-sheet">已有项目：执行成本表</option>
             <option value="quote-sheet">已有项目：合同报价表</option>
@@ -1075,7 +1121,12 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
         {needsProject && (
           <label>
             <span>归属项目</span>
-            <select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+            <select value={projectId} onChange={(event) => {
+              setProjectId(event.target.value);
+              setPreview(null);
+              setConfirmed(false);
+              setMessage("");
+            }}>
               {projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}
             </select>
           </label>
@@ -1086,7 +1137,11 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
             {Object.keys(values).map((key) => (
               <label key={key}>
                 <span>{key}</span>
-                <input value={values[key]} onChange={(event) => setValues({ ...values, [key]: event.target.value })} placeholder={key === "项目名称" ? "可留空，由 AI 从合同识别" : ""} />
+                <input value={values[key]} onChange={(event) => {
+                  setValues({ ...values, [key]: event.target.value });
+                  setPreview(null);
+                  setConfirmed(false);
+                }} placeholder={key === "项目名称" ? "可留空，由 AI 从合同识别" : ""} />
               </label>
             ))}
           </div>
@@ -1110,13 +1165,73 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
           </div>
         )}
 
+        {preview && <UploadPreview preview={preview} />}
+
         {message && <p className="form-message">{message}</p>}
         <div className="modal-actions">
           <button type="button" className="ghost" onClick={onClose}>取消</button>
-          <button className="primary" disabled={loading}>{loading ? "解析中" : "上传并解析"}</button>
+          {preview && !confirmed && <button type="button" className="ghost" onClick={requestPreview} disabled={loading}>重新预览</button>}
+          <button className="primary" disabled={loading || (preview && !preview.canConfirm)}>{loading ? "处理中" : preview ? "确认入库" : "AI 预览识别"}</button>
         </div>
       </form>
     </div>
+  );
+}
+
+function UploadPreview({ preview }) {
+  const fieldEntries = Object.entries(preview.fields || {}).filter(([, value]) => value !== "" && value !== undefined && value !== null);
+  return (
+    <section className="upload-preview">
+      <div className="preview-head">
+        <div>
+          <strong>AI 识别结果确认</strong>
+          <span>{preview.summary}</span>
+        </div>
+        <b className={preview.canConfirm ? "ok" : "danger"}>{preview.canConfirm ? "可确认" : "需处理"}</b>
+      </div>
+
+      {!!preview.targetProject && (
+        <div className="preview-target">
+          <span>归属项目</span>
+          <strong>{preview.targetProject.name}</strong>
+        </div>
+      )}
+
+      {!!fieldEntries.length && (
+        <div className="preview-fields">
+          {fieldEntries.map(([key, value]) => (
+            <div key={key}>
+              <span>{key}</span>
+              <strong>{typeof value === "number" ? money(value) : value}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {Array.isArray(preview.warnings) && preview.warnings.length > 0 && (
+        <div className="preview-warnings">
+          {preview.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+        </div>
+      )}
+
+      {(preview.sections || []).map((section) => (
+        <div className="preview-section" key={section.title}>
+          <div className="preview-section-head">
+            <strong>{section.title}</strong>
+            {section.total ? <span>合计 {money(section.total)}</span> : null}
+          </div>
+          <div className="preview-table">
+            {(section.rows || []).slice(0, 8).map((row, index) => (
+              <div key={`${section.title}-${index}`}>
+                <strong>{row.name || row.matched || "未命名项"}</strong>
+                <span>{row.quantity ? `${row.quantity}${row.unit || ""}` : row.status || "待确认"}</span>
+                <b>{row.amount || row.unitPrice ? money(row.amount || row.unitPrice) : row.matched || ""}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
   );
 }
 
