@@ -30,7 +30,9 @@ import "./styles.css";
 
 const SESSION_KEY = "ad-project-hub-session";
 const roleOptions = [
+  ["shareholder", "股东"],
   ["admin", "管理员"],
+  ["director", "总监"],
   ["pm", "项目经理"],
   ["sales", "销售"],
   ["finance", "财务"],
@@ -38,11 +40,17 @@ const roleOptions = [
   ["viewer", "只读成员"],
 ];
 
+const managementRoles = ["shareholder", "admin", "director", "finance"];
+
 function roleLabel(role) {
   return roleOptions.find(([value]) => value === role)?.[1] || role;
 }
 
-const projects = [
+function canSeeManagement(session) {
+  return managementRoles.includes(session?.role);
+}
+
+const demoProjects = [
   {
     id: "P-2026-0618",
     name: "青岚汽车夏季上市整合传播",
@@ -198,6 +206,63 @@ function money(value) {
   return number.toLocaleString("zh-CN");
 }
 
+function normalizeProject(project) {
+  const contract = Number(project.contract || 0);
+  const paid = Number(project.paid || 0);
+  const receivable = Number(project.receivable || Math.max(contract - paid, 0));
+  const costBudget = Number(project.costBudget || project.cost_budget || 0);
+  const costUsed = Number(project.costUsed || project.cost_used || 0);
+  const tasks = Array.isArray(project.tasks) && project.tasks.length ? project.tasks : [["资料归档", project.files?.length ? 100 : 35], ["月度执行", 42], ["核销确认", 18]];
+  const progress = Number(project.progress || averageProgress(tasks) || inferTimeProgress(project));
+  return {
+    ...project,
+    brand: project.brand || project.extractedFields?.brand || project.client || "",
+    sales: project.sales || project.extractedFields?.sales || "待确认",
+    pm: project.pm || project.extractedFields?.pm || project.owner || "待分派",
+    contract,
+    paid,
+    receivable,
+    costBudget,
+    costUsed,
+    progress,
+    margin: Number(project.margin || 0),
+    aiSummary: project.aiSummary || project.ai_summary || "AI 已建立项目档案，可继续上传合同、报价表、成本表和核销表完善项目数据。",
+    alerts: Array.isArray(project.alerts) ? project.alerts : [],
+    tasks,
+    costs: Array.isArray(project.costs) && project.costs.length ? project.costs : [["待归集成本", costUsed]],
+    pettyCashBudget: Number(project.extractedFields?.pettyCashBudget || project.extractedFields?.projectPettyCashBudget || 20000),
+    pettyCashUsed: Number(project.extractedFields?.pettyCashUsed || project.extractedFields?.projectPettyCashUsed || Math.min(costUsed * 0.12, 12000)),
+    nextMilestone: project.nextMilestone || project.next_milestone || "等待 AI 巡检生成下一节点",
+    paymentDue: project.paymentDue || project.payment_due || "待确认回款节点"
+  };
+}
+
+function averageProgress(tasks = []) {
+  const values = tasks.map((task) => Number(Array.isArray(task) ? task[1] : task.progress)).filter(Number.isFinite);
+  if (!values.length) return 0;
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function inferTimeProgress(project = {}) {
+  const text = `${project.extractedFields?.servicePeriod || ""} ${project.nextMilestone || ""}`;
+  const years = [...text.matchAll(/20\d{2}/g)].map((match) => Number(match[0]));
+  if (years.length < 2) return 35;
+  const start = new Date(`${years[0]}-01-01`).getTime();
+  const end = new Date(`${years[1]}-12-31`).getTime();
+  const now = Date.now();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 35;
+  return Math.max(0, Math.min(100, Math.round(((now - start) / (end - start)) * 100)));
+}
+
+function projectHealth(project) {
+  const timeProgress = inferTimeProgress(project);
+  const completion = Number(project.progress || averageProgress(project.tasks));
+  const delta = completion - timeProgress;
+  if (delta <= -12) return { label: "滞后", tone: "danger", timeProgress, completion, text: `完成度低于时间进度 ${Math.abs(delta)}%，建议本周补齐关键交付和核销材料。` };
+  if (delta >= 12) return { label: "超前", tone: "good", timeProgress, completion, text: "项目推进快于合同时间，可提前准备下月核销和客户确认材料。" };
+  return { label: "正常", tone: "ok", timeProgress, completion, text: "项目节奏基本匹配合同时间，建议保持当前节奏并及时归档材料。" };
+}
+
 function useChart(option) {
   return (node) => {
     if (!node) return;
@@ -209,10 +274,30 @@ function useChart(option) {
 }
 
 function ProjectDashboard({ session, view, setView, onLogout }) {
-  const [selectedId, setSelectedId] = useState(projects[0].id);
+  const [state, setState] = useState(null);
+  const [activeView, setActiveView] = useState("dashboard");
+  const [selectedId, setSelectedId] = useState(demoProjects[0].id);
   const [role, setRole] = useState("全部角色");
   const isAdmin = session?.role === "admin";
+  const isManagement = canSeeManagement(session);
+  const projects = useMemo(() => {
+    const realProjects = Array.isArray(state?.projects) ? state.projects.map(normalizeProject) : [];
+    return realProjects.length ? realProjects : demoProjects.map(normalizeProject);
+  }, [state]);
   const selected = projects.find((project) => project.id === selectedId) || projects[0];
+
+  useEffect(() => {
+    fetch("/api/state", { headers: { "x-user-id": session.id } })
+      .then((res) => res.json())
+      .then((payload) => {
+        if (!payload.ok) throw new Error(payload.error || "读取项目数据失败");
+        setState(payload.data);
+        const first = payload.data?.projects?.[0];
+        if (first?.id) setSelectedId(first.id);
+      })
+      .catch(() => setState({ projects: [] }));
+  }, [session.id]);
+
   const stats = useMemo(() => {
     const contract = projects.reduce((sum, item) => sum + item.contract, 0);
     const used = projects.reduce((sum, item) => sum + item.costUsed, 0);
@@ -267,8 +352,20 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   });
 
   const visibleAlerts = projects
-    .flatMap((project) => project.alerts.map((alert) => ({ ...alert, project: project.name })))
+    .flatMap((project) => {
+      const health = projectHealth(project);
+      const alerts = project.alerts.length ? project.alerts : [{ role: "PM", type: `进度${health.label}`, text: health.text }];
+      return alerts.map((alert) => ({ ...alert, project: project.name }));
+    })
     .filter((alert) => role === "全部角色" || alert.role === role);
+
+  const navItems = [
+    ["dashboard", LayoutDashboard, "项目工作台"],
+    ["ai", Bot, "AI 助手"],
+    ["approvals", BellRing, "审批与备用金"],
+    ["closeout", FileSpreadsheet, "成本复盘"],
+    ...(isManagement ? [["management", BarChart3, "经营舱"]] : []),
+  ];
 
   return (
     <div className="app-shell">
@@ -281,11 +378,11 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           </div>
         </div>
         <nav>
-          <a className="active"><LayoutDashboard size={18} />经营大屏</a>
-          <a><FileText size={18} />项目台账</a>
-          <a><FileSpreadsheet size={18} />文件解析</a>
-          <a><BellRing size={18} />预警中心</a>
-          <a><UsersRound size={18} />协作空间</a>
+          {navItems.map(([key, Icon, label]) => (
+            <a className={activeView === key ? "active" : ""} onClick={() => setActiveView(key)} key={key}>
+              <Icon size={18} />{label}
+            </a>
+          ))}
           <a
             className={view === "admin" ? "active" : ""}
             onClick={() => isAdmin && setView("admin")}
@@ -306,7 +403,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         <header className="topbar">
           <div>
             <h1>项目经营驾驶舱</h1>
-            <p>合同、执行、成本、回款与风险预警集中管理</p>
+            <p>{isManagement ? "公司经营、项目执行、资金压力与 AI 建议集中管理" : "我的项目、备用金、报销、文件归档和内容辅助"}</p>
           </div>
           <div className="actions">
             <div className="search"><Search size={16} /><input placeholder="搜索项目、客户、负责人" /></div>
@@ -315,6 +412,13 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             <button className="primary"><Plus size={16} />新建项目</button>
           </div>
         </header>
+
+        {activeView === "ai" && <AiWorkbench session={session} projects={projects} selected={selected} />}
+        {activeView === "approvals" && <ApprovalFunds projects={projects} selected={selected} session={session} />}
+        {activeView === "closeout" && <CloseoutReview project={selected} isManagement={isManagement} />}
+        {activeView === "management" && isManagement && <ManagementCockpit projects={projects} stats={stats} />}
+
+        {activeView === "dashboard" && <>
 
         <section className="metrics">
           <Metric icon={CircleDollarSign} label="合同总额" value={money(stats.contract)} sub="本年度已归档项目" />
@@ -383,8 +487,9 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             ))}
           </div>
 
-          <ProjectDetail project={selected} />
+          <ProjectDetail project={selected} isManagement={isManagement} />
         </section>
+        </>}
       </main>
     </div>
   );
@@ -409,8 +514,10 @@ function RiskBadge({ risk }) {
   return <b className={`risk risk-${risk}`}>{risk}风险</b>;
 }
 
-function ProjectDetail({ project }) {
-  const usedRate = Math.round((project.costUsed / project.costBudget) * 100);
+function ProjectDetail({ project, isManagement }) {
+  const usedRate = project.costBudget ? Math.round((project.costUsed / project.costBudget) * 100) : 0;
+  const health = projectHealth(project);
+  const pettyCashLeft = Math.max(Number(project.pettyCashBudget || 0) - Number(project.pettyCashUsed || 0), 0);
   return (
     <div className="detail">
       <div className="detail-head">
@@ -429,9 +536,20 @@ function ProjectDetail({ project }) {
 
       <div className="detail-metrics">
         <Mini label="合同金额" value={money(project.contract)} />
-        <Mini label="成本使用" value={`${usedRate}%`} />
+        <Mini label="备用金余额" value={money(pettyCashLeft)} />
         <Mini label="已回款" value={money(project.paid)} />
-        <Mini label="毛利率" value={`${project.margin}%`} />
+        <Mini label={isManagement ? "毛利率" : "项目状态"} value={isManagement ? `${project.margin}%` : health.label} />
+      </div>
+
+      <div className={`health-card ${health.tone}`}>
+        <div>
+          <span>AI 巡检</span>
+          <strong>{health.label}</strong>
+        </div>
+        <div className="health-track">
+          <i style={{ width: `${health.completion}%` }} />
+        </div>
+        <p>时间已过 {health.timeProgress}% · 完成度 {health.completion}%：{health.text}</p>
       </div>
 
       <div className="split">
@@ -468,6 +586,170 @@ function ProjectDetail({ project }) {
       </div>
     </div>
   );
+}
+
+function AiWorkbench({ session, projects, selected }) {
+  const visibleProjects = projects.slice(0, 4);
+  return (
+    <section className="feature-grid">
+      <div className="feature-panel ai-panel">
+        <PanelTitle icon={Bot} title="AI 项目助手" />
+        <div className="chat-card">
+          <p>可以直接问项目、备用金、报销、进度，也可以把文件发给 AI 归档到项目。</p>
+          <div className="prompt-list">
+            <button>我的项目备用金还有多少？</button>
+            <button>帮我登记到我的项目里</button>
+            <button>这个月我还有哪些材料没补？</button>
+          </div>
+          <div className="chat-input">
+            <UploadCloud size={16} />
+            <span>拖入合同、报价表、成本表、票据或核销表</span>
+            <button>发送给 AI</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="feature-panel">
+        <PanelTitle icon={FileText} title="项目匹配方式" />
+        <div className="logic-list">
+          <LogicItem title="说得模糊" text="例如“帮我登记到我的项目里”，AI 会按你的账号和参与项目弹出选择框。" />
+          <LogicItem title="说得明确" text="例如“统计到捷途项目成本里”，AI 会直接匹配项目并登记，必要时轻确认。" />
+          <LogicItem title="权限保护" text="AI 只处理你有权限的项目，不向员工展示利润和公司级财务。" />
+        </div>
+      </div>
+
+      <div className="feature-panel">
+        <PanelTitle icon={MessageSquareText} title="内容创意助手" />
+        <p className="muted">基于客户偏好、历史雷区和项目资料生成更容易过稿的选题、脚本、Brief 和提案方向。</p>
+        <div className="idea-card">
+          <strong>{selected.client || selected.name} 内容建议</strong>
+          <p>优先用“真实场景 + 明确卖点 + 可执行路径”，避免只给概念不落地。新 PM 接手时自动生成客户雷区和交接摘要。</p>
+        </div>
+      </div>
+
+      <div className="feature-panel">
+        <PanelTitle icon={UsersRound} title={`${session.name} 的项目`} />
+        <div className="compact-list">
+          {visibleProjects.map((project) => (
+            <div key={project.id}>
+              <strong>{project.name}</strong>
+              <span>{project.pm} · {projectHealth(project).label} · 备用金余 {money(Math.max(project.pettyCashBudget - project.pettyCashUsed, 0))}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ApprovalFunds({ projects, selected }) {
+  const approvals = [
+    { type: "项目备用金", project: selected.name, amount: selected.pettyCashBudget, status: "待总监确认", user: selected.pm },
+    { type: "报销申请", project: selected.name, amount: 1280, status: "待财务复核", user: "执行成员" },
+    { type: "供应商付款", project: selected.name, amount: Math.round(selected.costUsed * 0.28), status: "待付款排期", user: "项目PM" },
+  ];
+  return (
+    <section className="feature-grid">
+      <div className="feature-panel wide-feature">
+        <PanelTitle icon={BellRing} title="审批中心" />
+        <div className="approval-list">
+          {approvals.map((item) => (
+            <div className="approval-card" key={`${item.type}-${item.status}`}>
+              <div>
+                <strong>{item.type}</strong>
+                <span>{item.project} · {item.user}</span>
+              </div>
+              <b>{money(item.amount)}</b>
+              <em>{item.status}</em>
+              <button>查看</button>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="feature-panel">
+        <PanelTitle icon={CircleDollarSign} title="项目备用金" />
+        <Mini label="预算额度" value={money(selected.pettyCashBudget)} />
+        <Mini label="已使用" value={money(selected.pettyCashUsed)} />
+        <Mini label="剩余额度" value={money(Math.max(selected.pettyCashBudget - selected.pettyCashUsed, 0))} />
+      </div>
+      <div className="feature-panel">
+        <PanelTitle icon={ShieldAlert} title="AI 审批提示" />
+        <p className="muted">备用金只用于执行人员拍摄、差旅、现场小额支出；供应商付款单独进入供应商支出。报销通过后自动计入项目成本。</p>
+      </div>
+    </section>
+  );
+}
+
+function CloseoutReview({ project, isManagement }) {
+  const costRows = (project.costs || []).filter(([, value]) => Number(value) > 0).sort((a, b) => Number(b[1]) - Number(a[1]));
+  const topCost = costRows[0] || ["待归集成本", project.costUsed];
+  return (
+    <section className="feature-grid">
+      <div className="feature-panel wide-feature">
+        <PanelTitle icon={FileSpreadsheet} title="项目结案成本复盘" />
+        <div className="review-summary">
+          <Mini label="合同金额" value={money(project.contract)} />
+          <Mini label="总成本" value={money(project.costUsed)} />
+          <Mini label={isManagement ? "项目利润" : "结案状态"} value={isManagement ? money(project.contract - project.costUsed) : "待复盘"} />
+          <Mini label={isManagement ? "毛利率" : "资料完整度"} value={isManagement ? `${project.margin}%` : `${Math.min(100, project.progress + 12)}%`} />
+        </div>
+        <div className="idea-card">
+          <strong>AI 优化建议</strong>
+          <p>当前最大支出为「{topCost[0]}」{money(topCost[1])}。建议复盘供应商报价、追加审批和月度核销节奏，沉淀到下次同类项目启动清单。</p>
+        </div>
+      </div>
+      <div className="feature-panel">
+        <PanelTitle icon={BarChart3} title="支出排行" />
+        <div className="compact-list">
+          {costRows.slice(0, 5).map(([name, value]) => (
+            <div key={name}><strong>{name}</strong><span>{money(value)}</span></div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ManagementCockpit({ projects, stats }) {
+  const spending = projects.reduce((sum, project) => sum + Number(project.costUsed || 0), 0);
+  const cashGap = stats.receivable - spending * 0.42;
+  return (
+    <section className="feature-grid">
+      <div className="feature-panel founder-card wide-feature">
+        <PanelTitle icon={BarChart3} title="创始人经营舱" />
+        <div className="review-summary">
+          <Mini label="合同总额" value={money(stats.contract)} />
+          <Mini label="待回款" value={money(stats.receivable)} />
+          <Mini label="总支出" value={money(spending)} />
+          <Mini label="经营缺口" value={money(Math.min(cashGap, 0))} />
+        </div>
+        <div className="idea-card">
+          <strong>AI 商业顾问：稳健发展，优先回款</strong>
+          <p>当前待回款占比较高，建议销售优先推进逾期和临近到期项目；非必要备用金和低毛利新增项目先谨慎审批。公司优势应继续沉淀在高复购、短周期、预付款比例高的项目类型。</p>
+        </div>
+      </div>
+      <div className="feature-panel">
+        <PanelTitle icon={AlertTriangle} title="风险雷达" />
+        <div className="compact-list">
+          {projects.slice(0, 4).map((project) => (
+            <div key={project.id}><strong>{project.name}</strong><span>{project.risk}风险 · 待回款 {money(project.receivable)}</span></div>
+          ))}
+        </div>
+      </div>
+      <div className="feature-panel">
+        <PanelTitle icon={UsersRound} title="AI 学习中心" />
+        <div className="logic-list">
+          <LogicItem title="客户偏好" text="沉淀过稿风格、历史雷区和 PM 交接卡片。" />
+          <LogicItem title="供应商评分" text="按复用次数、准时率、内部评分和价格表现推荐。" />
+          <LogicItem title="市场机会" text="后续联网扫描招投标信息，按公司优势给销售提醒。" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function LogicItem({ title, text }) {
+  return <div className="logic-item"><strong>{title}</strong><p>{text}</p></div>;
 }
 
 function Mini({ label, value }) {

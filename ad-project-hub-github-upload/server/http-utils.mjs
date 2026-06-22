@@ -1,16 +1,6 @@
 export async function readBody(req) {
   const chunks = [];
-  const maxBytes = Number(process.env.REQUEST_BODY_LIMIT_BYTES || 90 * 1024 * 1024);
-  let total = 0;
-  for await (const chunk of req) {
-    total += chunk.length;
-    if (total > maxBytes) {
-      const error = new Error(`上传内容过大：${Math.round(total / 1024 / 1024)}MB，当前上限 ${Math.round(maxBytes / 1024 / 1024)}MB。请压缩 PDF 或拆分上传。`);
-      error.statusCode = 413;
-      throw error;
-    }
-    chunks.push(chunk);
-  }
+  for await (const chunk of req) chunks.push(chunk);
   const text = Buffer.concat(chunks).toString("utf8");
   return text ? JSON.parse(text) : {};
 }

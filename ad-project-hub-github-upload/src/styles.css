@@ -511,6 +511,212 @@ select {
   gap: 6px;
 }
 
+.health-card {
+  display: grid;
+  grid-template-columns: 96px minmax(160px, 1fr);
+  gap: 10px 14px;
+  align-items: center;
+  border: 1px solid #dce3ed;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 14px;
+  background: #f8fafc;
+}
+
+.health-card span,
+.muted {
+  color: #66758a;
+  font-size: 13px;
+}
+
+.health-card strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+.health-card p {
+  grid-column: 1 / -1;
+  color: #40506a;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.health-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #e8eef6;
+  overflow: hidden;
+}
+
+.health-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+}
+
+.health-card.good .health-track i {
+  background: #16a34a;
+}
+
+.health-card.danger .health-track i {
+  background: #ef4444;
+}
+
+.health-card.ok .health-track i {
+  background: #eab308;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.feature-panel {
+  background: #ffffff;
+  border: 1px solid #dce3ed;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(20, 33, 61, 0.05);
+  padding: 16px;
+}
+
+.wide-feature {
+  grid-column: 1 / -1;
+}
+
+.chat-card,
+.idea-card,
+.logic-item,
+.approval-card {
+  border: 1px solid #e3e9f1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.chat-card {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.chat-card p,
+.idea-card p,
+.logic-item p {
+  color: #526176;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.prompt-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.prompt-list button {
+  min-height: 34px;
+  border: 1px solid #cfe3ff;
+  border-radius: 8px;
+  background: #eef6ff;
+  color: #24415f;
+  padding: 0 10px;
+}
+
+.chat-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border: 1px dashed #9fb0c7;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #526176;
+}
+
+.chat-input span {
+  flex: 1;
+  font-size: 13px;
+}
+
+.chat-input button,
+.approval-card button {
+  height: 32px;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  padding: 0 10px;
+}
+
+.logic-list,
+.compact-list,
+.approval-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.logic-item,
+.idea-card {
+  padding: 12px;
+}
+
+.logic-item strong,
+.idea-card strong,
+.compact-list strong,
+.compact-list span {
+  display: block;
+}
+
+.compact-list > div {
+  border-top: 1px solid #edf1f6;
+  padding: 10px 0;
+}
+
+.compact-list > div:first-child {
+  border-top: 0;
+}
+
+.compact-list span {
+  color: #66758a;
+  font-size: 13px;
+  margin-top: 5px;
+}
+
+.approval-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 110px 120px 72px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+}
+
+.approval-card span,
+.approval-card em {
+  color: #66758a;
+  font-size: 13px;
+  font-style: normal;
+}
+
+.approval-card b {
+  font-size: 18px;
+}
+
+.review-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.founder-card {
+  background: #f9fbff;
+}
+
 .login-page {
   min-height: 100vh;
   display: grid;
@@ -699,11 +905,16 @@ label span {
 
   .dashboard-grid,
   .workspace,
-  .admin-grid {
+  .admin-grid,
+  .feature-grid {
     grid-template-columns: 1fr;
   }
 
   .panel.wide {
+    grid-column: auto;
+  }
+
+  .wide-feature {
     grid-column: auto;
   }
 }
@@ -727,7 +938,8 @@ label span {
 
   .metrics,
   .detail-metrics,
-  .split {
+  .split,
+  .review-summary {
     grid-template-columns: 1fr;
   }
 
@@ -749,5 +961,16 @@ label span {
   .member-row {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .health-card,
+  .approval-card,
+  .chat-input {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .chat-input {
+    display: grid;
   }
 }

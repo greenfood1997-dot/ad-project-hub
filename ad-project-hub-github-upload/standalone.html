@@ -1552,7 +1552,8 @@
             category,
             text,
             coveredMonths: category === "execution-cost" || category === "verification-sheet" ? inferCoveredMonths(`${file.name} ${text}`) : [],
-            base64: await readFileBase64(file)
+            base64: await readFileBase64(file),
+            dataUrl: await readFileDataUrl(file)
           });
         }
         if (buttonLabel) buttonLabel.textContent = "AI 归类中...";
@@ -1673,7 +1674,8 @@
             category,
             text,
             coveredMonths: category === "execution-cost" || category === "verification-sheet" ? inferCoveredMonths(`${file.name} ${text}`) : [],
-            base64: await readFileBase64(file)
+            base64: await readFileBase64(file),
+            dataUrl: await readFileDataUrl(file)
           };
         }));
       }
@@ -1820,7 +1822,8 @@
                 category: "execution-cost",
                 text,
                 coveredMonths: inferCoveredMonths(`${file.name} ${text}`),
-                base64: await readFileBase64(file)
+                base64: await readFileBase64(file),
+                dataUrl: await readFileDataUrl(file)
               };
             }));
             await apiPost("/api/projects/cost-sheet", { id: input.dataset.costProject, files: payloads });
@@ -1845,7 +1848,8 @@
               type: file.type || "unknown",
               category: "quote-sheet",
               text: await readFilePreviewText(file),
-              base64: await readFileBase64(file)
+              base64: await readFileBase64(file),
+              dataUrl: await readFileDataUrl(file)
             })));
             await apiPost("/api/projects/quote-sheet", { id: input.dataset.quoteProject, files: payloads });
             await refreshAfterProjectUpload(input.dataset.quoteProject);
@@ -1870,7 +1874,8 @@
               category: "verification-sheet",
               text: await readFilePreviewText(file),
               coveredMonths: inferCoveredMonths(file.name),
-              base64: await readFileBase64(file)
+              base64: await readFileBase64(file),
+              dataUrl: await readFileDataUrl(file)
             })));
             await apiPost("/api/projects/verification-sheet", { id: input.dataset.verificationProject, files: payloads });
             await refreshAfterProjectUpload(input.dataset.verificationProject);
@@ -2436,8 +2441,6 @@
         files.forEach((file) => map.set(fileKey(file), file));
         selectedFiles = Array.from(map.values());
         selectedFilePayloads = [];
-        const largePdf = selectedFiles.find((file) => /\.pdf$/i.test(file.name) && file.size > 40 * 1024 * 1024);
-        if (largePdf) showToast(`${largePdf.name} 较大，上传后会进入完整 OCR，请等待几分钟不要重复提交`);
         updateDropzoneLabel();
       }
       function updateDropzoneLabel() {
@@ -2480,7 +2483,8 @@
           size: file.size,
           type: file.type || "unknown",
           text: await readFilePreviewText(file),
-          base64: await readFileBase64(file)
+          base64: await readFileBase64(file),
+          dataUrl: await readFileDataUrl(file)
         })));
         updateParsePreview(selectedFilePayloads);
         return selectedFilePayloads;

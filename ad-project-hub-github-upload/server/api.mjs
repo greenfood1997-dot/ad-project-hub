@@ -262,7 +262,6 @@ export async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/projects") {
     if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
     const body = await readBody(req);
-    logUploadFiles("create-project", body.files || []);
     const data = await mutateDb((db) => createProject(db, body.values, body.files || [], user));
     sendJson(res, 200, { ok: true, data });
     return;
@@ -367,14 +366,4 @@ export async function handleApi(req, res) {
   }
 
   sendJson(res, 404, { ok: false, error: "API not found" });
-}
-
-function logUploadFiles(action, files = []) {
-  const summary = (Array.isArray(files) ? files : []).map((file) => ({
-    name: file.name || "",
-    sizeMB: Math.round(Number(file.size || 0) / 1024 / 1024 * 10) / 10,
-    base64MB: Math.round(String(file.base64 || "").length / 1024 / 1024 * 10) / 10,
-    hasText: Boolean(String(file.text || "").trim())
-  }));
-  console.log(`[UPLOAD] ${action}: ${JSON.stringify(summary)}`);
 }
