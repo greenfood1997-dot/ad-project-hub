@@ -98,10 +98,10 @@ TENCENT_OCR_REGION=ap-guangzhou
 
 ```env
 TENCENT_OCR_ACTION=GeneralAccurateOCR
-TENCENT_OCR_PDF_PAGES=3
+TENCENT_OCR_PDF_PAGES=32
 ```
 
-`TENCENT_OCR_PDF_PAGES` 表示扫描 PDF 最多识别前几页，默认 3 页。
+`TENCENT_OCR_PDF_PAGES` 表示扫描 PDF 最多识别前几页；不配置时会优先使用 PDF 实际页数，避免合同前几页能识别、后面报价表漏识别。若担心 OCR 费用，可设置一个较小上限。
 
 ## 下一步生产化
 

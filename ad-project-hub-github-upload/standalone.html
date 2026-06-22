@@ -791,6 +791,8 @@
       }
       function monthlyTargetSummary(rules = []) {
         const targets = rules.map((rule) => {
+          if (rule.monthlyTargetText) return rule.monthlyTargetText;
+          if (rule.monthlyQuantity) return `${String(rule.serviceName || "").slice(0, 14)}：${rule.monthlyQuantity}${rule.unit || "项"}/月`;
           const text = `${rule.description || ""} ${rule.serviceName || ""}`;
           const match = text.match(/每月(?:不少于|至少|不低于)?\s*(\d+(?:\.\d+)?)\s*(支|条|篇|次|个|项)/);
           if (!match) return "";
@@ -799,7 +801,11 @@
         return targets.slice(0, 3).join("；") || "待 AI 从报价规则识别月度目标";
       }
       function quotePreviewRows(rules = []) {
-        return rules.length ? rules.slice(0, 10).map((rule) => `<div class="cost-row"><span>${rule.serviceName}<br><small>${rule.unit || "项"} · ${rule.recognitionMethod || "按数量核销"}</small></span><b>${money(rule.unitPrice || 0)} / ${rule.unit || "项"}</b></div>`).join("") : `<p class="focus-note">暂无报价规则。</p>`;
+        return rules.length ? rules.slice(0, 20).map((rule) => {
+          const monthly = rule.monthlyQuantity ? `每月约 ${rule.monthlyQuantity}${rule.unit || "项"}` : "未识别月度目标";
+          const total = rule.quantity ? `总量 ${rule.quantity}${rule.unit || "项"}` : "";
+          return `<div class="cost-row"><span>${rule.serviceName}<br><small>${monthly}${total ? ` · ${total}` : ""} · ${rule.recognitionMethod || "按数量核销"}</small></span><b>${money(rule.unitPrice || 0)} / ${rule.unit || "项"}<br><small>总费用 ${money(rule.totalAmount || 0)}</small></b></div>`;
+        }).join("") : `<p class="focus-note">暂无报价规则。</p>`;
       }
       const previewFileStore = new Map();
       let previewFileSeq = 0;

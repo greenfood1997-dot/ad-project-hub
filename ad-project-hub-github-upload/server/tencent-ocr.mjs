@@ -9,6 +9,11 @@ export function tencentOcrConfigured() {
 }
 
 export async function recognizeFileWithTencentOcr(file, options = {}) {
+  const result = await recognizeFileWithTencentOcrDetailed(file, options);
+  return result.text;
+}
+
+export async function recognizeFileWithTencentOcrDetailed(file, options = {}) {
   if (!tencentOcrConfigured()) {
     throw new Error("未配置腾讯云 OCR 密钥，请在 Render Environment 设置 TENCENT_SECRET_ID 和 TENCENT_SECRET_KEY");
   }
@@ -22,15 +27,17 @@ export async function recognizeFileWithTencentOcr(file, options = {}) {
     return await recognizePage(base64, { isPdf: false });
   }
 
-  const pageCount = Number(process.env.TENCENT_OCR_PDF_PAGES || 3);
+  const pageCount = resolvePdfPageCount(file, options);
   const texts = [];
+  const tableRows = [];
   const errors = [];
   for (let page = 1; page <= pageCount; page += 1) {
     try {
       console.log(`[OCR] ${file.name || "file"}: recognizing PDF page ${page}/${pageCount}`);
-      const text = await recognizePage(base64, { isPdf: true, page });
-      console.log(`[OCR] ${file.name || "file"}: page ${page} returned ${text.length} characters`);
-      if (text.trim()) texts.push(`第${page}页\n${text}`);
+      const result = await recognizePage(base64, { isPdf: true, page });
+      console.log(`[OCR] ${file.name || "file"}: page ${page} returned ${result.text.length} characters`);
+      if (result.text.trim()) texts.push(`第${page}页\n${result.text}`);
+      tableRows.push(...result.tableRows.map((row) => ({ ...row, sheetName: `OCR第${page}页` })));
     } catch (error) {
       errors.push(`第${page}页：${error.message}`);
       if (page === 1) throw error;
@@ -38,7 +45,7 @@ export async function recognizeFileWithTencentOcr(file, options = {}) {
     }
   }
 
-  if (texts.length) return texts.join("\n\n");
+  if (texts.length) return { text: texts.join("\n\n"), tableRows };
   throw new Error(errors.join("；") || "OCR 未识别到文本");
 }
 
@@ -58,7 +65,55 @@ async function recognizePage(imageBase64, { isPdf, page = 1 }) {
   const response = await callTencentApi(action, payload);
   const detections = response.TextDetections || [];
   console.log(`[OCR] Tencent ${action}${isPdf ? ` page ${page}` : ""}: ${detections.length} text detections`);
-  return detections.map((item) => item.DetectedText || "").filter(Boolean).join("\n");
+  return {
+    text: detections.map((item) => item.DetectedText || "").filter(Boolean).join("\n"),
+    tableRows: detectionsToTableRows(detections)
+  };
+}
+
+function resolvePdfPageCount(file = {}, options = {}) {
+  const explicit = Number(options.pageCount || envValue("TENCENT_OCR_PDF_PAGES"));
+  if (explicit > 0) return explicit;
+  const parsed = Number(file.pageCount || file.pages || options.pdfPages || 0);
+  return parsed > 0 ? parsed : 20;
+}
+
+function detectionsToTableRows(detections = []) {
+  const words = detections
+    .map((item) => {
+      const polygon = item.Polygon || [];
+      const xs = polygon.map((point) => Number(point.X || 0));
+      const ys = polygon.map((point) => Number(point.Y || 0));
+      return {
+        text: String(item.DetectedText || "").trim(),
+        x: xs.length ? Math.min(...xs) : 0,
+        y: ys.length ? Math.min(...ys) : 0,
+        height: ys.length ? Math.max(...ys) - Math.min(...ys) : 12
+      };
+    })
+    .filter((item) => item.text);
+  words.sort((a, b) => a.y - b.y || a.x - b.x);
+
+  const lines = [];
+  for (const word of words) {
+    const tolerance = Math.max(8, word.height * 0.7);
+    const line = lines.find((item) => Math.abs(item.y - word.y) <= tolerance);
+    if (line) {
+      line.items.push(word);
+      line.y = (line.y + word.y) / 2;
+    } else {
+      lines.push({ y: word.y, items: [word] });
+    }
+  }
+
+  return lines
+    .sort((a, b) => a.y - b.y)
+    .map((line) => ({
+      cells: line.items
+        .sort((a, b) => a.x - b.x)
+        .map((item) => item.text)
+    }))
+    .filter((row) => row.cells.length);
 }
 
 async function callTencentApi(action, payload) {
