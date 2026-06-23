@@ -581,7 +581,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           onNotice={setNotice}
         />}
         {activeView === "closeout" && <CloseoutReview project={selected} isManagement={isManagement} />}
-        {activeView === "management" && isManagement && <ManagementCockpit projects={projects} stats={stats} />}
+        {activeView === "management" && isManagement && <ManagementCockpit projects={projects} approvals={state?.approvals || []} stats={stats} subView={activeSubView} />}
 
         {activeView === "dashboard" && activeSubView === "项目大盘" && (
           <section className="overview-layout">
@@ -1472,38 +1472,101 @@ function CloseoutReview({ project, isManagement }) {
   );
 }
 
-function ManagementCockpit({ projects, stats }) {
+function ManagementCockpit({ projects, approvals = [], stats, subView }) {
+  const activeProjects = projects.filter((project) => project.status !== "已完成");
+  const completedProjects = projects.filter((project) => project.status === "已完成");
   const spending = projects.reduce((sum, project) => sum + Number(project.costUsed || 0), 0);
-  const cashGap = stats.receivable - spending * 0.42;
+  const profit = projects.reduce((sum, project) => sum + (Number(project.contract || 0) - Number(project.costUsed || 0)), 0);
+  const margin = stats.contract ? Math.round((profit / stats.contract) * 100) : 0;
+  const pendingApprovals = approvals.filter((item) => String(item.status || "").includes("待"));
+  const pendingPettyCash = pendingApprovals.filter((item) => item.type === "petty_cash").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const pendingReimbursements = pendingApprovals.filter((item) => item.type === "reimbursement").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const pendingSupplierPay = approvals
+    .filter((item) => item.type === "supplier_payment" && item.status !== "已完成" && item.status !== "已驳回")
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const cashPressureAmount = stats.receivable + pendingPettyCash + pendingReimbursements + pendingSupplierPay;
+  const receivableRate = stats.contract ? Math.round((stats.receivable / stats.contract) * 100) : 0;
+  const pressureScore = receivableRate + (pendingApprovals.length * 4) + (margin < 25 ? 20 : 0);
+  const pressureLevel = pressureScore >= 70 ? "高" : pressureScore >= 38 ? "中" : "低";
+  const highRiskProjects = projects
+    .map((project) => {
+      const costRate = project.contract ? Math.round((Number(project.costUsed || 0) / Number(project.contract || 1)) * 100) : 0;
+      const receivableProjectRate = project.contract ? Math.round((Number(project.receivable || 0) / Number(project.contract || 1)) * 100) : 0;
+      const projectMargin = project.contract ? Math.round(((Number(project.contract || 0) - Number(project.costUsed || 0)) / Number(project.contract || 1)) * 100) : 0;
+      const score = (project.risk === "高" ? 35 : project.risk === "中" ? 18 : 0) + costRate + receivableProjectRate + (projectMargin < 25 ? 24 : 0);
+      return { ...project, costRate, receivableProjectRate, projectMargin, score };
+    })
+    .sort((a, b) => b.score - a.score);
+  const topRisk = highRiskProjects[0];
+  const recommendation = pressureLevel === "高"
+    ? "控制现金流，优先催收和暂停低毛利新增支出"
+    : pressureLevel === "中"
+      ? "稳健推进，控制审批节奏并盯紧回款节点"
+      : "可适度拓展，优先复制高毛利和回款快的项目类型";
+  const evidence = [
+    `待回款占合同 ${receivableRate}%`,
+    `待处理审批 ${pendingApprovals.length} 条`,
+    `综合毛利率 ${margin}%`,
+    topRisk ? `最高风险项目：${topRisk.name}` : "暂无明显高风险项目"
+  ];
+  const advisorActions = [
+    stats.receivable > 0 ? `优先催收待回款最高的项目：${[...highRiskProjects].sort((a, b) => b.receivable - a.receivable)[0]?.name || "暂无"}` : "当前回款压力较低，保持合同归档和核销节奏",
+    pendingApprovals.length ? `先处理 ${pendingApprovals.length} 条待审批，避免备用金/报销堆积` : "审批队列清爽，可以把精力放到项目交付和回款",
+    margin < 25 ? "毛利率偏低，新增项目报价要提高执行预算安全线" : "毛利率暂时健康，可复盘高毛利项目打法",
+  ];
+  const showCash = subView === "现金流压力";
+  const showAdvisor = subView === "AI 商业顾问";
   return (
     <section className="feature-grid">
       <div className="feature-panel founder-card wide-feature">
-        <PanelTitle icon={BarChart3} title="创始人经营舱" />
+        <PanelTitle icon={BarChart3} title={showCash ? "现金流压力" : showAdvisor ? "AI 商业顾问" : "公司经营大盘"} />
         <div className="review-summary">
           <Mini label="合同总额" value={money(stats.contract)} />
+          <Mini label="已回款" value={money(stats.paid)} />
           <Mini label="待回款" value={money(stats.receivable)} />
           <Mini label="总支出" value={money(spending)} />
-          <Mini label="经营缺口" value={money(Math.min(cashGap, 0))} />
+          <Mini label="项目利润" value={money(profit)} />
+          <Mini label="综合毛利率" value={`${margin}%`} />
+          <Mini label="进行中项目" value={`${activeProjects.length} 个`} />
+          <Mini label="已完成项目" value={`${completedProjects.length} 个`} />
         </div>
         <div className="idea-card">
-          <strong>AI 商业顾问：稳健发展，优先回款</strong>
-          <p>当前待回款占比较高，建议销售优先推进逾期和临近到期项目；非必要备用金和低毛利新增项目先谨慎审批。公司优势应继续沉淀在高复购、短周期、预付款比例高的项目类型。</p>
+          <strong>经营建议：{recommendation}</strong>
+          <p>{evidence.join("；")}。{advisorActions.join("；")}。</p>
+        </div>
+      </div>
+      <div className="feature-panel">
+        <PanelTitle icon={CircleDollarSign} title="现金流压力" />
+        <div className={`health-card ${pressureLevel === "高" ? "danger" : pressureLevel === "中" ? "ok" : "good"}`}>
+          <div><span>压力等级</span><strong>{pressureLevel}</strong></div>
+          <div className="health-track"><i style={{ width: `${Math.min(100, pressureScore)}%` }} /></div>
+          <p>待回款 {money(stats.receivable)} · 待备用金 {money(pendingPettyCash)} · 待报销 {money(pendingReimbursements)} · 待供应商付款 {money(pendingSupplierPay)}</p>
+        </div>
+        <div className="compact-list">
+          <div><strong>现金压力总暴露</strong><span>{money(cashPressureAmount)}</span></div>
+          <div><strong>待处理审批</strong><span>{pendingApprovals.length} 条</span></div>
         </div>
       </div>
       <div className="feature-panel">
         <PanelTitle icon={AlertTriangle} title="风险雷达" />
         <div className="compact-list">
-          {projects.slice(0, 4).map((project) => (
-            <div key={project.id}><strong>{project.name}</strong><span>{project.risk}风险 · 待回款 {money(project.receivable)}</span></div>
+          {highRiskProjects.slice(0, 5).map((project) => (
+            <div key={project.id}><strong>{project.name}</strong><span>{project.risk}风险 · 待回款 {money(project.receivable)} · 成本占比 {project.costRate}% · 毛利率 {project.projectMargin}%</span></div>
           ))}
         </div>
       </div>
       <div className="feature-panel">
-        <PanelTitle icon={UsersRound} title="AI 学习中心" />
+        <PanelTitle icon={Bot} title="商业顾问动作" />
         <div className="logic-list">
-          <LogicItem title="客户偏好" text="沉淀过稿风格、历史雷区和 PM 交接卡片。" />
-          <LogicItem title="供应商评分" text="按复用次数、准时率、内部评分和价格表现推荐。" />
-          <LogicItem title="市场机会" text="后续联网扫描招投标信息，按公司优势给销售提醒。" />
+          {advisorActions.map((action, index) => <LogicItem title={`建议 ${index + 1}`} text={action} key={action} />)}
+        </div>
+      </div>
+      <div className="feature-panel">
+        <PanelTitle icon={UsersRound} title="项目结构" />
+        <div className="compact-list">
+          <div><strong>高风险项目</strong><span>{projects.filter((project) => project.risk === "高").length} 个</span></div>
+          <div><strong>中风险项目</strong><span>{projects.filter((project) => project.risk === "中").length} 个</span></div>
+          <div><strong>低风险项目</strong><span>{projects.filter((project) => project.risk === "低").length} 个</span></div>
         </div>
       </div>
     </section>
