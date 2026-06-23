@@ -108,12 +108,58 @@
       "status": "草稿",
       "risk": "低",
       "aiSummary": "",
-      "nextMilestone": "",
-      "paymentDue": "",
-      "margin": 0,
+      "nextMilestone": "等待 AI 巡检生成下一节点",
+      "paymentDue": "待确认回款节点",
+      "margin": 100,
       "tasks": [],
       "costs": [],
-      "extractedFields": {},
+      "extractedFields": {
+        "pm": "待分派",
+        "sales": "待确认",
+        "executionBudgetRatio": "",
+        "executionBudget": 0,
+        "profitBreakdown": {
+          "advancePayment": 0,
+          "advanceInterest": 0,
+          "executionCost": 0,
+          "executionBudget": 0,
+          "internalLabor": 0,
+          "overhead": 0,
+          "totalDeduction": 0,
+          "profit": 3000000,
+          "margin": 100,
+          "interestRate": 3.45,
+          "interestDays": 0,
+          "interestSource": "无垫款",
+          "costs": [
+            [
+              "项目垫款",
+              0
+            ],
+            [
+              "垫款利息",
+              0
+            ],
+            [
+              "项目执行总成本",
+              0
+            ],
+            [
+              "项目执行预算上限",
+              0
+            ],
+            [
+              "内部人力",
+              0
+            ],
+            [
+              "公摊费用",
+              0
+            ]
+          ]
+        },
+        "profit": 3000000
+      },
       "createdAt": "2026-06-21T04:37:21.713Z",
       "createdBy": "u-admin",
       "files": [],
@@ -124,7 +170,9 @@
           "severity": "高",
           "text": "项目已回款 0，待回款 3000000，回款进度 0%，请销售跟进客户付款。"
         }
-      ]
+      ],
+      "pm": "待分派",
+      "sales": "待确认"
     },
     {
       "id": "P-1782016641703",
@@ -586,6 +634,20 @@
   ],
   "comments": [],
   "auditLogs": [
+    {
+      "type": "project",
+      "target": "管理员专属项目",
+      "action": "update",
+      "user": "中台管理员",
+      "at": "2026-06-23T14:25:57.930Z"
+    },
+    {
+      "type": "project",
+      "target": "管理员专属项目",
+      "action": "update",
+      "user": "中台管理员",
+      "at": "2026-06-23T14:25:57.916Z"
+    },
     {
       "type": "approval",
       "target": "项目A",

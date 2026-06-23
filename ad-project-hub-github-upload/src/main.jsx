@@ -640,7 +640,18 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
               ))}
             </div>
 
-            <ProjectDetail project={selected} isManagement={isManagement} />
+            <ProjectDetail
+              project={selected}
+              isManagement={isManagement}
+              session={session}
+              files={state?.files || []}
+              parseJobs={state?.parseJobs || []}
+              approvals={state?.approvals || []}
+              comments={state?.comments || []}
+              auditLogs={state?.auditLogs || []}
+              onDone={() => loadState()}
+              onNotice={setNotice}
+            />
           </section>
         )}
         {uploadOpen && <UploadDialog
@@ -916,10 +927,88 @@ function RiskBadge({ risk }) {
   return <b className={`risk risk-${risk}`}>{risk}风险</b>;
 }
 
-function ProjectDetail({ project, isManagement }) {
+function ProjectDetail({ project, isManagement, session, files, parseJobs, approvals, comments, auditLogs, onDone, onNotice }) {
   const usedRate = project.costBudget ? Math.round((project.costUsed / project.costBudget) * 100) : 0;
   const health = projectHealth(project);
   const pettyCashLeft = Math.max(Number(project.pettyCashBudget || 0) - Number(project.pettyCashUsed || 0), 0);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({});
+  useEffect(() => {
+    setForm({
+      name: project.name || "",
+      client: project.client || "",
+      owner: project.owner || "",
+      pm: project.pm || "",
+      sales: project.sales || "",
+      status: project.status || "",
+      contract: project.contract || 0,
+      paid: project.paid || 0,
+      nextMilestone: project.nextMilestone || "",
+      paymentDue: project.paymentDue || ""
+    });
+    setEditing(false);
+  }, [project.id]);
+
+  const projectFiles = [
+    ...(project.files || []).map((file) => ({ ...file, source: "project" })),
+    ...files
+      .filter((item) => item.projectId === project.id || item.projectName === project.name)
+      .flatMap((item) => (item.files || [item]).map((file) => ({
+        ...file,
+        source: item.type || file.category || "upload",
+        uploadedAt: file.uploadedAt || item.at,
+        uploadedByName: file.uploadedByName || item.user
+      })))
+  ];
+  const uniqueFiles = Array.from(new Map(projectFiles.map((file, index) => [`${file.name}-${file.uploadedAt || index}`, file])).values());
+  const projectJobs = parseJobs.filter((job) => job.projectId === project.id || job.projectName === project.name);
+  const projectApprovals = approvals.filter((item) => item.projectId === project.id || item.projectName === project.name || item.project === project.name);
+  const projectComments = comments.filter((item) => item.project === project.name);
+  const projectLogs = auditLogs.filter((item) => item.target === project.name);
+  const activityItems = [
+    ...projectJobs.map((job) => ({ at: job.updatedAt || job.createdAt, title: "AI 解析", text: `${job.projectName} · ${job.status} · ${job.progress || 0}%` })),
+    ...projectApprovals.map((item) => ({ at: item.updatedAt || item.createdAt, title: item.typeLabel || "审批", text: `${item.status} · ${money(item.amount)} · ${item.applicantName || ""}` })),
+    ...projectComments.map((item) => ({ at: item.at, title: "项目评论", text: `${item.user || ""}：${item.body || ""}` })),
+    ...projectLogs.map((item) => ({ at: item.at, title: "系统记录", text: `${item.user || ""} · ${item.action || item.type || ""}` })),
+    ...uniqueFiles.map((file) => ({ at: file.uploadedAt, title: "文件上传", text: `${file.name} · ${file.uploadedByName || file.uploadedBy || "未知"}` }))
+  ].filter((item) => item.at || item.text).sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0)).slice(0, 10);
+
+  function updateForm(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function saveProject() {
+    setSaving(true);
+    try {
+      await apiRequest("/api/projects/update", session, {
+        method: "POST",
+        body: JSON.stringify({
+          id: project.id,
+          values: {
+            "项目名称": form.name,
+            "客户 / 品牌": form.client,
+            "负责人": form.owner,
+            "PM": form.pm,
+            "销售": form.sales,
+            "项目状态": form.status,
+            "合同金额": form.contract,
+            "已回款": form.paid,
+            "下一节点": form.nextMilestone,
+            "回款节点": form.paymentDue
+          }
+        })
+      });
+      onNotice("项目基础信息已保存");
+      setEditing(false);
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="detail">
       <div className="detail-head">
@@ -942,6 +1031,43 @@ function ProjectDetail({ project, isManagement }) {
         <Mini label="已回款" value={money(project.paid)} />
         <Mini label={isManagement ? "毛利率" : "项目状态"} value={isManagement ? `${project.margin}%` : health.label} />
       </div>
+
+      <section className="detail-section">
+        <div className="section-head">
+          <h2>项目基础信息</h2>
+          {editing ? (
+            <div className="button-row">
+              <button className="ghost" onClick={() => setEditing(false)}>取消</button>
+              <button className="primary" onClick={saveProject} disabled={saving}>{saving ? "保存中" : "保存"}</button>
+            </div>
+          ) : (
+            <button onClick={() => setEditing(true)}>编辑</button>
+          )}
+        </div>
+        <div className="detail-form-grid">
+          {[
+            ["name", "项目名称"],
+            ["client", "客户 / 品牌"],
+            ["owner", "负责人"],
+            ["pm", "PM"],
+            ["sales", "销售"],
+            ["status", "状态"],
+            ["contract", "合同金额"],
+            ["paid", "已回款"],
+            ["nextMilestone", "下一节点"],
+            ["paymentDue", "回款节点"]
+          ].map(([field, label]) => (
+            <label key={field}>
+              <span>{label}</span>
+              {editing ? (
+                <input value={form[field] ?? ""} onChange={(event) => updateForm(field, event.target.value)} />
+              ) : (
+                <strong>{["contract", "paid"].includes(field) ? money(form[field]) : form[field] || "待补充"}</strong>
+              )}
+            </label>
+          ))}
+        </div>
+      </section>
 
       <div className={`health-card ${health.tone}`}>
         <div>
@@ -975,6 +1101,61 @@ function ProjectDetail({ project, isManagement }) {
           ))}
         </div>
       </div>
+
+      <section className="detail-section">
+        <div className="section-head">
+          <h2>文件与 AI 解析</h2>
+          <span className="muted">{uniqueFiles.length} 个文件 · {projectJobs.length} 个解析任务</span>
+        </div>
+        <div className="detail-list">
+          {uniqueFiles.length ? uniqueFiles.slice(0, 8).map((file, index) => (
+            <div key={`${file.name}-${index}`}>
+              <strong>{file.name}</strong>
+              <span>{file.source || file.category || "文件"} · {fileSize(file.size)} · {file.uploadedByName || file.uploadedBy || "未知上传人"} · {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString("zh-CN") : "时间待记录"}</span>
+            </div>
+          )) : <p className="muted">还没有项目文件。上传合同、报价表、成本表或核销表后会显示在这里。</p>}
+          {projectJobs.slice(0, 4).map((job) => (
+            <div key={job.id}>
+              <strong>解析任务：{job.status}</strong>
+              <span>{job.progress || 0}% · {(job.files || []).map((file) => file.name).join("、") || "文件待识别"}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="detail-section">
+        <div className="section-head">
+          <h2>审批与成本记录</h2>
+          <span className="muted">{projectApprovals.length} 条审批</span>
+        </div>
+        <div className="detail-list">
+          {projectApprovals.length ? projectApprovals.slice(0, 6).map((item) => (
+            <div key={item.id}>
+              <strong>{item.typeLabel || item.category || "审批"} · {money(item.amount)}</strong>
+              <span>{item.status} · {item.applicantName || "提交人"} · {item.reason || "暂无说明"}</span>
+            </div>
+          )) : <p className="muted">暂无审批记录。报销和备用金通过后会自动沉淀到这里。</p>}
+        </div>
+      </section>
+
+      <section className="detail-section">
+        <div className="section-head">
+          <h2>项目动态</h2>
+          <span className="muted">{activityItems.length} 条</span>
+        </div>
+        <div className="activity-list">
+          {activityItems.length ? activityItems.map((item, index) => (
+            <div key={`${item.title}-${index}`}>
+              <i />
+              <div>
+                <strong>{item.title}</strong>
+                <span>{item.text}</span>
+                <em>{item.at ? new Date(item.at).toLocaleString("zh-CN") : "时间待记录"}</em>
+              </div>
+            </div>
+          )) : <p className="muted">项目动态会记录上传、解析、审批、评论和系统更新。</p>}
+        </div>
+      </section>
 
       <div className="timeline">
         <div>

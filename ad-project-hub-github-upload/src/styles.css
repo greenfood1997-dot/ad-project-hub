@@ -3187,6 +3187,141 @@ select {
   background: #ffffff;
 }
 
+.detail-section {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.detail-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.detail-form-grid label {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 10px 11px;
+}
+
+.detail-form-grid label span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail-form-grid label strong {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.detail-form-grid input {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 9px;
+  outline: 0;
+}
+
+.detail-list {
+  display: grid;
+  gap: 10px;
+}
+
+.detail-list > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 11px 12px;
+}
+
+.detail-list strong,
+.detail-list span {
+  display: block;
+}
+
+.detail-list strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.detail-list span {
+  overflow-wrap: anywhere;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.activity-list {
+  display: grid;
+  gap: 0;
+}
+
+.activity-list > div {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 9px;
+  padding-bottom: 14px;
+}
+
+.activity-list > div:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 18px;
+  bottom: 0;
+  width: 1px;
+  background: var(--line-strong);
+}
+
+.activity-list i {
+  position: relative;
+  z-index: 1;
+  width: 17px;
+  height: 17px;
+  margin-top: 2px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand-soft);
+}
+
+.activity-list strong,
+.activity-list span,
+.activity-list em {
+  display: block;
+}
+
+.activity-list strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.activity-list span {
+  overflow-wrap: anywhere;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.activity-list em {
+  margin-top: 4px;
+  color: #9aa4b2;
+  font-size: 11px;
+  font-style: normal;
+}
+
 .founder-card {
   background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
 }

@@ -262,6 +262,11 @@ export function updateProject(db, body, user) {
   const nextName = String(values["项目名称"] || project.name || "").trim();
   const nextClient = String(values["客户 / 品牌"] || project.client || "").trim();
   const nextOwner = String(values["负责人"] || project.owner || "").trim();
+  const nextPm = String(values["PM"] || values["项目经理"] || project.pm || project.extractedFields?.pm || "").trim();
+  const nextSales = String(values["销售"] || project.sales || project.extractedFields?.sales || "").trim();
+  const nextStatus = String(values["项目状态"] || project.status || "").trim();
+  const nextMilestone = String(values["下一节点"] || project.nextMilestone || "").trim();
+  const nextPaymentDue = String(values["回款节点"] || project.paymentDue || "").trim();
   const contract = values["合同金额"] !== undefined && values["合同金额"] !== ""
     ? parseMoney(values["合同金额"])
     : parseMoney(project.contract);
@@ -281,11 +286,18 @@ export function updateProject(db, body, user) {
   if (nextName) project.name = nextName;
   project.client = nextClient;
   project.owner = nextOwner || user.name;
+  project.pm = nextPm || project.pm || "";
+  project.sales = nextSales || project.sales || "";
+  if (nextStatus) project.status = nextStatus;
+  project.nextMilestone = nextMilestone;
+  project.paymentDue = nextPaymentDue;
   project.contract = contract;
   project.paid = paid;
   project.receivable = Math.max(contract - paid, 0);
   project.extractedFields = {
     ...(project.extractedFields || {}),
+    pm: project.pm,
+    sales: project.sales,
     executionBudgetRatio,
     executionBudget
   };
