@@ -570,7 +570,16 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         </div>}
 
         {activeView === "ai" && <AiWorkbench session={session} projects={projects} selected={selected} onNotice={setNotice} />}
-        {activeView === "approvals" && <ApprovalFunds projects={projects} selected={selected} session={session} subView={activeSubView} setSubView={setActiveSubView} />}
+        {activeView === "approvals" && <ApprovalFunds
+          projects={projects}
+          approvals={state?.approvals || []}
+          selected={selected}
+          session={session}
+          subView={activeSubView}
+          setSubView={setActiveSubView}
+          onDone={() => loadState()}
+          onNotice={setNotice}
+        />}
         {activeView === "closeout" && <CloseoutReview project={selected} isManagement={isManagement} />}
         {activeView === "management" && isManagement && <ManagementCockpit projects={projects} stats={stats} />}
 
@@ -1055,50 +1064,94 @@ function AiWorkbench({ session, projects, selected, onNotice }) {
   );
 }
 
-function ApprovalFunds({ selected, subView, setSubView }) {
+function ApprovalFunds({ projects, approvals, selected, session, subView, setSubView, onDone, onNotice }) {
   const [selectedApprovalKey, setSelectedApprovalKey] = useState("");
-  const approvals = [
-    {
-      type: "项目备用金",
-      project: selected.name,
-      amount: selected.pettyCashBudget,
-      status: "待总监确认",
-      user: selected.pm,
-      category: "项目备用金",
-      scope: "拍摄、差旅、现场小额支出",
-      steps: [["执行提交", "done"], ["PM确认", "done"], ["总监审批", "current"], ["财务打款", "todo"]]
-    },
-    {
-      type: "报销申请",
-      project: selected.name,
-      amount: 1280,
-      status: "待财务复核",
-      user: "执行成员",
-      category: "报销",
-      scope: "票据补齐后自动计入项目成本",
-      steps: [["成员提交", "done"], ["PM复核", "done"], ["财务复核", "current"], ["完成入账", "todo"]]
-    },
-    {
-      type: "供应商付款",
-      project: selected.name,
-      amount: Math.round(selected.costUsed * 0.28),
-      status: "待付款排期",
-      user: "项目PM",
-      category: "待我审批",
-      scope: "供应商付款不占用备用金，进入供应商支出",
-      steps: [["PM发起", "done"], ["总监确认", "current"], ["财务排期", "todo"], ["付款完成", "todo"]]
-    },
-  ];
+  const [form, setForm] = useState({
+    projectId: selected?.id || "",
+    type: "reimbursement",
+    amount: "",
+    payee: "",
+    reason: ""
+  });
+  const [submitting, setSubmitting] = useState(false);
+  useEffect(() => {
+    if (selected?.id) setForm((current) => ({ ...current, projectId: current.projectId || selected.id }));
+  }, [selected?.id]);
+  const normalizedApprovals = approvals.map((item) => ({
+    ...item,
+    project: item.projectName || item.project || "未命名项目",
+    user: item.applicantName || item.user || "提交人",
+    typeName: item.typeLabel || item.type || "审批",
+    category: item.type === "petty_cash" ? "项目备用金" : item.type === "reimbursement" ? "报销" : item.category || "待我审批",
+    scope: item.reason || item.scope || "暂无说明",
+    steps: Array.isArray(item.steps) ? item.steps : []
+  }));
   const categories = [
-    { label: "待我审批", desc: "需要当前角色处理的审批", count: approvals.filter((item) => item.category === "待我审批" || item.status.includes("待")).length },
-    { label: "项目备用金", desc: "项目预算、已用和剩余额度", count: approvals.filter((item) => item.category === "项目备用金").length },
-    { label: "报销", desc: "员工报销、票据和入账状态", count: approvals.filter((item) => item.category === "报销").length },
+    { label: "待我审批", desc: "需要当前角色处理的审批", count: normalizedApprovals.filter((item) => item.status?.includes("待")).length },
+    { label: "项目备用金", desc: "项目预算、已用和剩余额度", count: normalizedApprovals.filter((item) => item.category === "项目备用金").length },
+    { label: "报销", desc: "员工报销、票据和入账状态", count: normalizedApprovals.filter((item) => item.category === "报销").length },
   ];
   const activeCategory = subView || "待我审批";
   const visibleApprovals = activeCategory === "待我审批"
-    ? approvals.filter((item) => item.status.includes("待"))
-    : approvals.filter((item) => item.category === activeCategory);
-  const selectedApproval = visibleApprovals.find((item) => `${item.type}-${item.status}` === selectedApprovalKey) || visibleApprovals[0] || approvals[0];
+    ? normalizedApprovals.filter((item) => item.status?.includes("待"))
+    : normalizedApprovals.filter((item) => item.category === activeCategory);
+  const fallbackApproval = normalizedApprovals[0] || {
+    id: "",
+    typeName: "暂无审批",
+    project: selected.name,
+    amount: 0,
+    status: "等待提交",
+    steps: []
+  };
+  const selectedApproval = visibleApprovals.find((item) => item.id === selectedApprovalKey) || visibleApprovals[0] || fallbackApproval;
+  const canAct = selectedApproval.id && selectedApproval.status?.includes("待") && ["shareholder", "admin", "director", "pm", "finance"].includes(session.role);
+
+  function updateForm(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submitApproval(event) {
+    event.preventDefault();
+    if (!form.projectId) {
+      onNotice("请先选择项目");
+      return;
+    }
+    if (!Number(form.amount)) {
+      onNotice("请填写审批金额");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await apiRequest("/api/approvals", session, {
+        method: "POST",
+        body: JSON.stringify(form)
+      });
+      setForm({ projectId: form.projectId, type: "reimbursement", amount: "", payee: "", reason: "" });
+      setSubView(form.type === "petty_cash" ? "项目备用金" : "报销");
+      setSelectedApprovalKey("");
+      onNotice("审批已提交，会进入 PM、总监、财务流程。");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function act(action) {
+    if (!selectedApproval.id) return;
+    try {
+      await apiRequest("/api/approvals/action", session, {
+        method: "POST",
+        body: JSON.stringify({ id: selectedApproval.id, action })
+      });
+      onNotice(action === "reject" ? "审批已驳回" : "审批已通过到下一步");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    }
+  }
+
   return (
     <section className="approval-workbench">
       <div className="approval-type-row">
@@ -1118,40 +1171,80 @@ function ApprovalFunds({ selected, subView, setSubView }) {
         ))}
       </div>
 
+      <form className="feature-panel approval-form" onSubmit={submitApproval}>
+        <PanelTitle icon={Plus} title="提交审批" />
+        <label>
+          <span>项目</span>
+          <select value={form.projectId} onChange={(event) => updateForm("projectId", event.target.value)}>
+            {projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>类型</span>
+          <select value={form.type} onChange={(event) => updateForm("type", event.target.value)}>
+            <option value="reimbursement">报销</option>
+            <option value="petty_cash">项目备用金</option>
+            <option value="supplier_payment">供应商付款</option>
+          </select>
+        </label>
+        <label>
+          <span>金额</span>
+          <input value={form.amount} onChange={(event) => updateForm("amount", event.target.value)} placeholder="例如 1280" />
+        </label>
+        <label>
+          <span>收款人 / 用途</span>
+          <input value={form.payee} onChange={(event) => updateForm("payee", event.target.value)} placeholder="员工、供应商或用途" />
+        </label>
+        <label>
+          <span>说明</span>
+          <input value={form.reason} onChange={(event) => updateForm("reason", event.target.value)} placeholder="拍摄交通、道具采购、票据说明等" />
+        </label>
+        <button className="primary" disabled={submitting}>{submitting ? "提交中" : "提交审批"}</button>
+      </form>
+
       <div className="feature-panel approval-main">
         <PanelTitle icon={BellRing} title={activeCategory} />
         <div className="approval-list">
-          {visibleApprovals.map((item) => (
-            <div className="approval-card" key={`${item.type}-${item.status}`}>
+          {visibleApprovals.length ? visibleApprovals.map((item) => (
+            <div className="approval-card" key={item.id}>
               <div>
-                <strong>{item.type}</strong>
+                <strong>{item.typeName}</strong>
                 <span>{item.project} · {item.user} · {item.scope}</span>
               </div>
               <b>{money(item.amount)}</b>
               <em>{item.status}</em>
-              <button onClick={() => setSelectedApprovalKey(`${item.type}-${item.status}`)}>查看</button>
+              <button onClick={() => setSelectedApprovalKey(item.id)}>查看</button>
             </div>
-          ))}
+          )) : <div className="empty-state">暂无审批单，可以从左侧提交备用金或报销。</div>}
         </div>
       </div>
 
       <div className="feature-panel approval-detail">
         <PanelTitle icon={Clock3} title="流程进度" />
         <div className="approval-detail-head">
-          <strong>{selectedApproval.type}</strong>
+          <strong>{selectedApproval.typeName}</strong>
           <span>{selectedApproval.project} · {money(selectedApproval.amount)}</span>
         </div>
         <div className="approval-steps">
-          {selectedApproval.steps.map(([name, status]) => (
-            <div className={`approval-step ${status}`} key={name}>
+          {selectedApproval.steps.length ? selectedApproval.steps.map((step) => (
+            <div className={`approval-step ${step.status}`} key={step.key || step.label}>
               <i />
               <div>
-                <strong>{name}</strong>
-                <span>{status === "done" ? "已完成" : status === "current" ? selectedApproval.status : "等待处理"}</span>
+                <strong>{step.label}</strong>
+                <span>{step.status === "done" ? "已完成" : step.status === "current" ? selectedApproval.status : step.status === "rejected" ? "已驳回" : "等待处理"}</span>
               </div>
             </div>
-          ))}
+          )) : <p className="muted">还没有审批流程，提交后会自动生成。</p>}
         </div>
+        {selectedApproval.logs?.length > 0 && <div className="approval-log">
+          {selectedApproval.logs.slice(0, 3).map((log) => (
+            <p key={`${log.action}-${log.at}`}>{log.user} · {log.action === "reject" ? "驳回" : log.action === "approve" ? "通过" : "提交"} · {new Date(log.at).toLocaleString("zh-CN")}</p>
+          ))}
+        </div>}
+        {canAct && <div className="approval-actions">
+          <button className="primary" onClick={() => act("approve")}>通过</button>
+          <button className="ghost" onClick={() => act("reject")}>驳回</button>
+        </div>}
       </div>
 
       <div className="feature-panel">

@@ -2,6 +2,8 @@ import { readDb, mutateDb, dbMode } from "./db.mjs";
 import { getCurrentUser, readBody, requireRole, sendJson } from "./http-utils.mjs";
 import {
   addComment,
+  actOnApproval,
+  createApproval,
   advanceParseJob,
   createProject,
   deleteProject,
@@ -175,6 +177,7 @@ function scopedSnapshot(db, user) {
     ...db,
     projects,
     suppliers: (db.suppliers || []).filter((item) => projectNames.has(item.project)),
+    approvals: (db.approvals || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)),
     files: (db.files || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName)),
     parseJobs: (db.parseJobs || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName)),
     comments: (db.comments || []).filter((item) => projectNames.has(item.project)),
@@ -365,6 +368,31 @@ export async function handleApi(req, res) {
     if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance", "member"], res)) return;
     const body = await readBody(req);
     const data = await mutateDb((db) => addComment(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/approvals") {
+    if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance", "member"], res)) return;
+    const body = await readBody(req);
+    if (!canAccessProject(snapshot, user, body.projectId)) {
+      sendJson(res, 403, { ok: false, error: "无权限为该项目提交审批" });
+      return;
+    }
+    const data = await mutateDb((db) => createApproval(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/approvals/action") {
+    if (!requireRole(user, ["shareholder", "admin", "director", "pm", "finance"], res)) return;
+    const body = await readBody(req);
+    const target = (snapshot.approvals || []).find((item) => item.id === body.id);
+    if (!target) {
+      sendJson(res, 404, { ok: false, error: "审批不存在" });
+      return;
+    }
+    const data = await mutateDb((db) => actOnApproval(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }

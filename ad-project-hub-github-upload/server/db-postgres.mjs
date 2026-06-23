@@ -29,6 +29,7 @@ export async function readPostgresDb() {
     files,
     parseJobs,
     suppliers,
+    approvals,
     alertUpdates,
     comments,
     auditLogs
@@ -48,6 +49,13 @@ export async function readPostgresDb() {
       extracted_fields as "extractedFields", created_at as "createdAt",
       updated_at as "updatedAt" from parse_jobs order by created_at desc`),
     db.query("select supplier, project, type, amount::float, status from suppliers order by created_at desc"),
+    db.query(`select id, type, type_label as "typeLabel", project_id as "projectId",
+      project_name as "projectName", amount::float, reason, payee, category,
+      status, current_role as "currentRole", applicant_id as "applicantId",
+      applicant_name as "applicantName", applicant_role as "applicantRole",
+      steps, logs, applied_at as "appliedAt", completed_at as "completedAt",
+      completed_by as "completedBy", created_at as "createdAt", updated_at as "updatedAt"
+      from approvals order by created_at desc`),
     db.query("select action, project, type, mentions, note, user_name as \"user\", created_at as at from alert_updates order by created_at desc"),
     db.query("select project, body, mentions, user_name as \"user\", created_at as at from comments order by created_at desc"),
     db.query("select type, target, action, user_name as \"user\", meta, created_at as at from audit_logs order by created_at desc")
@@ -66,6 +74,7 @@ export async function readPostgresDb() {
       files: files.rows.filter((file) => file.projectId === project.id)
     })),
     suppliers: suppliers.rows,
+    approvals: approvals.rows,
     files: files.rows,
     parseJobs: parseJobs.rows,
     alertUpdates: alertUpdates.rows,
@@ -80,6 +89,7 @@ export async function writePostgresDbFromSnapshot(snapshot) {
   await db.query("begin");
   try {
     await db.query("delete from audit_logs");
+    await db.query("delete from approvals");
     await db.query("delete from comments");
     await db.query("delete from alert_updates");
     await db.query("delete from suppliers");
@@ -176,6 +186,39 @@ export async function writePostgresDbFromSnapshot(snapshot) {
       await db.query(
         "insert into suppliers (supplier, project, type, amount, status) values ($1,$2,$3,$4,$5)",
         [item.supplier, item.project, item.type, item.amount || 0, item.status]
+      );
+    }
+
+    for (const item of snapshot.approvals || []) {
+      await db.query(
+        `insert into approvals (
+          id, type, type_label, project_id, project_name, amount, reason, payee,
+          category, status, current_role, applicant_id, applicant_name, applicant_role,
+          steps, logs, applied_at, completed_at, completed_by, created_at, updated_at
+        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+        [
+          item.id,
+          item.type,
+          item.typeLabel,
+          item.projectId,
+          item.projectName,
+          item.amount || 0,
+          item.reason || "",
+          item.payee || "",
+          item.category || "",
+          item.status,
+          item.currentRole || "",
+          item.applicantId || null,
+          item.applicantName || "",
+          item.applicantRole || "",
+          JSON.stringify(item.steps || []),
+          JSON.stringify(item.logs || []),
+          item.appliedAt || null,
+          item.completedAt || null,
+          item.completedBy || null,
+          item.createdAt || new Date().toISOString(),
+          item.updatedAt || new Date().toISOString()
+        ]
       );
     }
 

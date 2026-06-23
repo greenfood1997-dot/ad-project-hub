@@ -987,6 +987,157 @@ export function addComment(db, body, user) {
   return comment;
 }
 
+const APPROVAL_LABELS = {
+  petty_cash: "项目备用金",
+  reimbursement: "报销",
+  supplier_payment: "供应商付款"
+};
+
+function nextApprovalId() {
+  return `ap-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function approvalSteps(type, amount = 0) {
+  const base = [
+    { key: "submit", label: "员工提交", role: "member", status: "done" },
+    { key: "pm", label: "PM确认", role: "pm", status: "current" },
+    { key: "director", label: "总监审批", role: "director", status: "todo" },
+    { key: "finance", label: "财务处理", role: "finance", status: "todo" },
+    { key: "done", label: type === "reimbursement" ? "完成入账" : "完成付款", role: "finance", status: "todo" }
+  ];
+  if (type === "supplier_payment") base[0].label = "PM发起";
+  if (Number(amount) <= 1000 && type === "reimbursement") {
+    return base.filter((step) => step.key !== "director");
+  }
+  return base;
+}
+
+function currentApprovalStep(approval) {
+  return (approval.steps || []).find((step) => step.status === "current");
+}
+
+function syncApprovalSteps(approval, action, user) {
+  const currentIndex = (approval.steps || []).findIndex((step) => step.status === "current");
+  if (currentIndex < 0) return;
+  if (action === "reject") {
+    approval.steps[currentIndex].status = "rejected";
+    approval.status = "已驳回";
+    approval.currentRole = "";
+    return;
+  }
+  approval.steps[currentIndex].status = "done";
+  const nextIndex = approval.steps.findIndex((step, index) => index > currentIndex && step.key !== "done");
+  if (nextIndex >= 0) {
+    approval.steps[nextIndex].status = "current";
+    approval.currentRole = approval.steps[nextIndex].role;
+    approval.status = `待${approval.steps[nextIndex].label}`;
+    return;
+  }
+  const doneStep = approval.steps.find((step) => step.key === "done");
+  if (doneStep) doneStep.status = "done";
+  approval.status = "已完成";
+  approval.currentRole = "";
+  approval.completedAt = new Date().toISOString();
+  approval.completedBy = user.name;
+}
+
+function canRoleHandleApproval(userRole, currentRole) {
+  if (["shareholder", "admin"].includes(userRole)) return true;
+  if (currentRole === "pm") return ["pm", "director"].includes(userRole);
+  if (currentRole === "director") return userRole === "director";
+  if (currentRole === "finance") return userRole === "finance";
+  return false;
+}
+
+function applyApprovedFinanceImpact(db, approval) {
+  if (approval.status !== "已完成" || approval.appliedAt) return;
+  const project = (db.projects || []).find((item) => item.id === approval.projectId);
+  if (!project) return;
+  project.extractedFields = project.extractedFields || {};
+  const amount = Number(approval.amount || 0);
+  if (approval.type === "petty_cash") {
+    const currentBudget = Number(project.extractedFields.pettyCashBudget || project.extractedFields.projectPettyCashBudget || 0);
+    project.extractedFields.pettyCashBudget = currentBudget + amount;
+  }
+  if (approval.type === "reimbursement") {
+    const currentUsed = Number(project.extractedFields.pettyCashUsed || project.extractedFields.projectPettyCashUsed || 0);
+    project.extractedFields.pettyCashUsed = currentUsed + amount;
+    project.costUsed = Number(project.costUsed || 0) + amount;
+    const costs = Array.isArray(project.costs) ? project.costs : [];
+    const row = costs.find((item) => Array.isArray(item) && item[0] === "员工报销");
+    if (row) row[1] = Number(row[1] || 0) + amount;
+    else costs.push(["员工报销", amount]);
+    project.costs = costs;
+  }
+  project.updatedAt = new Date().toISOString();
+  approval.appliedAt = project.updatedAt;
+}
+
+export function createApproval(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body.projectId);
+  if (!project) throw new Error("项目不存在");
+  const type = body.type || "reimbursement";
+  if (!APPROVAL_LABELS[type]) throw new Error("不支持的审批类型");
+  const amount = Number(body.amount || 0);
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("请填写正确的审批金额");
+  const at = new Date().toISOString();
+  const approval = {
+    id: nextApprovalId(),
+    type,
+    typeLabel: APPROVAL_LABELS[type],
+    projectId: project.id,
+    projectName: project.name,
+    amount,
+    reason: String(body.reason || "").trim() || "未填写说明",
+    payee: String(body.payee || "").trim(),
+    category: body.category || APPROVAL_LABELS[type],
+    status: "待PM确认",
+    currentRole: "pm",
+    applicantId: user.id,
+    applicantName: user.name,
+    applicantRole: user.role,
+    createdAt: at,
+    updatedAt: at,
+    steps: approvalSteps(type, amount),
+    logs: [{ action: "submit", user: user.name, role: user.role, note: body.reason || "", at }]
+  };
+  db.approvals = db.approvals || [];
+  db.approvals.unshift(approval);
+  db.auditLogs.unshift({ type: "approval", target: project.name, action: "submit", user: user.name, meta: { approvalId: approval.id, approvalType: type, amount }, at });
+  return approval;
+}
+
+export function actOnApproval(db, body, user) {
+  const approval = (db.approvals || []).find((item) => item.id === body.id);
+  if (!approval) throw new Error("审批不存在");
+  if (["已完成", "已驳回"].includes(approval.status)) throw new Error("该审批已结束");
+  const step = currentApprovalStep(approval);
+  if (!step || !canRoleHandleApproval(user.role, step.role)) throw new Error("当前角色不能处理这一步审批");
+  const action = body.action === "reject" ? "reject" : "approve";
+  const at = new Date().toISOString();
+  syncApprovalSteps(approval, action, user);
+  approval.updatedAt = at;
+  approval.logs = approval.logs || [];
+  approval.logs.unshift({
+    action,
+    user: user.name,
+    role: user.role,
+    step: step.label,
+    note: String(body.note || "").trim(),
+    at
+  });
+  applyApprovedFinanceImpact(db, approval);
+  db.auditLogs.unshift({
+    type: "approval",
+    target: approval.projectName,
+    action,
+    user: user.name,
+    meta: { approvalId: approval.id, approvalType: approval.type, amount: approval.amount, status: approval.status },
+    at
+  });
+  return approval;
+}
+
 export function supplierCsv(db) {
   const header = "供应商,归属项目,费用类型,应结金额,状态\n";
   const rows = db.suppliers.map((item) => [item.supplier, item.project, item.type, item.amount, item.status]

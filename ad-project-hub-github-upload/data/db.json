@@ -273,7 +273,8 @@
         },
         "archiveTags": [],
         "confidence": "",
-        "missingFields": []
+        "missingFields": [],
+        "pettyCashUsed": 0
       },
       "createdAt": "2026-06-21T04:37:21.701Z",
       "createdBy": "u-admin",
@@ -305,7 +306,7 @@
           "text": "执行成本 120 已达到预算上限 120 的 100%，请 PM 立即复盘执行成本。"
         }
       ],
-      "updatedAt": "2026-06-21T05:05:55.328Z"
+      "updatedAt": "2026-06-23T09:33:41.613Z"
     }
   ],
   "suppliers": [
@@ -317,6 +318,7 @@
       "status": "待结算"
     }
   ],
+  "approvals": [],
   "files": [
     {
       "files": [
@@ -584,6 +586,132 @@
   ],
   "comments": [],
   "auditLogs": [
+    {
+      "type": "approval",
+      "target": "项目A",
+      "action": "approve",
+      "user": "财务成员",
+      "meta": {
+        "approvalId": "ap-mqqg5x6u-4lij5",
+        "approvalType": "reimbursement",
+        "amount": 99,
+        "status": "已完成"
+      },
+      "at": "2026-06-23T09:33:41.612Z"
+    },
+    {
+      "type": "approval",
+      "target": "项目A",
+      "action": "approve",
+      "user": "项目经理",
+      "meta": {
+        "approvalId": "ap-mqqg5x6u-4lij5",
+        "approvalType": "reimbursement",
+        "amount": 99,
+        "status": "待财务处理"
+      },
+      "at": "2026-06-23T09:33:41.592Z"
+    },
+    {
+      "type": "approval",
+      "target": "项目A",
+      "action": "submit",
+      "user": "普通员工",
+      "meta": {
+        "approvalId": "ap-mqqg5x6u-4lij5",
+        "approvalType": "reimbursement",
+        "amount": 99
+      },
+      "at": "2026-06-23T09:33:41.574Z"
+    },
+    {
+      "type": "approval",
+      "target": "项目A",
+      "action": "approve",
+      "user": "财务成员",
+      "meta": {
+        "approvalId": "ap-mqqg5eg1-cpav8",
+        "approvalType": "reimbursement",
+        "amount": 1888,
+        "status": "已完成"
+      },
+      "at": "2026-06-23T09:33:17.329Z"
+    },
+    {
+      "type": "approval",
+      "target": "项目A",
+      "action": "approve",
+      "user": "项目总监",
+      "meta": {
+        "approvalId": "ap-mqqg5eg1-cpav8",
+        "approvalType": "reimbursement",
+        "amount": 1888,
+        "status": "待财务处理"
+      },
+      "at": "2026-06-23T09:33:17.313Z"
+    },
+    {
+      "type": "approval",
+      "target": "项目A",
+      "action": "approve",
+      "user": "项目经理",
+      "meta": {
+        "approvalId": "ap-mqqg5eg1-cpav8",
+        "approvalType": "reimbursement",
+        "amount": 1888,
+        "status": "待总监审批"
+      },
+      "at": "2026-06-23T09:33:17.300Z"
+    },
+    {
+      "type": "approval",
+      "target": "项目A",
+      "action": "submit",
+      "user": "普通员工",
+      "meta": {
+        "approvalId": "ap-mqqg5eg1-cpav8",
+        "approvalType": "reimbursement",
+        "amount": 1888
+      },
+      "at": "2026-06-23T09:33:17.281Z"
+    },
+    {
+      "type": "approval",
+      "target": "项目A",
+      "action": "approve",
+      "user": "项目经理",
+      "meta": {
+        "approvalId": "ap-mqqg4jts-f2s8k",
+        "approvalType": "reimbursement",
+        "amount": 88,
+        "status": "待财务处理"
+      },
+      "at": "2026-06-23T09:32:37.621Z"
+    },
+    {
+      "type": "approval",
+      "target": "项目A",
+      "action": "submit",
+      "user": "普通员工",
+      "meta": {
+        "approvalId": "ap-mqqg4jts-f2s8k",
+        "approvalType": "reimbursement",
+        "amount": 88
+      },
+      "at": "2026-06-23T09:32:37.600Z"
+    },
+    {
+      "type": "approval",
+      "target": "项目A",
+      "action": "submit",
+      "user": "普通员工",
+      "meta": {
+        "approvalId": "ap-mqqg2y4d-1rh2b",
+        "approvalType": "reimbursement",
+        "amount": 88
+      },
+      "at": "2026-06-23T09:31:22.812Z"
+    },
     {
       "type": "upload",
       "target": "项目A",

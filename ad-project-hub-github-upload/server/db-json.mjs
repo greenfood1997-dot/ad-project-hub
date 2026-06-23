@@ -18,6 +18,7 @@ export async function readJsonDb() {
     users: raw.users || defaultDb.users,
     projects: raw.projects || [],
     suppliers: raw.suppliers || [],
+    approvals: raw.approvals || [],
     files: raw.files || raw.uploads || [],
     parseJobs: raw.parseJobs || [],
     alertUpdates: raw.alertUpdates || [],

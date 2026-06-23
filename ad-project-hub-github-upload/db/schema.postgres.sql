@@ -123,6 +123,30 @@ create table if not exists comments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists approvals (
+  id text primary key,
+  type text not null,
+  type_label text,
+  project_id text references projects(id) on delete cascade,
+  project_name text,
+  amount numeric not null default 0,
+  reason text,
+  payee text,
+  category text,
+  status text not null,
+  current_role text,
+  applicant_id text references users(id),
+  applicant_name text,
+  applicant_role text,
+  steps jsonb not null default '[]'::jsonb,
+  logs jsonb not null default '[]'::jsonb,
+  applied_at timestamptz,
+  completed_at timestamptz,
+  completed_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists audit_logs (
   id bigserial primary key,
   type text not null,

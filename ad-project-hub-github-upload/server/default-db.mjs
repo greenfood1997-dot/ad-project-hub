@@ -27,6 +27,7 @@ export const defaultDb = {
   },
   projects: [],
   suppliers: [],
+  approvals: [],
   files: [],
   parseJobs: [],
   alertUpdates: [],

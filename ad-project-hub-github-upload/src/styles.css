@@ -2316,6 +2316,7 @@ main.dashboard-main {
 .ai-chat-shell,
 .ai-side-panel,
 .approval-type,
+.approval-form,
 .approval-main,
 .approval-detail {
   background: var(--surface);
@@ -2460,6 +2461,31 @@ main.dashboard-main {
   min-height: 290px;
 }
 
+.approval-form {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.approval-form label {
+  gap: 6px;
+}
+
+.approval-form input,
+.approval-form select {
+  min-height: 38px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 10px;
+  outline: 0;
+}
+
+.approval-form .primary {
+  width: 100%;
+  margin-top: 2px;
+}
+
 .approval-detail {
   align-self: start;
 }
@@ -2519,6 +2545,11 @@ main.dashboard-main {
   box-shadow: 0 0 0 4px var(--brand-soft);
 }
 
+.approval-step.rejected i {
+  border-color: var(--red);
+  background: var(--red);
+}
+
 .approval-step strong,
 .approval-step span {
   display: block;
@@ -2532,6 +2563,38 @@ main.dashboard-main {
   margin-top: 3px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.approval-log {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.approval-log p,
+.empty-state {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.approval-actions button {
+  flex: 1;
+}
+
+.empty-state {
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--surface-soft);
 }
 
 .modal-backdrop {
