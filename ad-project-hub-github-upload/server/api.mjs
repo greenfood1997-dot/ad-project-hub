@@ -24,6 +24,7 @@ import {
 const OWNER_ROLES = ["shareholder"];
 const ADMIN_ROLES = ["shareholder", "admin"];
 const DIRECTOR_ROLES = ["shareholder", "admin", "director"];
+const MANAGEMENT_ROLES = ["shareholder", "admin", "director", "finance"];
 const PROJECT_WRITE_ROLES = ["shareholder", "admin", "director", "pm", "sales"];
 const ROLE_LABELS = {
   shareholder: "股东",
@@ -190,6 +191,37 @@ function canAccessProject(db, user, projectId) {
   return visibleProjectsForUser(db, ensureMemberFields(user)).some((project) => project.id === projectId);
 }
 
+function scopedSettings(settings = {}, user) {
+  const result = {
+    product: settings.product || {},
+    interestRate: settings.interestRate || {}
+  };
+  if (settings.aiService) {
+    result.aiService = {
+      "服务商": settings.aiService["服务商"],
+      "Base URL": settings.aiService["Base URL"],
+      "模型名称": settings.aiService["模型名称"],
+      connection: settings.aiService.connection,
+      savedAt: settings.aiService.savedAt,
+      configured: Boolean(settings.aiService["API Key"])
+    };
+  }
+  if (MANAGEMENT_ROLES.includes(user.role)) {
+    result.companyFinance = settings.companyFinance || settings.product?.companyFinance || {};
+  }
+  return result;
+}
+
+function publicState(db, user) {
+  return {
+    ...db,
+    settings: scopedSettings(db.settings || {}, user),
+    users: ADMIN_ROLES.includes(user.role)
+      ? (db.users || []).map((item) => publicUser(ensureMemberFields(item)))
+      : []
+  };
+}
+
 export async function handleApi(req, res) {
   const url = new URL(req.url, "http://localhost");
   const snapshot = await readDb();
@@ -212,7 +244,7 @@ export async function handleApi(req, res) {
     const scoped = scopedSnapshot(snapshot, ensureMemberFields(user));
     sendJson(res, 200, {
       ok: true,
-      data: { ...scoped, users: scoped.users.map((item) => publicUser(ensureMemberFields(item))) },
+      data: publicState(scoped, ensureMemberFields(user)),
       currentUser: publicUser(ensureMemberFields(user)),
       dbMode: dbMode()
     });
@@ -220,6 +252,7 @@ export async function handleApi(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/members") {
+    if (!requireRole(user, ADMIN_ROLES, res)) return;
     sendJson(res, 200, { ok: true, data: snapshot.users.map((item) => publicUser(ensureMemberFields(item))) });
     return;
   }

@@ -301,6 +301,168 @@ function projectHealth(project) {
   return { label: "正常", tone: "ok", timeProgress, completion, text: "项目节奏基本匹配合同时间，建议保持当前节奏并及时归档材料。" };
 }
 
+function operatingSettings(settings = {}) {
+  const company = settings.companyFinance || settings.product?.companyFinance || {};
+  const number = (key) => Number(company[key] || 0);
+  const monthlyFixedCost =
+    number("monthlyLaborCost") +
+    number("monthlyRent") +
+    number("monthlyLoan") +
+    number("monthlyInterest") +
+    number("monthlyOtherCost");
+  const currentCash = number("currentCash");
+  const safetyReserve = monthlyFixedCost * 6;
+  const runwayMonths = monthlyFixedCost ? currentCash / monthlyFixedCost : 0;
+  const gap = Math.max(safetyReserve - currentCash, 0);
+  const runwayLabel = monthlyFixedCost <= 0
+    ? "待设置"
+    : runwayMonths >= 6
+      ? "安全"
+      : runwayMonths >= 3
+        ? "谨慎"
+        : "危险！你快倒闭啦！需要收缩现金流";
+  return { ...company, currentCash, monthlyFixedCost, safetyReserve, runwayMonths, gap, runwayLabel };
+}
+
+function operatingMetrics(projects = [], approvals = [], stats = {}, settings = {}) {
+  const activeProjects = projects.filter((project) => project.status !== "已完成");
+  const completedProjects = projects.filter((project) => project.status === "已完成");
+  const spending = projects.reduce((sum, project) => sum + Number(project.costUsed || 0), 0);
+  const profit = projects.reduce((sum, project) => sum + (Number(project.contract || 0) - Number(project.costUsed || 0)), 0);
+  const margin = stats.contract ? Math.round((profit / stats.contract) * 100) : 0;
+  const pendingApprovals = approvals.filter((item) => String(item.status || "").includes("待"));
+  const pendingPettyCash = pendingApprovals.filter((item) => item.type === "petty_cash").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const pendingReimbursements = pendingApprovals.filter((item) => item.type === "reimbursement").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const pendingSupplierPay = approvals
+    .filter((item) => item.type === "supplier_payment" && item.status !== "已完成" && item.status !== "已驳回")
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const cashPressureAmount = Number(stats.receivable || 0) + pendingPettyCash + pendingReimbursements + pendingSupplierPay;
+  const receivableRate = stats.contract ? Math.round((Number(stats.receivable || 0) / stats.contract) * 100) : 0;
+  const runway = operatingSettings(settings);
+  const runwayPenalty = runway.monthlyFixedCost && runway.runwayMonths < 3 ? 30 : runway.monthlyFixedCost && runway.runwayMonths < 6 ? 14 : 0;
+  const pressureScore = receivableRate + (pendingApprovals.length * 4) + (margin < 25 ? 20 : 0) + runwayPenalty;
+  const pressureLevel = pressureScore >= 70 ? "高" : pressureScore >= 38 ? "中" : "低";
+  const highRiskProjects = projects
+    .map((project) => {
+      const costRate = project.contract ? Math.round((Number(project.costUsed || 0) / Number(project.contract || 1)) * 100) : 0;
+      const receivableProjectRate = project.contract ? Math.round((Number(project.receivable || 0) / Number(project.contract || 1)) * 100) : 0;
+      const projectMargin = project.contract ? Math.round(((Number(project.contract || 0) - Number(project.costUsed || 0)) / Number(project.contract || 1)) * 100) : 0;
+      const score = (project.risk === "高" ? 35 : project.risk === "中" ? 18 : 0) + costRate + receivableProjectRate + (projectMargin < 25 ? 24 : 0);
+      return { ...project, costRate, receivableProjectRate, projectMargin, score };
+    })
+    .sort((a, b) => b.score - a.score);
+  const topRisk = highRiskProjects[0];
+  const recommendation = runway.runwayLabel.includes("危险")
+    ? "危险！你快倒闭啦！需要收缩现金流"
+    : pressureLevel === "高"
+      ? "控制现金流，优先催收和暂停低毛利新增支出"
+      : pressureLevel === "中"
+        ? "稳健推进，控制审批节奏并盯紧回款节点"
+        : "可适度拓展，优先复制高毛利和回款快的项目类型";
+  const advisorActions = [
+    stats.receivable > 0 ? `优先催收待回款最高的项目：${[...highRiskProjects].sort((a, b) => b.receivable - a.receivable)[0]?.name || "暂无"}` : "当前回款压力较低，保持合同归档和核销节奏",
+    pendingApprovals.length ? `先处理 ${pendingApprovals.length} 条待审批，避免备用金/报销堆积` : "审批队列清爽，可以把精力放到项目交付和回款",
+    runway.monthlyFixedCost ? `现金可撑 ${runway.runwayMonths.toFixed(1)} 个月，6个月安全线缺口 ${money(runway.gap)}` : "请先填写公司现金和月固定支出，才能计算6个月安全线",
+    margin < 25 ? "毛利率偏低，新增项目报价要提高执行预算安全线" : "毛利率暂时健康，可复盘高毛利项目打法",
+  ];
+  return {
+    activeProjects,
+    completedProjects,
+    spending,
+    profit,
+    margin,
+    pendingApprovals,
+    pendingPettyCash,
+    pendingReimbursements,
+    pendingSupplierPay,
+    cashPressureAmount,
+    receivableRate,
+    pressureScore,
+    pressureLevel,
+    highRiskProjects,
+    topRisk,
+    recommendation,
+    advisorActions,
+    runway
+  };
+}
+
+function findProjectFromText(text, projects = [], selected) {
+  const query = String(text || "");
+  return projects.find((project) => query.includes(project.name) || (project.client && query.includes(project.client))) || selected || projects[0];
+}
+
+function amountFromText(text) {
+  const match = String(text || "").match(/(\d+(?:\.\d+)?)\s*(万|元)?/);
+  if (!match) return 0;
+  const number = Number(match[1]);
+  return match[2] === "万" ? number * 10000 : number;
+}
+
+async function tryCreateAiApproval({ query, session, projects, selected, onDone }) {
+  const amount = amountFromText(query);
+  if (!amount || !/(提交|申请|登记|报销|备用金)/.test(query)) return "";
+  const type = /备用金|预算/.test(query) ? "petty_cash" : /报销|票据/.test(query) ? "reimbursement" : "";
+  if (!type) return "";
+  const target = findProjectFromText(query, projects, selected);
+  if (!target?.id) throw new Error("没有匹配到可登记的项目");
+  const data = await apiRequest("/api/approvals", session, {
+    method: "POST",
+    body: JSON.stringify({
+      projectId: target.id,
+      type,
+      amount,
+      payee: session.name,
+      reason: query
+    })
+  });
+  await onDone?.();
+  return `已帮你提交「${target.name}」的${type === "petty_cash" ? "项目备用金" : "报销"}申请，金额 ${money(amount)}。当前状态：${data.status}。`;
+}
+
+function aiReplyFor({ query, session, projects, approvals = [], settings = {}, stats = {}, selected }) {
+  const target = findProjectFromText(query, projects, selected);
+  if (!target) return "你当前还没有可见项目。可以先让销售或管理员上传合同创建项目，再由总监分派成员。";
+  const pettyLeft = Math.max(Number(target.pettyCashBudget || 0) - Number(target.pettyCashUsed || 0), 0);
+  if (/备用金|预算/.test(query)) {
+    return `「${target.name}」备用金预算 ${money(target.pettyCashBudget)}，已使用 ${money(target.pettyCashUsed)}，当前剩余 ${money(pettyLeft)}。`;
+  }
+  if (/报销|票据|审批/.test(query)) {
+    const projectApprovals = approvals.filter((item) => item.projectId === target.id || item.projectName === target.name);
+    if (!projectApprovals.length) return `「${target.name}」当前没有审批记录。你可以说“帮我提交 500 元报销到${target.name}”，我会直接生成审批单。`;
+    return `「${target.name}」共有 ${projectApprovals.length} 条审批：${projectApprovals.slice(0, 3).map((item) => `${item.typeLabel || item.type} ${money(item.amount)} ${item.status}`).join("；")}。`;
+  }
+  if (/登记|上传|归档|成本/.test(query)) {
+    const matches = projects.filter((project) => query.includes(project.name) || (project.client && query.includes(project.client)));
+    if (!matches.length && projects.length > 1) {
+      return `我识别到你有 ${projects.length} 个可见项目。为了避免成本记错账，请在上传入口选择项目；如果你直接说项目名，比如“这个统计到${target.name}成本里”，我会按项目匹配。`;
+    }
+    return `当前匹配项目是「${target.name}」。财务类写入我会优先走审批单，文件归档请用上传入口，避免误改成本数据。`;
+  }
+  if (/创意|内容|过稿|脚本/.test(query)) {
+    return `针对「${target.client || target.name}」，建议先给真实使用场景，再给客户能确认的执行路径，减少空概念。可以把历史反馈继续上传，我会沉淀客户偏好和雷区。`;
+  }
+  if (/进度|节点|滞后|超前|完成度/.test(query)) {
+    const health = projectHealth(target);
+    return `「${target.name}」当前完成度 ${health.completion}%，时间进度 ${health.timeProgress}%，AI 判断为${health.label}。${health.text}`;
+  }
+  if (/现金流|经营|倒闭|安全线|老板|公司/.test(query)) {
+    if (!canSeeManagement(session)) return "公司经营和现金流属于管理层可见内容。你可以继续问自己项目的进度、备用金、报销和材料状态。";
+    const metrics = operatingMetrics(projects, approvals, stats, settings);
+    return `公司经营判断：${metrics.recommendation}。待回款 ${money(stats.receivable)}，待审批 ${metrics.pendingApprovals.length} 条，现金可撑 ${metrics.runway.monthlyFixedCost ? `${metrics.runway.runwayMonths.toFixed(1)}个月` : "待设置"}，6个月安全线缺口 ${money(metrics.runway.gap)}。`;
+  }
+  if (/我的项目|有哪些项目/.test(query)) {
+    return `你当前可见 ${projects.length} 个项目：${projects.slice(0, 5).map((project) => `${project.name}(${projectHealth(project).label})`).join("、")}。`;
+  }
+  return `我先按当前项目「${target.name}」理解：进度 ${target.progress}%，下一节点是「${target.nextMilestone}」。你可以问“我的项目备用金还有多少”，也可以说“帮我提交 500 元报销到${target.name}”。`;
+}
+
+async function answerAiQuestion(context) {
+  const query = String(context.query || "").trim();
+  const actionReply = await tryCreateAiApproval({ ...context, query });
+  return actionReply || aiReplyFor({ ...context, query });
+}
+
 function useChart(option) {
   return (node) => {
     if (!node) return;
@@ -569,7 +731,16 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           ))}
         </div>}
 
-        {activeView === "ai" && <AiWorkbench session={session} projects={projects} selected={selected} onNotice={setNotice} />}
+        {activeView === "ai" && <AiWorkbench
+          session={session}
+          projects={projects}
+          approvals={state?.approvals || []}
+          settings={state?.settings || {}}
+          stats={stats}
+          selected={selected}
+          onDone={() => loadState()}
+          onNotice={setNotice}
+        />}
         {activeView === "approvals" && <ApprovalFunds
           projects={projects}
           approvals={state?.approvals || []}
@@ -581,7 +752,16 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           onNotice={setNotice}
         />}
         {activeView === "closeout" && <CloseoutReview project={selected} isManagement={isManagement} />}
-        {activeView === "management" && isManagement && <ManagementCockpit projects={projects} approvals={state?.approvals || []} stats={stats} subView={activeSubView} />}
+        {activeView === "management" && isManagement && <ManagementCockpit
+          projects={projects}
+          approvals={state?.approvals || []}
+          settings={state?.settings || {}}
+          session={session}
+          stats={stats}
+          subView={activeSubView}
+          onDone={() => loadState()}
+          onNotice={setNotice}
+        />}
 
         {activeView === "dashboard" && activeSubView === "项目大盘" && (
           <section className="overview-layout">
@@ -608,7 +788,11 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             <DashboardAiPanel
               session={session}
               projects={projects}
+              approvals={state?.approvals || []}
+              settings={state?.settings || {}}
+              stats={stats}
               selected={selected}
+              onDone={() => loadState()}
               onNotice={setNotice}
             />
           </section>
@@ -813,8 +997,9 @@ function EmployeeProjectOverview({ projects, selected, onSelect, onUpload }) {
   );
 }
 
-function DashboardAiPanel({ session, projects, selected, onNotice }) {
+function DashboardAiPanel({ session, projects, approvals = [], settings = {}, stats = {}, selected, onDone, onNotice }) {
   const [question, setQuestion] = useState("");
+  const [sending, setSending] = useState(false);
   const [messages, setMessages] = useState(() => [
     {
       from: "assistant",
@@ -830,40 +1015,26 @@ function DashboardAiPanel({ session, projects, selected, onNotice }) {
     minute: "2-digit",
   }).format(new Date());
 
-  function replyFor(text) {
-    const query = text.trim();
-    const pettyLeft = Math.max(Number(selected.pettyCashBudget || 0) - Number(selected.pettyCashUsed || 0), 0);
-    if (/备用金|预算/.test(query)) {
-      return `「${selected.name}」备用金预算 ${money(selected.pettyCashBudget)}，已使用 ${money(selected.pettyCashUsed)}，当前剩余 ${money(pettyLeft)}。`;
-    }
-    if (/报销|票据/.test(query)) {
-      return `可以先把票据或说明发上来，我会按你的可见项目匹配；如果项目不唯一，会让你点选确认，再进入报销流程。`;
-    }
-    if (/登记|上传|归档|成本/.test(query)) {
-      return `如果你没有说具体项目，我会根据你的账号找到参与项目并弹出选择；如果说到「${selected.client || selected.name}」，我会优先登记到当前项目。`;
-    }
-    if (/创意|内容|过稿|脚本/.test(query)) {
-      return `针对「${selected.client || selected.name}」，建议先走真实使用场景，再给客户能确认的执行路径，减少空概念。后续会把客户偏好和雷区沉淀成项目记忆。`;
-    }
-    if (/进度|节点|滞后|超前/.test(query)) {
-      const health = projectHealth(selected);
-      return `「${selected.name}」当前完成度 ${health.completion}%，时间进度 ${health.timeProgress}%，AI 判断为${health.label}。${health.text}`;
-    }
-    return `我先按当前项目「${selected.name}」理解：进度 ${selected.progress}%，下一节点是「${selected.nextMilestone}」。如果你想登记文件或成本，可以直接继续发文件或说明。`;
-  }
-
-  function send(text = question) {
+  async function send(text = question) {
     const query = text.trim();
     if (!query) {
       onNotice("先输入一句话，比如“我的项目备用金还有多少？”");
       return;
     }
+    setSending(true);
+    let reply = "";
+    try {
+      reply = await answerAiQuestion({ query, session, projects, approvals, settings, stats, selected, onDone });
+    } catch (error) {
+      reply = `这次没办成：${error.message}`;
+    }
     setMessages((items) => [
       ...items,
       { from: "user", title: session.name, text: query },
-      { from: "assistant", title: "AI 项目助手", text: replyFor(query) },
+      { from: "assistant", title: "AI 项目助手", text: reply },
     ].slice(-7));
     setQuestion("");
+    setSending(false);
   }
 
   return (
@@ -913,7 +1084,7 @@ function DashboardAiPanel({ session, projects, selected, onNotice }) {
           }}
           placeholder="随心输入，问项目、报销、备用金或内容创意"
         />
-        <button onClick={() => send()}><ChevronRight size={18} /></button>
+        <button onClick={() => send()} disabled={sending}><ChevronRight size={18} /></button>
       </div>
     </aside>
   );
@@ -1171,24 +1342,38 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
   );
 }
 
-function AiWorkbench({ session, projects, selected, onNotice }) {
+function AiWorkbench({ session, projects, approvals = [], settings = {}, stats = {}, selected, onDone, onNotice }) {
   const visibleProjects = projects.slice(0, 4);
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
-  function ask(text) {
-    const query = text || question;
+  const [sending, setSending] = useState(false);
+  const [messages, setMessages] = useState(() => [
+    {
+      from: "assistant",
+      title: "AI 项目助手",
+      text: "你可以直接问项目进度、备用金、审批、材料缺口和内容创意；也可以说“帮我提交500元报销到我的项目”。",
+    },
+  ]);
+
+  async function ask(text) {
+    const query = String(text || question).trim();
     if (!query.trim()) {
       onNotice("先输入一个问题，比如“我的项目备用金还有多少？”");
       return;
     }
-    const pettyLeft = Math.max(selected.pettyCashBudget - selected.pettyCashUsed, 0);
-    let reply = `我先按你当前选中的「${selected.name}」回答：项目进度 ${selected.progress}%，备用金剩余 ${money(pettyLeft)}，下一节点是「${selected.nextMilestone}」。`;
-    if (/备用金|预算/.test(query)) reply = `「${selected.name}」备用金预算 ${money(selected.pettyCashBudget)}，已使用 ${money(selected.pettyCashUsed)}，剩余 ${money(pettyLeft)}。`;
-    if (/报销/.test(query)) reply = `「${selected.name}」当前可先从审批与备用金里的“报销”进入，后续会接入真实报销单创建和票据入库。`;
-    if (/材料|文件|缺/.test(query)) reply = `「${selected.name}」建议优先检查合同、报价规则、月度核销表和成本票据是否齐全。后续我会把缺失项自动列成待办。`;
-    if (/创意|过稿|内容/.test(query)) reply = `「${selected.client || selected.name}」内容建议：用真实场景开头，明确卖点和执行路径，少讲空泛概念；客户雷区后续会从历史反馈里自动沉淀。`;
-    setAnswer(reply);
+    setSending(true);
+    let reply = "";
+    try {
+      reply = await answerAiQuestion({ query, session, projects, approvals, settings, stats, selected, onDone });
+    } catch (error) {
+      reply = `这次没办成：${error.message}`;
+    }
+    setMessages((items) => [
+      ...items,
+      { from: "user", title: session.name, text: query },
+      { from: "assistant", title: "AI 项目助手", text: reply },
+    ].slice(-8));
     setQuestion(query);
+    setSending(false);
   }
   return (
     <section className="ai-workbench">
@@ -1203,14 +1388,18 @@ function AiWorkbench({ session, projects, selected, onNotice }) {
         </div>
         <div className="prompt-list">
           <button onClick={() => ask("我的项目备用金还有多少？")}>我的项目备用金还有多少？</button>
-          <button onClick={() => onNotice("文件登记请先使用右上角“新建项目/上传合同执行表”。下一步会把这里接成聊天内上传。")}>帮我登记到我的项目里</button>
-          <button onClick={() => ask("这个月我还有哪些材料没补？")}>这个月我还有哪些材料没补？</button>
+          <button onClick={() => ask(`帮我提交500元报销到${selected.name}`)}>帮我提交一笔报销</button>
+          <button onClick={() => ask("这个项目进度怎么样？")}>这个项目进度怎么样？</button>
           <button onClick={() => ask("给我生成一个更容易过稿的内容方向")}>给我生成一个更容易过稿的内容方向</button>
         </div>
-        {answer && <div className="ai-message ai-message-result">
-          <strong>AI 回复</strong>
-          <p>{answer}</p>
-        </div>}
+        <div className="ai-feed ai-workbench-feed">
+          {messages.map((message, index) => (
+            <div className={`ai-feed-item ${message.from}`} key={`${message.from}-${index}`}>
+              <span>{message.title}</span>
+              <p>{message.text}</p>
+            </div>
+          ))}
+        </div>
         <div className="ai-context-strip">
           {visibleProjects.map((project) => (
             <div key={project.id}>
@@ -1222,7 +1411,7 @@ function AiWorkbench({ session, projects, selected, onNotice }) {
         <div className="chat-input ai-main-input">
           <UploadCloud size={16} />
           <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="输入问题，或先用上传入口让 AI 识别项目文件" />
-          <button onClick={() => ask()}>发送</button>
+          <button onClick={() => ask()} disabled={sending}>{sending ? "处理中" : "发送"}</button>
         </div>
       </div>
 
@@ -1472,47 +1661,53 @@ function CloseoutReview({ project, isManagement }) {
   );
 }
 
-function ManagementCockpit({ projects, approvals = [], stats, subView }) {
-  const activeProjects = projects.filter((project) => project.status !== "已完成");
-  const completedProjects = projects.filter((project) => project.status === "已完成");
-  const spending = projects.reduce((sum, project) => sum + Number(project.costUsed || 0), 0);
-  const profit = projects.reduce((sum, project) => sum + (Number(project.contract || 0) - Number(project.costUsed || 0)), 0);
-  const margin = stats.contract ? Math.round((profit / stats.contract) * 100) : 0;
-  const pendingApprovals = approvals.filter((item) => String(item.status || "").includes("待"));
-  const pendingPettyCash = pendingApprovals.filter((item) => item.type === "petty_cash").reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const pendingReimbursements = pendingApprovals.filter((item) => item.type === "reimbursement").reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const pendingSupplierPay = approvals
-    .filter((item) => item.type === "supplier_payment" && item.status !== "已完成" && item.status !== "已驳回")
-    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const cashPressureAmount = stats.receivable + pendingPettyCash + pendingReimbursements + pendingSupplierPay;
-  const receivableRate = stats.contract ? Math.round((stats.receivable / stats.contract) * 100) : 0;
-  const pressureScore = receivableRate + (pendingApprovals.length * 4) + (margin < 25 ? 20 : 0);
-  const pressureLevel = pressureScore >= 70 ? "高" : pressureScore >= 38 ? "中" : "低";
-  const highRiskProjects = projects
-    .map((project) => {
-      const costRate = project.contract ? Math.round((Number(project.costUsed || 0) / Number(project.contract || 1)) * 100) : 0;
-      const receivableProjectRate = project.contract ? Math.round((Number(project.receivable || 0) / Number(project.contract || 1)) * 100) : 0;
-      const projectMargin = project.contract ? Math.round(((Number(project.contract || 0) - Number(project.costUsed || 0)) / Number(project.contract || 1)) * 100) : 0;
-      const score = (project.risk === "高" ? 35 : project.risk === "中" ? 18 : 0) + costRate + receivableProjectRate + (projectMargin < 25 ? 24 : 0);
-      return { ...project, costRate, receivableProjectRate, projectMargin, score };
-    })
-    .sort((a, b) => b.score - a.score);
-  const topRisk = highRiskProjects[0];
-  const recommendation = pressureLevel === "高"
-    ? "控制现金流，优先催收和暂停低毛利新增支出"
-    : pressureLevel === "中"
-      ? "稳健推进，控制审批节奏并盯紧回款节点"
-      : "可适度拓展，优先复制高毛利和回款快的项目类型";
+function ManagementCockpit({ projects, approvals = [], settings = {}, session, stats, subView, onDone, onNotice }) {
+  const metrics = operatingMetrics(projects, approvals, stats, settings);
+  const [financeForm, setFinanceForm] = useState(() => ({
+    currentCash: metrics.runway.currentCash || "",
+    monthlyLaborCost: metrics.runway.monthlyLaborCost || "",
+    monthlyRent: metrics.runway.monthlyRent || "",
+    monthlyLoan: metrics.runway.monthlyLoan || "",
+    monthlyInterest: metrics.runway.monthlyInterest || "",
+    monthlyOtherCost: metrics.runway.monthlyOtherCost || ""
+  }));
+  const [savingFinance, setSavingFinance] = useState(false);
+  useEffect(() => {
+    setFinanceForm({
+      currentCash: metrics.runway.currentCash || "",
+      monthlyLaborCost: metrics.runway.monthlyLaborCost || "",
+      monthlyRent: metrics.runway.monthlyRent || "",
+      monthlyLoan: metrics.runway.monthlyLoan || "",
+      monthlyInterest: metrics.runway.monthlyInterest || "",
+      monthlyOtherCost: metrics.runway.monthlyOtherCost || ""
+    });
+  }, [settings.companyFinance?.savedAt]);
+
+  async function saveFinance(event) {
+    event.preventDefault();
+    setSavingFinance(true);
+    try {
+      await apiRequest("/api/settings", session, {
+        method: "POST",
+        body: JSON.stringify({
+          type: "companyFinance",
+          values: financeForm
+        })
+      });
+      onNotice("公司现金流设置已保存");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    } finally {
+      setSavingFinance(false);
+    }
+  }
+
   const evidence = [
-    `待回款占合同 ${receivableRate}%`,
-    `待处理审批 ${pendingApprovals.length} 条`,
-    `综合毛利率 ${margin}%`,
-    topRisk ? `最高风险项目：${topRisk.name}` : "暂无明显高风险项目"
-  ];
-  const advisorActions = [
-    stats.receivable > 0 ? `优先催收待回款最高的项目：${[...highRiskProjects].sort((a, b) => b.receivable - a.receivable)[0]?.name || "暂无"}` : "当前回款压力较低，保持合同归档和核销节奏",
-    pendingApprovals.length ? `先处理 ${pendingApprovals.length} 条待审批，避免备用金/报销堆积` : "审批队列清爽，可以把精力放到项目交付和回款",
-    margin < 25 ? "毛利率偏低，新增项目报价要提高执行预算安全线" : "毛利率暂时健康，可复盘高毛利项目打法",
+    `待回款占合同 ${metrics.receivableRate}%`,
+    `待处理审批 ${metrics.pendingApprovals.length} 条`,
+    `综合毛利率 ${metrics.margin}%`,
+    metrics.topRisk ? `最高风险项目：${metrics.topRisk.name}` : "暂无明显高风险项目"
   ];
   const showCash = subView === "现金流压力";
   const showAdvisor = subView === "AI 商业顾问";
@@ -1524,33 +1719,54 @@ function ManagementCockpit({ projects, approvals = [], stats, subView }) {
           <Mini label="合同总额" value={money(stats.contract)} />
           <Mini label="已回款" value={money(stats.paid)} />
           <Mini label="待回款" value={money(stats.receivable)} />
-          <Mini label="总支出" value={money(spending)} />
-          <Mini label="项目利润" value={money(profit)} />
-          <Mini label="综合毛利率" value={`${margin}%`} />
-          <Mini label="进行中项目" value={`${activeProjects.length} 个`} />
-          <Mini label="已完成项目" value={`${completedProjects.length} 个`} />
+          <Mini label="总支出" value={money(metrics.spending)} />
+          <Mini label="项目利润" value={money(metrics.profit)} />
+          <Mini label="综合毛利率" value={`${metrics.margin}%`} />
+          <Mini label="进行中项目" value={`${metrics.activeProjects.length} 个`} />
+          <Mini label="已完成项目" value={`${metrics.completedProjects.length} 个`} />
+          <Mini label="现金可撑" value={metrics.runway.monthlyFixedCost ? `${metrics.runway.runwayMonths.toFixed(1)}月` : "待设置"} />
+          <Mini label="6个月缺口" value={money(metrics.runway.gap)} />
         </div>
         <div className="idea-card">
-          <strong>经营建议：{recommendation}</strong>
-          <p>{evidence.join("；")}。{advisorActions.join("；")}。</p>
+          <strong>经营建议：{metrics.recommendation}</strong>
+          <p>{evidence.join("；")}。{metrics.advisorActions.join("；")}。</p>
         </div>
       </div>
       <div className="feature-panel">
         <PanelTitle icon={CircleDollarSign} title="现金流压力" />
-        <div className={`health-card ${pressureLevel === "高" ? "danger" : pressureLevel === "中" ? "ok" : "good"}`}>
-          <div><span>压力等级</span><strong>{pressureLevel}</strong></div>
-          <div className="health-track"><i style={{ width: `${Math.min(100, pressureScore)}%` }} /></div>
-          <p>待回款 {money(stats.receivable)} · 待备用金 {money(pendingPettyCash)} · 待报销 {money(pendingReimbursements)} · 待供应商付款 {money(pendingSupplierPay)}</p>
+        <div className={`health-card ${metrics.runway.runwayLabel.includes("危险") || metrics.pressureLevel === "高" ? "danger" : metrics.pressureLevel === "中" ? "ok" : "good"}`}>
+          <div><span>压力等级</span><strong>{metrics.runway.runwayLabel.includes("危险") ? "危险" : metrics.pressureLevel}</strong></div>
+          <div className="health-track"><i style={{ width: `${Math.min(100, metrics.pressureScore)}%` }} /></div>
+          <p>{metrics.runway.runwayLabel}。待回款 {money(stats.receivable)} · 待备用金 {money(metrics.pendingPettyCash)} · 待报销 {money(metrics.pendingReimbursements)} · 待供应商付款 {money(metrics.pendingSupplierPay)}</p>
         </div>
         <div className="compact-list">
-          <div><strong>现金压力总暴露</strong><span>{money(cashPressureAmount)}</span></div>
-          <div><strong>待处理审批</strong><span>{pendingApprovals.length} 条</span></div>
+          <div><strong>现金压力总暴露</strong><span>{money(metrics.cashPressureAmount)}</span></div>
+          <div><strong>待处理审批</strong><span>{metrics.pendingApprovals.length} 条</span></div>
+          <div><strong>月固定支出</strong><span>{money(metrics.runway.monthlyFixedCost)}</span></div>
+          <div><strong>6个月安全线</strong><span>{money(metrics.runway.safetyReserve)}</span></div>
         </div>
       </div>
+      <form className="feature-panel settings-form" onSubmit={saveFinance}>
+        <PanelTitle icon={Settings2} title="经营现金设置" />
+        {[
+          ["currentCash", "当前公司现金"],
+          ["monthlyLaborCost", "每月人力成本"],
+          ["monthlyRent", "每月租金"],
+          ["monthlyLoan", "每月贷款"],
+          ["monthlyInterest", "每月利息"],
+          ["monthlyOtherCost", "每月其他固定支出"]
+        ].map(([key, label]) => (
+          <label key={key}>
+            <span>{label}</span>
+            <input value={financeForm[key]} onChange={(event) => setFinanceForm((current) => ({ ...current, [key]: event.target.value }))} placeholder="填写金额" />
+          </label>
+        ))}
+        <button className="primary" disabled={savingFinance}>{savingFinance ? "保存中" : "保存现金设置"}</button>
+      </form>
       <div className="feature-panel">
         <PanelTitle icon={AlertTriangle} title="风险雷达" />
         <div className="compact-list">
-          {highRiskProjects.slice(0, 5).map((project) => (
+          {metrics.highRiskProjects.slice(0, 5).map((project) => (
             <div key={project.id}><strong>{project.name}</strong><span>{project.risk}风险 · 待回款 {money(project.receivable)} · 成本占比 {project.costRate}% · 毛利率 {project.projectMargin}%</span></div>
           ))}
         </div>
@@ -1558,7 +1774,7 @@ function ManagementCockpit({ projects, approvals = [], stats, subView }) {
       <div className="feature-panel">
         <PanelTitle icon={Bot} title="商业顾问动作" />
         <div className="logic-list">
-          {advisorActions.map((action, index) => <LogicItem title={`建议 ${index + 1}`} text={action} key={action} />)}
+          {metrics.advisorActions.map((action, index) => <LogicItem title={`建议 ${index + 1}`} text={action} key={action} />)}
         </div>
       </div>
       <div className="feature-panel">

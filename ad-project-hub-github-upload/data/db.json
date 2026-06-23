@@ -92,6 +92,17 @@
       "connection": null,
       "savedAt": "2026-06-21T04:37:21.719Z",
       "savedBy": "u-admin"
+    },
+    "companyFinance": {
+      "currentCash": 1200000,
+      "monthlyLaborCost": 130000,
+      "monthlyRent": 25000,
+      "monthlyLoan": 0,
+      "monthlyInterest": 0,
+      "monthlyOtherCost": 45000,
+      "connection": null,
+      "savedAt": "2026-06-23T15:03:21.470Z",
+      "savedBy": "u-admin"
     }
   },
   "projects": [
@@ -634,6 +645,24 @@
   ],
   "comments": [],
   "auditLogs": [
+    {
+      "type": "approval",
+      "target": "管理员专属项目",
+      "action": "submit",
+      "user": "中台管理员",
+      "meta": {
+        "approvalId": "ap-mqqrxvgv-e5gic",
+        "approvalType": "reimbursement",
+        "amount": 1
+      },
+      "at": "2026-06-23T15:03:21.487Z"
+    },
+    {
+      "type": "settings",
+      "target": "companyFinance",
+      "user": "中台管理员",
+      "at": "2026-06-23T15:03:21.470Z"
+    },
     {
       "type": "project",
       "target": "管理员专属项目",

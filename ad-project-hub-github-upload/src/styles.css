@@ -2364,6 +2364,12 @@ main.dashboard-main {
   line-height: 1.7;
 }
 
+.ai-workbench-feed {
+  margin-top: 14px;
+  max-height: 360px;
+  overflow: auto;
+}
+
 .ai-context-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
