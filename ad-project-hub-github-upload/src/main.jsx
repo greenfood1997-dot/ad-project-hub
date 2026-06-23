@@ -315,6 +315,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [state, setState] = useState(null);
   const [activeView, setActiveView] = useState("dashboard");
   const [activeSubView, setActiveSubView] = useState("项目大盘");
+  const [openNav, setOpenNav] = useState({ dashboard: true });
   const [selectedId, setSelectedId] = useState(demoProjects[0].id);
   const [role, setRole] = useState("全部角色");
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -493,15 +494,25 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         </div>
         <nav>
           {navGroups.map(({ key, icon: Icon, label, children }) => (
-            <div className={`nav-group ${activeView === key ? "open" : ""}`} key={key}>
+            <div className={`nav-group ${openNav[key] ? "open" : ""}`} key={key}>
               <button
                 className={`nav-parent ${activeView === key ? "active" : ""}`}
                 onClick={() => {
+                  if (children?.length) {
+                    setOpenNav((current) => ({ ...current, [key]: !current[key] }));
+                    if (activeView !== key) {
+                      setActiveView(key);
+                      setActiveSubView(children[0][1]);
+                    }
+                    return;
+                  }
                   setActiveView(key);
-                  setActiveSubView(children?.[0]?.[1] || "");
+                  setActiveSubView("");
                 }}
               >
-                <Icon size={18} />{label}
+                <Icon size={18} />
+                <span>{label}</span>
+                {!!children?.length && <ChevronRight className="nav-caret" size={15} />}
               </button>
               {!!children?.length && <div className="nav-children">
                 {children.map(([, child]) => (
@@ -536,7 +547,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         </div>
       </aside>
 
-      <main>
+      <main className={activeView === "dashboard" && activeSubView === "项目大盘" ? "dashboard-main" : ""}>
         <header className="topbar">
           <div>
             <h1>项目经营驾驶舱</h1>
@@ -714,7 +725,7 @@ function EmployeeProjectOverview({ projects, selected, onSelect, onUpload }) {
           <h2>{selected.name}</h2>
           <p>{selected.client} · {selected.pm} 负责 · 下一节点：{selected.nextMilestone}</p>
         </div>
-        <button className="primary" onClick={onUpload}><UploadCloud size={16} />上传项目文件</button>
+        <button className="primary hero-upload" onClick={onUpload}><UploadCloud size={16} /><span>上传项目文件</span></button>
       </section>
 
       <section className="metrics employee-metrics">
@@ -837,6 +848,14 @@ function DashboardAiPanel({ session, projects, selected, onNotice }) {
 
   return (
     <aside className="ai-activity-panel">
+      <div className="ai-profile">
+        <div className="ai-avatar">{session.name?.slice(0, 1) || "A"}</div>
+        <div>
+          <strong>{session.name}</strong>
+          <span>{roleLabel(session.role)} · AI 项目伙伴</span>
+        </div>
+      </div>
+
       <div className="ai-activity-head">
         <div>
           <span>{timeText}</span>
