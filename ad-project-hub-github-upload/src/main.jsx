@@ -563,46 +563,66 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         {activeView === "closeout" && <CloseoutReview project={selected} isManagement={isManagement} />}
         {activeView === "management" && isManagement && <ManagementCockpit projects={projects} stats={stats} />}
 
-        {activeView === "dashboard" && <>
-
-        {activeSubView === "项目大盘" && <ProjectOverview
-          stats={stats}
-          cashRef={cashRef}
-          progressRef={progressRef}
-          costRef={costRef}
-          role={role}
-          setRole={setRole}
-          visibleAlerts={visibleAlerts}
-        />}
-
-        <section className="workspace">
-          <div className="project-list">
-            <div className="section-head">
-              <h2>{activeSubView === "我的项目" ? "我的项目" : "项目台账"}</h2>
-              <button onClick={() => setUploadOpen(true)}><UploadCloud size={16} />上传合同/执行表</button>
+        {activeView === "dashboard" && activeSubView === "项目大盘" && (
+          <section className="overview-layout">
+            <div className="overview-center">
+              {isManagement ? (
+                <ProjectOverview
+                  stats={stats}
+                  cashRef={cashRef}
+                  progressRef={progressRef}
+                  costRef={costRef}
+                  role={role}
+                  setRole={setRole}
+                  visibleAlerts={visibleAlerts}
+                />
+              ) : (
+                <EmployeeProjectOverview
+                  projects={projects}
+                  selected={selected}
+                  onSelect={setSelectedId}
+                  onUpload={() => setUploadOpen(true)}
+                />
+              )}
             </div>
-            {projects.map((project) => (
-              <button
-                className={`project-row ${project.id === selectedId ? "selected" : ""}`}
-                key={project.id}
-                onClick={() => setSelectedId(project.id)}
-              >
-                <div>
-                  <strong>{project.name}</strong>
-                  <span>{project.client} · {project.sales} / {project.pm}</span>
-                </div>
-                <div className="row-right">
-                  <RiskBadge risk={project.risk} />
-                  <span>{project.progress}%</span>
-                  <ChevronRight size={16} />
-                </div>
-              </button>
-            ))}
-          </div>
+            <DashboardAiPanel
+              session={session}
+              projects={projects}
+              selected={selected}
+              onNotice={setNotice}
+            />
+          </section>
+        )}
 
-          <ProjectDetail project={selected} isManagement={isManagement} />
-        </section>
-        </>}
+        {activeView === "dashboard" && activeSubView === "我的项目" && (
+          <section className="workspace">
+            <div className="project-list">
+              <div className="section-head">
+                <h2>我的项目</h2>
+                <button onClick={() => setUploadOpen(true)}><UploadCloud size={16} />上传合同/执行表</button>
+              </div>
+              {projects.map((project) => (
+                <button
+                  className={`project-row ${project.id === selectedId ? "selected" : ""}`}
+                  key={project.id}
+                  onClick={() => setSelectedId(project.id)}
+                >
+                  <div>
+                    <strong>{project.name}</strong>
+                    <span>{project.client} · {project.sales} / {project.pm}</span>
+                  </div>
+                  <div className="row-right">
+                    <RiskBadge risk={project.risk} />
+                    <span>{project.progress}%</span>
+                    <ChevronRight size={16} />
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <ProjectDetail project={selected} isManagement={isManagement} />
+          </section>
+        )}
         {uploadOpen && <UploadDialog
           session={session}
           projects={projects}
@@ -672,6 +692,191 @@ function ProjectOverview({ stats, cashRef, progressRef, costRef, role, setRole, 
         </div>
       </section>
     </>
+  );
+}
+
+function EmployeeProjectOverview({ projects, selected, onSelect, onUpload }) {
+  const activeProjects = projects.filter((project) => project.status !== "已完成");
+  const health = projectHealth(selected);
+  const pettyLeft = Math.max(Number(selected.pettyCashBudget || 0) - Number(selected.pettyCashUsed || 0), 0);
+  const missingItems = [
+    selected.contract ? null : "合同金额待补",
+    selected.files?.length ? null : "项目文件待上传",
+    selected.paymentDue && selected.paymentDue !== "待确认回款节点" ? null : "回款节点待确认",
+    selected.costUsed ? null : "成本表待归集",
+  ].filter(Boolean);
+  const displayMissing = missingItems.length ? missingItems : ["合同、成本、核销材料目前没有明显缺口"];
+  return (
+    <>
+      <section className="employee-hero">
+        <div>
+          <span>我的项目工作台</span>
+          <h2>{selected.name}</h2>
+          <p>{selected.client} · {selected.pm} 负责 · 下一节点：{selected.nextMilestone}</p>
+        </div>
+        <button className="primary" onClick={onUpload}><UploadCloud size={16} />上传项目文件</button>
+      </section>
+
+      <section className="metrics employee-metrics">
+        <Metric icon={LayoutDashboard} label="项目进度" value={`${selected.progress}%`} sub={`AI 判断：${health.label}`} />
+        <Metric icon={Clock3} label="时间进度" value={`${health.timeProgress}%`} sub="按合同周期粗略估算" />
+        <Metric icon={CircleDollarSign} label="备用金余额" value={money(pettyLeft)} sub={`已用 ${money(selected.pettyCashUsed)}`} />
+        <Metric icon={FileText} label="当前项目数" value={`${activeProjects.length || projects.length} 个`} sub="仅展示你可见的项目" />
+      </section>
+
+      <section className="employee-grid">
+        <div className={`panel employee-focus ${health.tone}`}>
+          <PanelTitle icon={Bot} title="AI 项目巡检" />
+          <div className="employee-health-number">
+            <strong>{health.label}</strong>
+            <span>时间 {health.timeProgress}% · 完成 {health.completion}%</span>
+          </div>
+          <div className="health-track">
+            <i style={{ width: `${health.completion}%` }} />
+          </div>
+          <p>{health.text}</p>
+        </div>
+
+        <div className="panel">
+          <PanelTitle icon={CheckCircle2} title="当前任务" />
+          <div className="employee-task-list">
+            {selected.tasks.map(([name, value]) => (
+              <div className="employee-task" key={name}>
+                <span>{name}</span>
+                <b>{value}%</b>
+                <div><i style={{ width: `${value}%` }} /></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          <PanelTitle icon={ShieldAlert} title="材料与报销提醒" />
+          <div className="compact-list">
+            {displayMissing.map((item) => (
+              <div key={item}>
+                <strong>{item}</strong>
+                <span>可直接从右侧 AI 输入，或点上传让 AI 识别后归档。</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel">
+          <PanelTitle icon={FileSpreadsheet} title="我的项目列表" />
+          <div className="employee-project-strip">
+            {projects.slice(0, 5).map((project) => (
+              <button
+                className={project.id === selected.id ? "active" : ""}
+                key={project.id}
+                onClick={() => onSelect(project.id)}
+              >
+                <strong>{project.name}</strong>
+                <span>{projectHealth(project).label} · {project.progress}% · 余 {money(Math.max(project.pettyCashBudget - project.pettyCashUsed, 0))}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function DashboardAiPanel({ session, projects, selected, onNotice }) {
+  const [question, setQuestion] = useState("");
+  const [messages, setMessages] = useState(() => [
+    {
+      from: "assistant",
+      title: "AI 项目助手",
+      text: "我会结合你的账号权限、当前项目和上传记录回答问题。你可以问备用金、报销、进度，也可以说“帮我登记到我的项目里”。",
+    },
+  ]);
+  const weatherText = "上海 29°C · 多云，外拍注意补水";
+  const timeText = new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date());
+
+  function replyFor(text) {
+    const query = text.trim();
+    const pettyLeft = Math.max(Number(selected.pettyCashBudget || 0) - Number(selected.pettyCashUsed || 0), 0);
+    if (/备用金|预算/.test(query)) {
+      return `「${selected.name}」备用金预算 ${money(selected.pettyCashBudget)}，已使用 ${money(selected.pettyCashUsed)}，当前剩余 ${money(pettyLeft)}。`;
+    }
+    if (/报销|票据/.test(query)) {
+      return `可以先把票据或说明发上来，我会按你的可见项目匹配；如果项目不唯一，会让你点选确认，再进入报销流程。`;
+    }
+    if (/登记|上传|归档|成本/.test(query)) {
+      return `如果你没有说具体项目，我会根据你的账号找到参与项目并弹出选择；如果说到「${selected.client || selected.name}」，我会优先登记到当前项目。`;
+    }
+    if (/创意|内容|过稿|脚本/.test(query)) {
+      return `针对「${selected.client || selected.name}」，建议先走真实使用场景，再给客户能确认的执行路径，减少空概念。后续会把客户偏好和雷区沉淀成项目记忆。`;
+    }
+    if (/进度|节点|滞后|超前/.test(query)) {
+      const health = projectHealth(selected);
+      return `「${selected.name}」当前完成度 ${health.completion}%，时间进度 ${health.timeProgress}%，AI 判断为${health.label}。${health.text}`;
+    }
+    return `我先按当前项目「${selected.name}」理解：进度 ${selected.progress}%，下一节点是「${selected.nextMilestone}」。如果你想登记文件或成本，可以直接继续发文件或说明。`;
+  }
+
+  function send(text = question) {
+    const query = text.trim();
+    if (!query) {
+      onNotice("先输入一句话，比如“我的项目备用金还有多少？”");
+      return;
+    }
+    setMessages((items) => [
+      ...items,
+      { from: "user", title: session.name, text: query },
+      { from: "assistant", title: "AI 项目助手", text: replyFor(query) },
+    ].slice(-7));
+    setQuestion("");
+  }
+
+  return (
+    <aside className="ai-activity-panel">
+      <div className="ai-activity-head">
+        <div>
+          <span>{timeText}</span>
+          <strong>{weatherText}</strong>
+        </div>
+        <Bot size={18} />
+      </div>
+
+      <div className="ai-quick-tags">
+        <button onClick={() => send("我的项目备用金还有多少？")}>备用金</button>
+        <button onClick={() => send("这个项目进度怎么样？")}>进度</button>
+        <button onClick={() => send("帮我生成一个更容易过稿的内容方向")}>内容</button>
+      </div>
+
+      <div className="ai-feed">
+        {messages.map((message, index) => (
+          <div className={`ai-feed-item ${message.from}`} key={`${message.from}-${index}`}>
+            <span>{message.title}</span>
+            <p>{message.text}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="ai-project-context">
+        <strong>{selected.name}</strong>
+        <span>{projects.length} 个可见项目 · 当前 {projectHealth(selected).label}</span>
+      </div>
+
+      <div className="ai-compose">
+        <input
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") send();
+          }}
+          placeholder="随心输入，问项目、报销、备用金或内容创意"
+        />
+        <button onClick={() => send()}><ChevronRight size={18} /></button>
+      </div>
+    </aside>
   );
 }
 
