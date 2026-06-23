@@ -318,8 +318,11 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [selectedId, setSelectedId] = useState(demoProjects[0].id);
   const [role, setRole] = useState("全部角色");
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [notice, setNotice] = useState("");
   const isAdmin = session?.role === "admin";
   const isManagement = canSeeManagement(session);
+  const aiConfigured = Boolean(state?.settings?.aiService?.["API Key"]);
   const projects = useMemo(() => {
     const realProjects = Array.isArray(state?.projects) ? state.projects.map(normalizeProject) : [];
     return realProjects.length ? realProjects : demoProjects.map(normalizeProject);
@@ -416,7 +419,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     series: [
       {
         type: "bar",
-        data: projects.map((item) => Math.round((item.costUsed / item.costBudget) * 100)),
+        data: projects.map((item) => item.costBudget ? Math.round((item.costUsed / item.costBudget) * 100) : 0),
         label: { show: true, position: "right", formatter: "{c}%", color: "#4e5969", fontSize: 12 },
         barMaxWidth: 14,
         itemStyle: { borderRadius: [0, 6, 6, 0] }
@@ -527,8 +530,8 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         </nav>
         <div className="integration">
           <p>{session.name} · {roleLabel(session.role)}</p>
-          <button><MessageSquareText size={16} />飞书机器人</button>
-          <button><MessageSquareText size={16} />企业微信</button>
+          <button onClick={() => setNotice("飞书机器人入口已预留，下一步需要在后台产品设置里接入飞书 App ID 和事件订阅。")}><MessageSquareText size={16} />飞书机器人</button>
+          <button onClick={() => setNotice("企业微信入口已预留，后续可接收群文件、项目提醒和审批通知。")}><MessageSquareText size={16} />企业微信</button>
           <button onClick={onLogout}><LogOut size={16} />退出登录</button>
         </div>
       </aside>
@@ -541,13 +544,21 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           </div>
           <div className="actions">
             <div className="search"><Search size={16} /><input placeholder="搜索项目、客户、负责人" /></div>
-            <button className="ghost"><Filter size={16} />筛选</button>
+            <button className="ghost" onClick={() => setFilterOpen(!filterOpen)}><Filter size={16} />筛选</button>
             {isAdmin && <button className="ghost" onClick={() => setView("admin")}><UserCog size={16} />成员管理</button>}
+            {isAdmin && <button className={aiConfigured ? "ghost" : "ghost warning"} onClick={() => setView("admin:ai")}><Bot size={16} />{aiConfigured ? "AI 已接入" : "接入 AI"}</button>}
             <button className="primary" onClick={() => setUploadOpen(true)}><Plus size={16} />新建项目</button>
           </div>
         </header>
+        {notice && <div className="notice-bar"><span>{notice}</span><button onClick={() => setNotice("")}>知道了</button></div>}
+        {filterOpen && <div className="filter-panel">
+          <button className={role === "全部角色" ? "active" : ""} onClick={() => setRole("全部角色")}>全部提醒</button>
+          {["PM", "销售", "管理层"].map((item) => (
+            <button className={role === item ? "active" : ""} key={item} onClick={() => setRole(item)}>{item}</button>
+          ))}
+        </div>}
 
-        {activeView === "ai" && <AiWorkbench session={session} projects={projects} selected={selected} />}
+        {activeView === "ai" && <AiWorkbench session={session} projects={projects} selected={selected} onNotice={setNotice} />}
         {activeView === "approvals" && <ApprovalFunds projects={projects} selected={selected} session={session} subView={activeSubView} setSubView={setActiveSubView} />}
         {activeView === "closeout" && <CloseoutReview project={selected} isManagement={isManagement} />}
         {activeView === "management" && isManagement && <ManagementCockpit projects={projects} stats={stats} />}
@@ -746,8 +757,25 @@ function ProjectDetail({ project, isManagement }) {
   );
 }
 
-function AiWorkbench({ session, projects, selected }) {
+function AiWorkbench({ session, projects, selected, onNotice }) {
   const visibleProjects = projects.slice(0, 4);
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  function ask(text) {
+    const query = text || question;
+    if (!query.trim()) {
+      onNotice("先输入一个问题，比如“我的项目备用金还有多少？”");
+      return;
+    }
+    const pettyLeft = Math.max(selected.pettyCashBudget - selected.pettyCashUsed, 0);
+    let reply = `我先按你当前选中的「${selected.name}」回答：项目进度 ${selected.progress}%，备用金剩余 ${money(pettyLeft)}，下一节点是「${selected.nextMilestone}」。`;
+    if (/备用金|预算/.test(query)) reply = `「${selected.name}」备用金预算 ${money(selected.pettyCashBudget)}，已使用 ${money(selected.pettyCashUsed)}，剩余 ${money(pettyLeft)}。`;
+    if (/报销/.test(query)) reply = `「${selected.name}」当前可先从审批与备用金里的“报销”进入，后续会接入真实报销单创建和票据入库。`;
+    if (/材料|文件|缺/.test(query)) reply = `「${selected.name}」建议优先检查合同、报价规则、月度核销表和成本票据是否齐全。后续我会把缺失项自动列成待办。`;
+    if (/创意|过稿|内容/.test(query)) reply = `「${selected.client || selected.name}」内容建议：用真实场景开头，明确卖点和执行路径，少讲空泛概念；客户雷区后续会从历史反馈里自动沉淀。`;
+    setAnswer(reply);
+    setQuestion(query);
+  }
   return (
     <section className="ai-workbench">
       <div className="ai-chat-shell">
@@ -760,11 +788,15 @@ function AiWorkbench({ session, projects, selected }) {
           <p>问备用金、报销、进度、材料缺口，或者把合同、报价表、成本表、票据、核销表发过来，我会先识别你的账号和项目权限，再帮你归档或登记。</p>
         </div>
         <div className="prompt-list">
-          <button>我的项目备用金还有多少？</button>
-          <button>帮我登记到我的项目里</button>
-          <button>这个月我还有哪些材料没补？</button>
-          <button>给我生成一个更容易过稿的内容方向</button>
+          <button onClick={() => ask("我的项目备用金还有多少？")}>我的项目备用金还有多少？</button>
+          <button onClick={() => onNotice("文件登记请先使用右上角“新建项目/上传合同执行表”。下一步会把这里接成聊天内上传。")}>帮我登记到我的项目里</button>
+          <button onClick={() => ask("这个月我还有哪些材料没补？")}>这个月我还有哪些材料没补？</button>
+          <button onClick={() => ask("给我生成一个更容易过稿的内容方向")}>给我生成一个更容易过稿的内容方向</button>
         </div>
+        {answer && <div className="ai-message ai-message-result">
+          <strong>AI 回复</strong>
+          <p>{answer}</p>
+        </div>}
         <div className="ai-context-strip">
           {visibleProjects.map((project) => (
             <div key={project.id}>
@@ -775,8 +807,8 @@ function AiWorkbench({ session, projects, selected }) {
         </div>
         <div className="chat-input ai-main-input">
           <UploadCloud size={16} />
-          <span>输入问题，或拖入文件让 AI 自动识别项目</span>
-          <button>发送</button>
+          <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="输入问题，或先用上传入口让 AI 识别项目文件" />
+          <button onClick={() => ask()}>发送</button>
         </div>
       </div>
 
@@ -1294,10 +1326,23 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-function AdminMembers({ session, setView, onLogout }) {
+function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
+  const [adminTab, setAdminTab] = useState(initialTab);
   const [members, setMembers] = useState([]);
   const [editingId, setEditingId] = useState("");
   const [message, setMessage] = useState("");
+  const [settingsMessage, setSettingsMessage] = useState("");
+  const [aiSettings, setAiSettings] = useState({
+    "服务商": "DeepSeek",
+    "API Key": "",
+    "Base URL": "https://api.deepseek.com",
+    "模型名称": "deepseek-chat",
+  });
+  const [productSettings, setProductSettings] = useState({
+    "公司名称": "广告项目中台",
+    "默认执行预算占比": "60%",
+    "大文件提醒阈值MB": "40",
+  });
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -1306,6 +1351,7 @@ function AdminMembers({ session, setView, onLogout }) {
     status: "active",
     pin: "123456",
   });
+  const aiReady = Boolean(aiSettings["API Key"]);
 
   async function api(path, options = {}) {
     const res = await fetch(path, {
@@ -1325,8 +1371,18 @@ function AdminMembers({ session, setView, onLogout }) {
     setMembers(await api("/api/members"));
   }
 
+  async function loadSettings() {
+    const res = await fetch("/api/state", { headers: { "x-user-id": session.id } });
+    const payload = await res.json();
+    if (!payload.ok) throw new Error(payload.error || "读取设置失败");
+    const settings = payload.data?.settings || {};
+    setAiSettings((current) => ({ ...current, ...(settings.aiService || {}) }));
+    setProductSettings((current) => ({ ...current, ...(settings.product || {}) }));
+  }
+
   useEffect(() => {
     loadMembers().catch((err) => setMessage(err.message));
+    loadSettings().catch((err) => setSettingsMessage(err.message));
   }, []);
 
   function edit(member) {
@@ -1374,6 +1430,58 @@ function AdminMembers({ session, setView, onLogout }) {
     }
   }
 
+  function applyProviderPreset(provider) {
+    const presets = {
+      DeepSeek: { "服务商": "DeepSeek", "Base URL": "https://api.deepseek.com", "模型名称": "deepseek-chat" },
+      "Kimi / Moonshot": { "服务商": "Kimi / Moonshot", "Base URL": "https://api.moonshot.cn/v1", "模型名称": "moonshot-v1-8k" },
+      "GPT / OpenAI": { "服务商": "GPT / OpenAI", "Base URL": "https://api.openai.com/v1", "模型名称": "gpt-4.1" },
+      "自定义": { "服务商": "自定义" },
+    };
+    setAiSettings({ ...aiSettings, ...(presets[provider] || { "服务商": provider }) });
+  }
+
+  async function testAi(event) {
+    event.preventDefault();
+    setSettingsMessage("正在测试 AI 连接...");
+    try {
+      const data = await api("/api/settings/ai/test", {
+        method: "POST",
+        body: JSON.stringify({ values: aiSettings }),
+      });
+      setSettingsMessage(`AI 连接正常：${data.provider} / ${data.model}`);
+    } catch (err) {
+      setSettingsMessage(err.message);
+    }
+  }
+
+  async function saveAi(event) {
+    event.preventDefault();
+    setSettingsMessage("正在保存 AI 配置...");
+    try {
+      await api("/api/settings", {
+        method: "POST",
+        body: JSON.stringify({ type: "aiService", values: aiSettings }),
+      });
+      setSettingsMessage("AI API 已保存，后续合同/表格解析会使用这套配置。");
+    } catch (err) {
+      setSettingsMessage(err.message);
+    }
+  }
+
+  async function saveProductSettings(event) {
+    event.preventDefault();
+    setSettingsMessage("正在保存产品设置...");
+    try {
+      await api("/api/settings", {
+        method: "POST",
+        body: JSON.stringify({ type: "product", values: productSettings }),
+      });
+      setSettingsMessage("产品设置已保存");
+    } catch (err) {
+      setSettingsMessage(err.message);
+    }
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -1386,9 +1494,9 @@ function AdminMembers({ session, setView, onLogout }) {
         </div>
         <nav>
           <a onClick={() => setView("app")}><LayoutDashboard size={18} />返回员工端</a>
-          <a className="active"><UsersRound size={18} />成员管理</a>
-          <a><Settings2 size={18} />产品设置</a>
-          <a><ShieldAlert size={18} />权限策略</a>
+          <a className={adminTab === "members" ? "active" : ""} onClick={() => setAdminTab("members")}><UsersRound size={18} />成员管理</a>
+          <a className={adminTab === "ai" ? "active" : ""} onClick={() => setAdminTab("ai")}><Bot size={18} />AI 接入</a>
+          <a className={adminTab === "product" ? "active" : ""} onClick={() => setAdminTab("product")}><Settings2 size={18} />产品设置</a>
         </nav>
         <div className="integration">
           <p>{session.name} · {roleLabel(session.role)}</p>
@@ -1398,13 +1506,13 @@ function AdminMembers({ session, setView, onLogout }) {
       <main>
         <header className="topbar">
           <div>
-            <h1>成员管理</h1>
-            <p>维护内部账号、角色和后台访问权限</p>
+            <h1>{adminTab === "members" ? "成员管理" : adminTab === "ai" ? "AI 接入" : "产品设置"}</h1>
+            <p>{adminTab === "members" ? "维护内部账号、角色和后台访问权限" : adminTab === "ai" ? "配置 DeepSeek、Kimi、OpenAI 或兼容模型，用于合同和表格智能解析" : "维护产品基础参数和上传提醒"}</p>
           </div>
-          <button className="ghost" onClick={resetForm}><Plus size={16} />新增成员</button>
+          {adminTab === "members" && <button className="ghost" onClick={resetForm}><Plus size={16} />新增成员</button>}
         </header>
 
-        <section className="admin-grid">
+        {adminTab === "members" && <section className="admin-grid">
           <form className="member-form" onSubmit={save}>
             <div className="section-head"><h2>{editingId ? "编辑成员" : "新增成员"}</h2></div>
             <label><span>姓名</span><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
@@ -1436,7 +1544,65 @@ function AdminMembers({ session, setView, onLogout }) {
               </div>
             ))}
           </div>
-        </section>
+        </section>}
+
+        {adminTab === "ai" && <section className="admin-grid">
+          <form className="member-form settings-form" onSubmit={saveAi}>
+            <div className="section-head">
+              <h2>AI 服务配置</h2>
+              <span className={`config-state ${aiReady ? "ok" : "warn"}`}>{aiReady ? "已保存 Key" : "未接入"}</span>
+            </div>
+            <label>
+              <span>服务商</span>
+              <select value={aiSettings["服务商"] || "DeepSeek"} onChange={(event) => applyProviderPreset(event.target.value)}>
+                <option value="DeepSeek">DeepSeek</option>
+                <option value="Kimi / Moonshot">Kimi / Moonshot</option>
+                <option value="GPT / OpenAI">GPT / OpenAI</option>
+                <option value="自定义">自定义兼容接口</option>
+              </select>
+            </label>
+            <label><span>API Key</span><input value={aiSettings["API Key"] || ""} type="password" onChange={(event) => setAiSettings({ ...aiSettings, "API Key": event.target.value })} placeholder="粘贴你的 API Key" /></label>
+            <label><span>Base URL</span><input value={aiSettings["Base URL"] || ""} onChange={(event) => setAiSettings({ ...aiSettings, "Base URL": event.target.value })} /></label>
+            <label><span>模型名称</span><input value={aiSettings["模型名称"] || ""} onChange={(event) => setAiSettings({ ...aiSettings, "模型名称": event.target.value })} /></label>
+            {settingsMessage && <p className="form-message">{settingsMessage}</p>}
+            <div className="button-row">
+              <button className="ghost" type="button" onClick={testAi}>测试连接</button>
+              <button className="primary">保存 AI API</button>
+            </div>
+          </form>
+          <div className="member-table settings-help">
+            <div className="section-head"><h2>接入说明</h2></div>
+            <div className="logic-list">
+              <LogicItem title="为什么看起来没了" text="如果覆盖上传时带了空的 data/db.json，线上保存过的 AI API 可能被重置。新版已支持 Render 环境变量兜底。" />
+              <LogicItem title="Render 兜底变量" text="可以在 Render 设置 AI_API_KEY、AI_BASE_URL、AI_MODEL，后台配置为空时也能继续解析。" />
+              <LogicItem title="DeepSeek" text="适合成本敏感的表格解析和项目问答，默认 Base URL 为 https://api.deepseek.com。" />
+              <LogicItem title="Kimi / Moonshot" text="适合长文本合同理解，可填 moonshot-v1-8k 或你购买的其他模型。" />
+              <LogicItem title="OpenAI 兼容" text="支持 OpenAI 或其他兼容 Chat Completions 的服务，只要填写 Base URL、API Key 和模型名。" />
+            </div>
+          </div>
+        </section>}
+
+        {adminTab === "product" && <section className="admin-grid">
+          <form className="member-form settings-form" onSubmit={saveProductSettings}>
+            <div className="section-head"><h2>基础参数</h2></div>
+            {Object.keys(productSettings).map((key) => (
+              <label key={key}>
+                <span>{key}</span>
+                <input value={productSettings[key]} onChange={(event) => setProductSettings({ ...productSettings, [key]: event.target.value })} />
+              </label>
+            ))}
+            {settingsMessage && <p className="form-message">{settingsMessage}</p>}
+            <button className="primary">保存产品设置</button>
+          </form>
+          <div className="member-table settings-help">
+            <div className="section-head"><h2>后续可接入</h2></div>
+            <div className="logic-list">
+              <LogicItem title="飞书组织同步" text="后续在这里填 App ID、App Secret，同步公司成员和部门。" />
+              <LogicItem title="对象存储" text="大 PDF 和图片建议后续接入对象存储，避免请求体过大。" />
+              <LogicItem title="审批规则" text="后续把备用金、报销、供应商付款的金额阈值和审批链配置化。" />
+            </div>
+          </div>
+        </section>}
       </main>
     </div>
   );
@@ -1459,8 +1625,8 @@ function AppShell() {
   }
 
   if (!session) return <LoginScreen onLogin={setSession} />;
-  if (view === "admin" && session.role === "admin") {
-    return <AdminMembers session={session} setView={setView} onLogout={logout} />;
+  if ((view === "admin" || view === "admin:ai") && session.role === "admin") {
+    return <AdminMembers session={session} setView={setView} onLogout={logout} initialTab={view === "admin:ai" ? "ai" : "members"} />;
   }
   return <ProjectDashboard session={session} view={view} setView={setView} onLogout={logout} />;
 }

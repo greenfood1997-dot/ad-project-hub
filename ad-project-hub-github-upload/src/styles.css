@@ -642,6 +642,15 @@ select {
   font-size: 13px;
 }
 
+.chat-input input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+
 .chat-input button,
 .approval-card button {
   height: 32px;
@@ -816,6 +825,46 @@ label span {
   align-items: start;
 }
 
+.notice-bar,
+.filter-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.notice-bar {
+  justify-content: space-between;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.notice-bar button,
+.filter-panel button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  padding: 7px 10px;
+}
+
+.filter-panel {
+  flex-wrap: wrap;
+  padding: 10px;
+}
+
+.filter-panel button.active {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-weight: 700;
+}
+
 .member-form,
 .member-table {
   padding: 16px;
@@ -840,6 +889,21 @@ label span {
 .member-table .section-head span {
   color: #66758a;
   font-size: 13px;
+}
+
+.settings-form {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-help {
+  min-height: 320px;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .role-pill,
@@ -1137,6 +1201,32 @@ h1 {
   height: 38px;
   font-size: 14px;
   font-weight: 650;
+}
+
+.ghost.warning {
+  border-color: #f7c873;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.config-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.config-state.ok {
+  color: #0f766e;
+  background: #dcfce7;
+}
+
+.config-state.warn {
+  color: #92400e;
+  background: #fffbeb;
 }
 
 .metric,

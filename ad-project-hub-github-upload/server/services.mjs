@@ -1115,11 +1115,12 @@ async function analyzeProjectFiles(aiSettings, values, files, interestRateSettin
     .join("\n\n")
     .slice(0, 50000);
   const fallback = inferFieldsFromText(values, text, extractedFiles, interestRateSettings);
+  const effectiveAiSettings = resolveAiSettings(aiSettings);
 
-  if (!text.trim() || !aiSettings?.["API Key"]) return { ...fallback, extractedFiles };
+  if (!text.trim() || !effectiveAiSettings?.["API Key"]) return { ...fallback, extractedFiles };
 
   try {
-    const ai = normalizeAiSettings(aiSettings);
+    const ai = normalizeAiSettings(effectiveAiSettings);
     const data = await requestAiJson(ai, values, text);
     const content = data.choices?.[0]?.message?.content || "{}";
     return {
@@ -1133,6 +1134,20 @@ async function analyzeProjectFiles(aiSettings, values, files, interestRateSettin
       summary: `${fallback.summary} AI 解析未完成，已使用本地规则抽取。原因：${error.message}`
     };
   }
+}
+
+function resolveAiSettings(settings = {}) {
+  const envSettings = {
+    "服务商": process.env.AI_PROVIDER || process.env.OPENAI_PROVIDER || "",
+    "API Key": process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "",
+    "Base URL": process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "",
+    "模型名称": process.env.AI_MODEL || process.env.OPENAI_MODEL || ""
+  };
+  const merged = { ...(settings || {}) };
+  for (const [key, value] of Object.entries(envSettings)) {
+    if (!merged[key] && value) merged[key] = value;
+  }
+  return normalizeAiSettings(merged);
 }
 
 function mergeParsedFields(fallback, aiParsed) {
