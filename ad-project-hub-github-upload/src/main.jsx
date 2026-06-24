@@ -393,7 +393,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [searchText, setSearchText] = useState("");
   const isAdmin = ["shareholder", "admin"].includes(session?.role);
   const isManagement = canSeeManagement(session);
-  const aiConfigured = Boolean(state?.settings?.aiService?.["API Key"]);
+  const aiConfigured = Boolean(state?.settings?.aiService?.configured || state?.settings?.aiService?.["API Key"]);
   const feishuConfigured = Boolean(state?.settings?.feishu?.appId && state?.settings?.feishu?.appSecret);
   const wechatConfigured = Boolean(state?.settings?.wechat?.webhookUrl || state?.settings?.wechat?.corpId);
   const projects = useMemo(() => {
@@ -574,6 +574,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           {navGroups.map(({ key, icon: Icon, label, children }) => (
             <div className={`nav-group ${openNav[key] ? "open" : ""}`} key={key}>
               <button
+                type="button"
                 className={`nav-parent ${activeView === key ? "active" : ""}`}
                 onClick={() => {
                   if (children?.length) {
@@ -595,6 +596,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
               {!!children?.length && <div className="nav-children">
                 {children.map(([, child]) => (
                   <button
+                    type="button"
                     className={activeView === key && activeSubView === child ? "active" : ""}
                     key={`${key}-${child}`}
                     onClick={() => {
@@ -609,19 +611,20 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             </div>
           ))}
           {isAdmin && (
-            <a
-              className={view === "admin" ? "active" : ""}
+            <button
+              type="button"
+              className={`nav-admin-entry ${view === "admin" ? "active" : ""}`}
               onClick={() => setView("admin")}
             >
               <Settings2 size={18} />后台管理
-            </a>
+            </button>
           )}
         </nav>
         <div className="integration">
           <p>{session.name} · {roleLabel(session.role)}</p>
-          <button onClick={() => setNotice(feishuConfigured ? "飞书配置已保存。正式收发群文件还需要在飞书开放平台把事件订阅 URL 指向当前服务。" : "飞书未配置：请到后台管理 > 产品设置填写 App ID、App Secret 和事件订阅地址。")}><MessageSquareText size={16} />飞书机器人</button>
-          <button onClick={() => setNotice(wechatConfigured ? "企业微信配置已保存。正式通知需要在企业微信后台启用机器人或应用回调。" : "企业微信未配置：请到后台管理 > 产品设置填写 Webhook 或企业应用信息。")}><MessageSquareText size={16} />企业微信</button>
-          <button onClick={onLogout}><LogOut size={16} />退出登录</button>
+          <button type="button" onClick={() => setNotice(feishuConfigured ? "飞书配置已保存。正式收发群文件还需要在飞书开放平台把事件订阅 URL 指向当前服务。" : "飞书未配置：请到后台管理 > 产品设置填写 App ID、App Secret 和事件订阅地址。")}><MessageSquareText size={16} />飞书机器人</button>
+          <button type="button" onClick={() => setNotice(wechatConfigured ? "企业微信配置已保存。正式通知需要在企业微信后台启用机器人或应用回调。" : "企业微信未配置：请到后台管理 > 产品设置填写 Webhook 或企业应用信息。")}><MessageSquareText size={16} />企业微信</button>
+          <button type="button" onClick={onLogout}><LogOut size={16} />退出登录</button>
         </div>
       </aside>
 
@@ -633,17 +636,17 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           </div>
           <div className="actions">
             <div className="search"><Search size={16} /><input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="搜索项目、客户、负责人" /></div>
-            <button className="ghost" onClick={() => setFilterOpen(!filterOpen)}><Filter size={16} />筛选</button>
-            {isAdmin && <button className="ghost" onClick={() => setView("admin")}><UserCog size={16} />成员管理</button>}
-            {isAdmin && <button className={aiConfigured ? "ghost" : "ghost warning"} onClick={() => setView("admin:ai")}><Bot size={16} />{aiConfigured ? "AI 已接入" : "接入 AI"}</button>}
-            <button className="primary" onClick={() => setUploadOpen(true)}><Plus size={16} />新建项目</button>
+            <button type="button" className="ghost" onClick={() => setFilterOpen(!filterOpen)}><Filter size={16} />筛选</button>
+            {isAdmin && <button type="button" className="ghost" onClick={() => setView("admin")}><UserCog size={16} />成员管理</button>}
+            {isAdmin && <button type="button" className={aiConfigured ? "ghost" : "ghost warning"} onClick={() => setView("admin:ai")}><Bot size={16} />{aiConfigured ? "AI 已接入" : "接入 AI"}</button>}
+            <button type="button" className="primary" onClick={() => setUploadOpen(true)}><Plus size={16} />新建项目</button>
           </div>
         </header>
-        {notice && <div className="notice-bar"><span>{notice}</span><button onClick={() => setNotice("")}>知道了</button></div>}
+        {notice && <div className="notice-bar"><span>{notice}</span><button type="button" onClick={() => setNotice("")}>知道了</button></div>}
         {filterOpen && <div className="filter-panel">
-          <button className={role === "全部角色" ? "active" : ""} onClick={() => setRole("全部角色")}>全部提醒</button>
+          <button type="button" className={role === "全部角色" ? "active" : ""} onClick={() => setRole("全部角色")}>全部提醒</button>
           {["PM", "销售", "管理层"].map((item) => (
-            <button className={role === item ? "active" : ""} key={item} onClick={() => setRole(item)}>{item}</button>
+            <button type="button" className={role === item ? "active" : ""} key={item} onClick={() => setRole(item)}>{item}</button>
           ))}
         </div>}
 
@@ -662,7 +665,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
               <PanelTitle icon={Search} title="没有匹配的项目" />
               <h2>当前搜索没有结果。</h2>
               <p>换一个项目名、客户名、负责人或 PM 试试。</p>
-              <button className="ghost" onClick={() => setSearchText("")}>清空搜索</button>
+              <button type="button" className="ghost" onClick={() => setSearchText("")}>清空搜索</button>
             </div>
           </section>
         )}
@@ -687,7 +690,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           onDone={() => loadState()}
           onNotice={setNotice}
         />}
-        {!!visibleProjects.length && activeView === "closeout" && <CloseoutReview project={selected} isManagement={isManagement} />}
+        {!!visibleProjects.length && activeView === "closeout" && <CloseoutReview project={selected} isManagement={isManagement} subView={activeSubView} />}
         {activeView === "management" && isManagement && <ManagementCockpit
           projects={projects}
           approvals={state?.approvals || []}
@@ -739,10 +742,11 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             <div className="project-list">
               <div className="section-head">
                 <h2>我的项目</h2>
-                <button onClick={() => setUploadOpen(true)}><UploadCloud size={16} />上传合同/执行表</button>
+                <button type="button" onClick={() => setUploadOpen(true)}><UploadCloud size={16} />上传合同/执行表</button>
               </div>
               {visibleProjects.map((project) => (
                 <button
+                  type="button"
                   className={`project-row ${project.id === selectedId ? "selected" : ""}`}
                   key={project.id}
                   onClick={() => setSelectedId(project.id)}
@@ -854,8 +858,8 @@ function EmptyProjectState({ isManagement, isAdmin, onUpload, onAdmin }) {
         <h2>先上传第一份合同或报价表，OA 才会开始生成项目数据。</h2>
         <p>{isManagement ? "上传后会自动进入项目台账、审批、回款、成本复盘和经营舱统计。" : "如果你还看不到项目，可能是管理员还没有把你绑定到项目里。"}</p>
         <div className="button-row">
-          <button className="primary" onClick={onUpload}><UploadCloud size={16} />上传合同创建项目</button>
-          {isAdmin && <button className="ghost" onClick={onAdmin}><UserCog size={16} />成员与权限</button>}
+          <button type="button" className="primary" onClick={onUpload}><UploadCloud size={16} />上传合同创建项目</button>
+          {isAdmin && <button type="button" className="ghost" onClick={onAdmin}><UserCog size={16} />成员与权限</button>}
         </div>
       </div>
       <div className="empty-steps">
@@ -887,7 +891,7 @@ function EmployeeProjectOverview({ projects, selected, onSelect, onUpload }) {
           <h2>{selected.name}</h2>
           <p>{selected.client} · {selected.pm} 负责 · 下一节点：{selected.nextMilestone}</p>
         </div>
-        <button className="primary hero-upload" onClick={onUpload}><UploadCloud size={16} /><span>上传项目文件</span></button>
+        <button type="button" className="primary hero-upload" onClick={onUpload}><UploadCloud size={16} /><span>上传项目文件</span></button>
       </section>
 
       <section className="metrics employee-metrics">
@@ -940,6 +944,7 @@ function EmployeeProjectOverview({ projects, selected, onSelect, onUpload }) {
           <div className="employee-project-strip">
             {projects.slice(0, 5).map((project) => (
               <button
+                type="button"
                 className={project.id === selected.id ? "active" : ""}
                 key={project.id}
                 onClick={() => onSelect(project.id)}
@@ -1014,9 +1019,9 @@ function DashboardAiPanel({ session, projects, approvals = [], settings = {}, st
       </div>
 
       <div className="ai-quick-tags">
-        <button onClick={() => send("我的项目备用金还有多少？")}>备用金</button>
-        <button onClick={() => send("这个项目进度怎么样？")}>进度</button>
-        <button onClick={() => send("帮我生成一个更容易过稿的内容方向")}>内容</button>
+        <button type="button" onClick={() => send("我的项目备用金还有多少？")}>备用金</button>
+        <button type="button" onClick={() => send("这个项目进度怎么样？")}>进度</button>
+        <button type="button" onClick={() => send("帮我生成一个更容易过稿的内容方向")}>内容</button>
       </div>
 
       <div className="ai-feed">
@@ -1042,7 +1047,7 @@ function DashboardAiPanel({ session, projects, approvals = [], settings = {}, st
           }}
           placeholder="随心输入，问项目、报销、备用金或内容创意"
         />
-        <button onClick={() => send()} disabled={sending}><ChevronRight size={18} /></button>
+        <button type="button" onClick={() => send()} disabled={sending}><ChevronRight size={18} /></button>
       </div>
     </aside>
   );
@@ -1216,11 +1221,11 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
           <h2>项目基础信息</h2>
           {editing ? (
             <div className="button-row">
-              <button className="ghost" onClick={() => setEditing(false)}>取消</button>
-              <button className="primary" onClick={saveProject} disabled={saving}>{saving ? "保存中" : "保存"}</button>
+              <button type="button" className="ghost" onClick={() => setEditing(false)}>取消</button>
+              <button type="button" className="primary" onClick={saveProject} disabled={saving}>{saving ? "保存中" : "保存"}</button>
             </div>
           ) : (
-            <button onClick={() => setEditing(true)}>编辑</button>
+            <button type="button" onClick={() => setEditing(true)}>编辑</button>
           )}
         </div>
         <div className="detail-form-grid">
@@ -1328,7 +1333,7 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
             onChange={(event) => setCommentText(event.target.value)}
             placeholder="记录一句项目进展、客户反馈、材料补充或风险提醒"
           />
-          <button className="primary" disabled={commenting}>{commenting ? "记录中" : "记录"}</button>
+          <button type="submit" className="primary" disabled={commenting}>{commenting ? "记录中" : "记录"}</button>
         </form>
         <div className="activity-list">
           {activityItems.length ? activityItems.map((item, index) => (
@@ -1403,10 +1408,10 @@ function AiWorkbench({ session, projects, approvals = [], settings = {}, stats =
           <p>问备用金、报销、进度、材料缺口，或者把合同、报价表、成本表、票据、核销表发过来，我会先识别你的账号和项目权限，再帮你归档或登记。</p>
         </div>
         <div className="prompt-list">
-          <button onClick={() => ask("我的项目备用金还有多少？")}>我的项目备用金还有多少？</button>
-          <button onClick={() => ask(`帮我提交500元报销到${selected.name}`)}>帮我提交一笔报销</button>
-          <button onClick={() => ask("这个项目进度怎么样？")}>这个项目进度怎么样？</button>
-          <button onClick={() => ask("给我生成一个更容易过稿的内容方向")}>给我生成一个更容易过稿的内容方向</button>
+          <button type="button" onClick={() => ask("我的项目备用金还有多少？")}>我的项目备用金还有多少？</button>
+          <button type="button" onClick={() => ask(`帮我提交500元报销到${selected.name}`)}>帮我提交一笔报销</button>
+          <button type="button" onClick={() => ask("这个项目进度怎么样？")}>这个项目进度怎么样？</button>
+          <button type="button" onClick={() => ask("给我生成一个更容易过稿的内容方向")}>给我生成一个更容易过稿的内容方向</button>
         </div>
         <div className="ai-feed ai-workbench-feed">
           {messages.map((message, index) => (
@@ -1427,7 +1432,7 @@ function AiWorkbench({ session, projects, approvals = [], settings = {}, stats =
         <div className="chat-input ai-main-input">
           <UploadCloud size={16} />
           <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="输入问题，或先用上传入口让 AI 识别项目文件" />
-          <button onClick={() => ask()} disabled={sending}>{sending ? "处理中" : "发送"}</button>
+          <button type="button" onClick={() => ask()} disabled={sending}>{sending ? "处理中" : "发送"}</button>
         </div>
       </div>
 
@@ -1543,6 +1548,7 @@ function ApprovalFunds({ projects, approvals, selected, session, subView, setSub
       <div className="approval-type-row">
         {categories.map((item) => (
           <button
+            type="button"
             className={`approval-type ${activeCategory === item.label ? "active" : ""}`}
             key={item.label}
             onClick={() => {
@@ -1585,7 +1591,7 @@ function ApprovalFunds({ projects, approvals, selected, session, subView, setSub
           <span>说明</span>
           <input value={form.reason} onChange={(event) => updateForm("reason", event.target.value)} placeholder="拍摄交通、道具采购、票据说明等" />
         </label>
-        <button className="primary" disabled={submitting}>{submitting ? "提交中" : "提交审批"}</button>
+        <button type="submit" className="primary" disabled={submitting}>{submitting ? "提交中" : "提交审批"}</button>
       </form>
 
       <div className="feature-panel approval-main">
@@ -1647,32 +1653,56 @@ function ApprovalFunds({ projects, approvals, selected, session, subView, setSub
   );
 }
 
-function CloseoutReview({ project, isManagement }) {
+function CloseoutReview({ project, isManagement, subView }) {
   const costRows = (project.costs || []).filter(([, value]) => Number(value) > 0).sort((a, b) => Number(b[1]) - Number(a[1]));
   const topCost = costRows[0] || ["待归集成本", project.costUsed];
+  const totalCost = costRows.reduce((sum, [, value]) => sum + Number(value || 0), 0) || Number(project.costUsed || 0);
+  const showRanking = subView === "支出排行";
   return (
     <section className="feature-grid">
-      <div className="feature-panel wide-feature">
-        <PanelTitle icon={FileSpreadsheet} title="项目结案成本复盘" />
-        <div className="review-summary">
-          <Mini label="合同金额" value={money(project.contract)} />
-          <Mini label="总成本" value={money(project.costUsed)} />
-          <Mini label={isManagement ? "项目利润" : "结案状态"} value={isManagement ? money(project.contract - project.costUsed) : "待复盘"} />
-          <Mini label={isManagement ? "毛利率" : "资料完整度"} value={isManagement ? `${project.margin}%` : `${Math.min(100, project.progress + 12)}%`} />
+      {!showRanking && <>
+        <div className="feature-panel wide-feature">
+          <PanelTitle icon={FileSpreadsheet} title="项目结案成本复盘" />
+          <div className="review-summary">
+            <Mini label="合同金额" value={money(project.contract)} />
+            <Mini label="总成本" value={money(project.costUsed)} />
+            <Mini label={isManagement ? "项目利润" : "结案状态"} value={isManagement ? money(project.contract - project.costUsed) : "待复盘"} />
+            <Mini label={isManagement ? "毛利率" : "资料完整度"} value={isManagement ? `${project.margin}%` : `${Math.min(100, project.progress + 12)}%`} />
+          </div>
+          <div className="idea-card">
+            <strong>AI 优化建议</strong>
+            <p>当前最大支出为「{topCost[0]}」{money(topCost[1])}。建议复盘供应商报价、追加审批和月度核销节奏，沉淀到下次同类项目启动清单。</p>
+          </div>
         </div>
-        <div className="idea-card">
-          <strong>AI 优化建议</strong>
-          <p>当前最大支出为「{topCost[0]}」{money(topCost[1])}。建议复盘供应商报价、追加审批和月度核销节奏，沉淀到下次同类项目启动清单。</p>
+        <div className="feature-panel">
+          <PanelTitle icon={ShieldAlert} title="复盘风险" />
+          <div className="compact-list">
+            <div><strong>最大支出</strong><span>{topCost[0]} · {money(topCost[1])}</span></div>
+            <div><strong>成本占合同</strong><span>{project.contract ? `${Math.round((Number(project.costUsed || 0) / Number(project.contract || 1)) * 100)}%` : "待确认合同"}</span></div>
+            <div><strong>回款状态</strong><span>{project.receivable > 0 ? `待回款 ${money(project.receivable)}` : "已无待回款"}</span></div>
+          </div>
         </div>
-      </div>
-      <div className="feature-panel">
-        <PanelTitle icon={BarChart3} title="支出排行" />
-        <div className="compact-list">
-          {costRows.slice(0, 5).map(([name, value]) => (
-            <div key={name}><strong>{name}</strong><span>{money(value)}</span></div>
-          ))}
+      </>}
+      {showRanking && <>
+        <div className="feature-panel wide-feature">
+          <PanelTitle icon={BarChart3} title="支出排行" />
+          <div className="compact-list">
+            {costRows.length ? costRows.slice(0, 8).map(([name, value]) => (
+              <div key={name}>
+                <strong>{name}</strong>
+                <span>{money(value)} · 占总成本 {totalCost ? Math.round((Number(value || 0) / totalCost) * 100) : 0}%</span>
+              </div>
+            )) : <div className="empty-state">暂无成本明细，上传成本表或报销通过后会自动出现在这里。</div>}
+          </div>
         </div>
-      </div>
+        <div className="feature-panel">
+          <PanelTitle icon={Bot} title="支出优化建议" />
+          <div className="logic-list">
+            <LogicItem title="优先复盘" text={`先看最大支出「${topCost[0]}」，确认是否有临时追加、供应商报价偏高或审批滞后。`} />
+            <LogicItem title="下次控制" text="把高占比支出前置到立项预算里，并设置超过预算阈值时必须重新审批。" />
+          </div>
+        </div>
+      </>}
     </section>
   );
 }
@@ -1752,7 +1782,7 @@ function ManagementCockpit({ projects, approvals = [], settings = {}, session, s
           <input value={financeForm[key]} onChange={(event) => setFinanceForm((current) => ({ ...current, [key]: event.target.value }))} placeholder="填写金额" />
         </label>
       ))}
-      <button className="primary" disabled={savingFinance}>{savingFinance ? "保存中" : "保存现金设置"}</button>
+      <button type="submit" className="primary" disabled={savingFinance}>{savingFinance ? "保存中" : "保存现金设置"}</button>
     </form>
   );
   return (
@@ -2047,7 +2077,7 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
         <div className="modal-actions">
           <button type="button" className="ghost" onClick={onClose}>取消</button>
           {preview && !confirmed && <button type="button" className="ghost" onClick={requestPreview} disabled={loading}>重新预览</button>}
-          <button className="primary" disabled={loading || (preview && !preview.canConfirm)}>{loading ? "处理中" : preview ? "确认入库" : "AI 预览识别"}</button>
+          <button type="submit" className="primary" disabled={loading || (preview && !preview.canConfirm)}>{loading ? "处理中" : preview ? "确认入库" : "AI 预览识别"}</button>
         </div>
       </form>
     </div>
@@ -2162,7 +2192,7 @@ function LoginScreen({ onLogin }) {
             <div className="input-row"><LockKeyhole size={16} /><input value={pin} type="password" onChange={(event) => setPin(event.target.value)} /></div>
           </label>
           {error && <p className="form-error">{error}</p>}
-          <button className="primary" disabled={loading}>{loading ? "登录中" : "进入系统"}</button>
+          <button type="submit" className="primary" disabled={loading}>{loading ? "登录中" : "进入系统"}</button>
         </form>
         <p className="login-hint">默认管理员：admin@company.local / 123456。上线后请在成员管理里修改 PIN。</p>
       </section>
@@ -2333,6 +2363,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
         body: JSON.stringify({ type: "aiService", values: aiSettings }),
       });
       setSettingsMessage("AI API 已保存，后续合同/表格解析会使用这套配置。");
+      await loadSettings();
     } catch (err) {
       setSettingsMessage(err.message);
     }
@@ -2377,14 +2408,14 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
           </div>
         </div>
         <nav>
-          <a onClick={() => setView("app")}><LayoutDashboard size={18} />返回员工端</a>
-          <a className={adminTab === "members" ? "active" : ""} onClick={() => setAdminTab("members")}><UsersRound size={18} />成员管理</a>
-          <a className={adminTab === "ai" ? "active" : ""} onClick={() => setAdminTab("ai")}><Bot size={18} />AI 接入</a>
-          <a className={adminTab === "product" ? "active" : ""} onClick={() => setAdminTab("product")}><Settings2 size={18} />产品设置</a>
+          <button type="button" className="admin-nav-link" onClick={() => setView("app")}><LayoutDashboard size={18} />返回员工端</button>
+          <button type="button" className={`admin-nav-link ${adminTab === "members" ? "active" : ""}`} onClick={() => setAdminTab("members")}><UsersRound size={18} />成员管理</button>
+          <button type="button" className={`admin-nav-link ${adminTab === "ai" ? "active" : ""}`} onClick={() => setAdminTab("ai")}><Bot size={18} />AI 接入</button>
+          <button type="button" className={`admin-nav-link ${adminTab === "product" ? "active" : ""}`} onClick={() => setAdminTab("product")}><Settings2 size={18} />产品设置</button>
         </nav>
         <div className="integration">
           <p>{session.name} · {roleLabel(session.role)}</p>
-          <button onClick={onLogout}><LogOut size={16} />退出登录</button>
+          <button type="button" onClick={onLogout}><LogOut size={16} />退出登录</button>
         </div>
       </aside>
       <main>
@@ -2393,7 +2424,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
             <h1>{adminTab === "members" ? "成员管理" : adminTab === "ai" ? "AI 接入" : "产品设置"}</h1>
             <p>{adminTab === "members" ? "维护内部账号、角色和后台访问权限" : adminTab === "ai" ? "配置 DeepSeek、Kimi、OpenAI 或兼容模型，用于合同和表格智能解析" : "维护产品基础参数和上传提醒"}</p>
           </div>
-          {adminTab === "members" && <button className="ghost" onClick={resetForm}><Plus size={16} />新增成员</button>}
+          {adminTab === "members" && <button type="button" className="ghost" onClick={resetForm}><Plus size={16} />新增成员</button>}
         </header>
 
         {adminTab === "members" && <section className="admin-grid">
@@ -2410,7 +2441,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
             <label><span>部门</span><input value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} /></label>
             <label><span>临时 PIN</span><input value={form.pin} placeholder="留空则保持不变" onChange={(event) => setForm({ ...form, pin: event.target.value })} /></label>
             {message && <p className="form-message">{message}</p>}
-            <button className="primary">保存成员</button>
+            <button type="submit" className="primary">保存成员</button>
           </form>
 
           <div className="member-table">
@@ -2423,8 +2454,8 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
                 </div>
                 <b className={`role-pill ${member.role}`}>{roleLabel(member.role)}</b>
                 <b className={`status-pill ${member.status}`}>{member.status === "disabled" ? "已停用" : "启用中"}</b>
-                <button className="ghost" onClick={() => edit(member)}>编辑</button>
-                <button className="ghost" onClick={() => toggle(member)}>{member.status === "disabled" ? "启用" : "停用"}</button>
+                <button type="button" className="ghost" onClick={() => edit(member)}>编辑</button>
+                <button type="button" className="ghost" onClick={() => toggle(member)}>{member.status === "disabled" ? "启用" : "停用"}</button>
               </div>
             ))}
           </div>
@@ -2451,7 +2482,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
             {settingsMessage && <p className="form-message">{settingsMessage}</p>}
             <div className="button-row">
               <button className="ghost" type="button" onClick={testAi}>测试连接</button>
-              <button className="primary">保存 AI API</button>
+              <button type="submit" className="primary">保存 AI API</button>
             </div>
           </form>
           <div className="member-table settings-help">
@@ -2476,7 +2507,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
               </label>
             ))}
             {settingsMessage && <p className="form-message">{settingsMessage}</p>}
-            <button className="primary">保存产品设置</button>
+            <button type="submit" className="primary">保存产品设置</button>
           </form>
           <div className="member-table settings-help">
             <div className="section-head"><h2>协同与生产配置</h2></div>

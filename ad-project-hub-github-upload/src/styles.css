@@ -68,18 +68,27 @@ nav {
 }
 
 nav a,
+.admin-nav-link,
+.nav-admin-entry,
 .integration button {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   min-height: 40px;
+  border: 0;
   border-radius: 8px;
+  background: transparent;
   color: #c8d3e2;
   text-decoration: none;
+  text-align: left;
   padding: 0 12px;
+  cursor: pointer;
 }
 
-nav a.active {
+nav a.active,
+.admin-nav-link.active,
+.nav-admin-entry.active {
   background: #223557;
   color: #ffffff;
 }
@@ -1114,6 +1123,8 @@ body {
 
 .nav-parent,
 nav a,
+.admin-nav-link,
+.nav-admin-entry,
 .integration button {
   min-height: 44px;
   border-radius: 16px;
@@ -1123,6 +1134,8 @@ nav a,
 
 .nav-parent:hover,
 nav a:hover,
+.admin-nav-link:hover,
+.nav-admin-entry:hover,
 .nav-children button:hover,
 .integration button:hover {
   background: rgba(102, 84, 241, 0.08);
@@ -1130,14 +1143,18 @@ nav a:hover,
 }
 
 .nav-parent.active,
-nav a.active {
+nav a.active,
+.admin-nav-link.active,
+.nav-admin-entry.active {
   background: linear-gradient(135deg, #6654f1, #745cff);
   color: #ffffff;
   box-shadow: 0 16px 32px rgba(102, 84, 241, 0.24);
 }
 
 .nav-parent.active svg,
-nav a.active svg {
+nav a.active svg,
+.admin-nav-link.active svg,
+.nav-admin-entry.active svg {
   color: #ffffff;
 }
 
