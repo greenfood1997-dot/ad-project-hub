@@ -391,7 +391,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [searchText, setSearchText] = useState("");
-  const isAdmin = session?.role === "admin";
+  const isAdmin = ["shareholder", "admin"].includes(session?.role);
   const isManagement = canSeeManagement(session);
   const aiConfigured = Boolean(state?.settings?.aiService?.["API Key"]);
   const feishuConfigured = Boolean(state?.settings?.feishu?.appId && state?.settings?.feishu?.appSecret);
@@ -1599,7 +1599,7 @@ function ApprovalFunds({ projects, approvals, selected, session, subView, setSub
               </div>
               <b>{money(item.amount)}</b>
               <em>{item.status}</em>
-              <button onClick={() => setSelectedApprovalKey(item.id)}>查看</button>
+              <button type="button" onClick={() => setSelectedApprovalKey(item.id)}>查看</button>
             </div>
           )) : <div className="empty-state">暂无审批单，可以从左侧提交备用金或报销。</div>}
         </div>
@@ -1628,8 +1628,8 @@ function ApprovalFunds({ projects, approvals, selected, session, subView, setSub
           ))}
         </div>}
         {canAct && <div className="approval-actions">
-          <button className="primary" onClick={() => act("approve")}>通过</button>
-          <button className="ghost" onClick={() => act("reject")}>驳回</button>
+          <button type="button" className="primary" onClick={() => act("approve")}>通过</button>
+          <button type="button" className="ghost" onClick={() => act("reject")}>驳回</button>
         </div>}
       </div>
 
@@ -1727,80 +1727,122 @@ function ManagementCockpit({ projects, approvals = [], settings = {}, session, s
   ];
   const showCash = subView === "现金流压力";
   const showAdvisor = subView === "AI 商业顾问";
+  const showDashboard = !showCash && !showAdvisor;
+  const cashHealthClass = metrics.runway.runwayLabel.includes("危险") || metrics.pressureLevel === "高" ? "danger" : metrics.pressureLevel === "中" ? "ok" : "good";
+  const cashHealth = (
+    <div className={`health-card ${cashHealthClass}`}>
+      <div><span>压力等级</span><strong>{metrics.runway.runwayLabel.includes("危险") ? "危险" : metrics.pressureLevel}</strong></div>
+      <div className="health-track"><i style={{ width: `${Math.min(100, metrics.pressureScore)}%` }} /></div>
+      <p>{metrics.runway.runwayLabel}。待回款 {money(stats.receivable)} · 待备用金 {money(metrics.pendingPettyCash)} · 待报销 {money(metrics.pendingReimbursements)} · 待供应商付款 {money(metrics.pendingSupplierPay)}</p>
+    </div>
+  );
+  const financeSettingsForm = (
+    <form className="feature-panel settings-form" onSubmit={saveFinance}>
+      <PanelTitle icon={Settings2} title="经营现金设置" />
+      {[
+        ["currentCash", "当前公司现金"],
+        ["monthlyLaborCost", "每月人力成本"],
+        ["monthlyRent", "每月租金"],
+        ["monthlyLoan", "每月贷款"],
+        ["monthlyInterest", "每月利息"],
+        ["monthlyOtherCost", "每月其他固定支出"]
+      ].map(([key, label]) => (
+        <label key={key}>
+          <span>{label}</span>
+          <input value={financeForm[key]} onChange={(event) => setFinanceForm((current) => ({ ...current, [key]: event.target.value }))} placeholder="填写金额" />
+        </label>
+      ))}
+      <button className="primary" disabled={savingFinance}>{savingFinance ? "保存中" : "保存现金设置"}</button>
+    </form>
+  );
   return (
     <section className="feature-grid">
-      <div className="feature-panel founder-card wide-feature">
-        <PanelTitle icon={BarChart3} title={showCash ? "现金流压力" : showAdvisor ? "AI 商业顾问" : "公司经营大盘"} />
-        <div className="review-summary">
-          <Mini label="合同总额" value={money(stats.contract)} />
-          <Mini label="已回款" value={money(stats.paid)} />
-          <Mini label="待回款" value={money(stats.receivable)} />
-          <Mini label="总支出" value={money(metrics.spending)} />
-          <Mini label="项目利润" value={money(metrics.profit)} />
-          <Mini label="综合毛利率" value={`${metrics.margin}%`} />
-          <Mini label="进行中项目" value={`${metrics.activeProjects.length} 个`} />
-          <Mini label="已完成项目" value={`${metrics.completedProjects.length} 个`} />
-          <Mini label="现金可撑" value={metrics.runway.monthlyFixedCost ? `${metrics.runway.runwayMonths.toFixed(1)}月` : "待设置"} />
-          <Mini label="6个月缺口" value={money(metrics.runway.gap)} />
+      {showDashboard && <>
+        <div className="feature-panel founder-card wide-feature">
+          <PanelTitle icon={BarChart3} title="公司经营大盘" />
+          <div className="review-summary">
+            <Mini label="合同总额" value={money(stats.contract)} />
+            <Mini label="已回款" value={money(stats.paid)} />
+            <Mini label="待回款" value={money(stats.receivable)} />
+            <Mini label="总支出" value={money(metrics.spending)} />
+            <Mini label="项目利润" value={money(metrics.profit)} />
+            <Mini label="综合毛利率" value={`${metrics.margin}%`} />
+            <Mini label="进行中项目" value={`${metrics.activeProjects.length} 个`} />
+            <Mini label="已完成项目" value={`${metrics.completedProjects.length} 个`} />
+            <Mini label="现金可撑" value={metrics.runway.monthlyFixedCost ? `${metrics.runway.runwayMonths.toFixed(1)}月` : "待设置"} />
+            <Mini label="6个月缺口" value={money(metrics.runway.gap)} />
+          </div>
         </div>
-        <div className="idea-card">
-          <strong>经营建议：{metrics.recommendation}</strong>
-          <p>{evidence.join("；")}。{metrics.advisorActions.join("；")}。</p>
+        <div className="feature-panel">
+          <PanelTitle icon={AlertTriangle} title="风险雷达" />
+          <div className="compact-list">
+            {metrics.highRiskProjects.slice(0, 5).map((project) => (
+              <div key={project.id}><strong>{project.name}</strong><span>{project.risk}风险 · 待回款 {money(project.receivable)} · 成本占比 {project.costRate}% · 毛利率 {project.projectMargin}%</span></div>
+            ))}
+          </div>
         </div>
-      </div>
-      <div className="feature-panel">
-        <PanelTitle icon={CircleDollarSign} title="现金流压力" />
-        <div className={`health-card ${metrics.runway.runwayLabel.includes("危险") || metrics.pressureLevel === "高" ? "danger" : metrics.pressureLevel === "中" ? "ok" : "good"}`}>
-          <div><span>压力等级</span><strong>{metrics.runway.runwayLabel.includes("危险") ? "危险" : metrics.pressureLevel}</strong></div>
-          <div className="health-track"><i style={{ width: `${Math.min(100, metrics.pressureScore)}%` }} /></div>
-          <p>{metrics.runway.runwayLabel}。待回款 {money(stats.receivable)} · 待备用金 {money(metrics.pendingPettyCash)} · 待报销 {money(metrics.pendingReimbursements)} · 待供应商付款 {money(metrics.pendingSupplierPay)}</p>
+        <div className="feature-panel">
+          <PanelTitle icon={UsersRound} title="项目结构" />
+          <div className="compact-list">
+            <div><strong>高风险项目</strong><span>{projects.filter((project) => project.risk === "高").length} 个</span></div>
+            <div><strong>中风险项目</strong><span>{projects.filter((project) => project.risk === "中").length} 个</span></div>
+            <div><strong>低风险项目</strong><span>{projects.filter((project) => project.risk === "低").length} 个</span></div>
+            <div><strong>待审批</strong><span>{metrics.pendingApprovals.length} 条</span></div>
+          </div>
         </div>
-        <div className="compact-list">
-          <div><strong>现金压力总暴露</strong><span>{money(metrics.cashPressureAmount)}</span></div>
-          <div><strong>待处理审批</strong><span>{metrics.pendingApprovals.length} 条</span></div>
-          <div><strong>月固定支出</strong><span>{money(metrics.runway.monthlyFixedCost)}</span></div>
-          <div><strong>6个月安全线</strong><span>{money(metrics.runway.safetyReserve)}</span></div>
+      </>}
+      {showCash && <>
+        <div className="feature-panel wide-feature">
+          <PanelTitle icon={CircleDollarSign} title="现金流压力" />
+          {cashHealth}
+          <div className="review-summary">
+            <Mini label="当前现金" value={money(metrics.runway.currentCash)} />
+            <Mini label="月固定支出" value={money(metrics.runway.monthlyFixedCost)} />
+            <Mini label="6个月安全线" value={money(metrics.runway.safetyReserve)} />
+            <Mini label="6个月缺口" value={money(metrics.runway.gap)} />
+          </div>
         </div>
-      </div>
-      <form className="feature-panel settings-form" onSubmit={saveFinance}>
-        <PanelTitle icon={Settings2} title="经营现金设置" />
-        {[
-          ["currentCash", "当前公司现金"],
-          ["monthlyLaborCost", "每月人力成本"],
-          ["monthlyRent", "每月租金"],
-          ["monthlyLoan", "每月贷款"],
-          ["monthlyInterest", "每月利息"],
-          ["monthlyOtherCost", "每月其他固定支出"]
-        ].map(([key, label]) => (
-          <label key={key}>
-            <span>{label}</span>
-            <input value={financeForm[key]} onChange={(event) => setFinanceForm((current) => ({ ...current, [key]: event.target.value }))} placeholder="填写金额" />
-          </label>
-        ))}
-        <button className="primary" disabled={savingFinance}>{savingFinance ? "保存中" : "保存现金设置"}</button>
-      </form>
-      <div className="feature-panel">
-        <PanelTitle icon={AlertTriangle} title="风险雷达" />
-        <div className="compact-list">
-          {metrics.highRiskProjects.slice(0, 5).map((project) => (
-            <div key={project.id}><strong>{project.name}</strong><span>{project.risk}风险 · 待回款 {money(project.receivable)} · 成本占比 {project.costRate}% · 毛利率 {project.projectMargin}%</span></div>
-          ))}
+        <div className="feature-panel">
+          <PanelTitle icon={AlertTriangle} title="现金压力来源" />
+          <div className="compact-list">
+            <div><strong>现金压力总暴露</strong><span>{money(metrics.cashPressureAmount)}</span></div>
+            <div><strong>待回款</strong><span>{money(stats.receivable)}</span></div>
+            <div><strong>待备用金</strong><span>{money(metrics.pendingPettyCash)}</span></div>
+            <div><strong>待报销</strong><span>{money(metrics.pendingReimbursements)}</span></div>
+            <div><strong>待供应商付款</strong><span>{money(metrics.pendingSupplierPay)}</span></div>
+          </div>
         </div>
-      </div>
-      <div className="feature-panel">
-        <PanelTitle icon={Bot} title="商业顾问动作" />
-        <div className="logic-list">
-          {metrics.advisorActions.map((action, index) => <LogicItem title={`建议 ${index + 1}`} text={action} key={action} />)}
+        {financeSettingsForm}
+      </>}
+      {showAdvisor && <>
+        <div className="feature-panel founder-card wide-feature">
+          <PanelTitle icon={Bot} title="AI 商业顾问" />
+          <div className="idea-card">
+            <strong>经营建议：{metrics.recommendation}</strong>
+            <p>{evidence.join("；")}。</p>
+          </div>
+          <div className="logic-list">
+            {metrics.advisorActions.map((action, index) => <LogicItem title={`建议 ${index + 1}`} text={action} key={action} />)}
+          </div>
         </div>
-      </div>
-      <div className="feature-panel">
-        <PanelTitle icon={UsersRound} title="项目结构" />
-        <div className="compact-list">
-          <div><strong>高风险项目</strong><span>{projects.filter((project) => project.risk === "高").length} 个</span></div>
-          <div><strong>中风险项目</strong><span>{projects.filter((project) => project.risk === "中").length} 个</span></div>
-          <div><strong>低风险项目</strong><span>{projects.filter((project) => project.risk === "低").length} 个</span></div>
+        <div className="feature-panel">
+          <PanelTitle icon={BarChart3} title="判断依据" />
+          <div className="compact-list">
+            <div><strong>待回款占比</strong><span>{metrics.receivableRate}%</span></div>
+            <div><strong>综合毛利率</strong><span>{metrics.margin}%</span></div>
+            <div><strong>现金可撑</strong><span>{metrics.runway.monthlyFixedCost ? `${metrics.runway.runwayMonths.toFixed(1)}个月` : "待设置"}</span></div>
+            <div><strong>待处理审批</strong><span>{metrics.pendingApprovals.length} 条</span></div>
+          </div>
         </div>
-      </div>
+        <div className="feature-panel">
+          <PanelTitle icon={AlertTriangle} title="优先关注项目" />
+          <div className="compact-list">
+            {metrics.highRiskProjects.slice(0, 4).map((project) => (
+              <div key={project.id}><strong>{project.name}</strong><span>评分 {project.score} · 待回款 {money(project.receivable)} · 毛利率 {project.projectMargin}%</span></div>
+            ))}
+          </div>
+        </div>
+      </>}
     </section>
   );
 }
@@ -2451,7 +2493,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
                   <input value={feishuSettings[key]} onChange={(event) => setFeishuSettings({ ...feishuSettings, [key]: event.target.value })} />
                 </label>
               ))}
-              <button className="ghost" onClick={() => saveTypedSetting("feishu", feishuSettings, "飞书配置")}>保存飞书配置</button>
+              <button type="button" className="ghost" onClick={() => saveTypedSetting("feishu", feishuSettings, "飞书配置")}>保存飞书配置</button>
             </div>
             <div className="settings-block">
               <h3>企业微信</h3>
@@ -2466,7 +2508,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
                   <input value={wechatSettings[key]} onChange={(event) => setWechatSettings({ ...wechatSettings, [key]: event.target.value })} />
                 </label>
               ))}
-              <button className="ghost" onClick={() => saveTypedSetting("wechat", wechatSettings, "企业微信配置")}>保存企业微信配置</button>
+              <button type="button" className="ghost" onClick={() => saveTypedSetting("wechat", wechatSettings, "企业微信配置")}>保存企业微信配置</button>
             </div>
             <div className="settings-block">
               <h3>对象存储</h3>
@@ -2480,7 +2522,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
                   <input value={storageSettings[key]} onChange={(event) => setStorageSettings({ ...storageSettings, [key]: event.target.value })} />
                 </label>
               ))}
-              <button className="ghost" onClick={() => saveTypedSetting("storage", storageSettings, "对象存储配置")}>保存存储配置</button>
+              <button type="button" className="ghost" onClick={() => saveTypedSetting("storage", storageSettings, "对象存储配置")}>保存存储配置</button>
             </div>
             <div className="settings-block">
               <h3>审批阈值</h3>
@@ -2494,7 +2536,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
                   <input value={approvalSettings[key]} onChange={(event) => setApprovalSettings({ ...approvalSettings, [key]: event.target.value })} />
                 </label>
               ))}
-              <button className="ghost" onClick={() => saveTypedSetting("approvalRules", approvalSettings, "审批规则")}>保存审批规则</button>
+              <button type="button" className="ghost" onClick={() => saveTypedSetting("approvalRules", approvalSettings, "审批规则")}>保存审批规则</button>
             </div>
           </div>
         </section>}
@@ -2520,7 +2562,7 @@ function AppShell() {
   }
 
   if (!session) return <LoginScreen onLogin={setSession} />;
-  if ((view === "admin" || view === "admin:ai") && session.role === "admin") {
+  if ((view === "admin" || view === "admin:ai") && ["shareholder", "admin"].includes(session.role)) {
     return <AdminMembers session={session} setView={setView} onLogout={logout} initialTab={view === "admin:ai" ? "ai" : "members"} />;
   }
   return <ProjectDashboard session={session} view={view} setView={setView} onLogout={logout} />;
