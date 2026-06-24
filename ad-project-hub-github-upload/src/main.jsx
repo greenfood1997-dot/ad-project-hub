@@ -50,154 +50,6 @@ function canSeeManagement(session) {
   return managementRoles.includes(session?.role);
 }
 
-const demoProjects = [
-  {
-    id: "P-2026-0618",
-    name: "青岚汽车夏季上市整合传播",
-    client: "青岚汽车",
-    brand: "青岚 E9",
-    owner: "周敏",
-    sales: "林泽",
-    pm: "何佳",
-    status: "执行中",
-    risk: "高",
-    contract: 1280000,
-    costBudget: 820000,
-    costUsed: 742000,
-    paid: 480000,
-    receivable: 800000,
-    progress: 64,
-    margin: 42,
-    nextMilestone: "6月28日 线下发布会执行复盘",
-    paymentDue: "6月30日 第二笔回款",
-    aiSummary:
-      "执行进度正常但成本消耗已达预算 90.5%，物料搭建与达人追加费用推高毛利风险；第二笔回款临近，需销售提前确认验收材料。",
-    alerts: [
-      { role: "PM", type: "成本预警", text: "成本消耗超过预算 90%，建议冻结新增供应商需求。" },
-      { role: "销售", type: "回款提醒", text: "第二笔 50 万回款距到期 11 天，需确认验收单。" },
-    ],
-    tasks: [
-      ["策略方案", 100],
-      ["达人执行", 72],
-      ["线下发布", 55],
-      ["复盘结案", 20],
-    ],
-    costs: [
-      ["媒介采买", 260000],
-      ["达人合作", 188000],
-      ["场地搭建", 212000],
-      ["设计制作", 82000],
-    ],
-  },
-  {
-    id: "P-2026-0602",
-    name: "星屿咖啡年度社媒代运营",
-    client: "星屿咖啡",
-    brand: "星屿",
-    owner: "陈安",
-    sales: "林泽",
-    pm: "王祎",
-    status: "执行中",
-    risk: "中",
-    contract: 960000,
-    costBudget: 520000,
-    costUsed: 278000,
-    paid: 320000,
-    receivable: 640000,
-    progress: 38,
-    margin: 55,
-    nextMilestone: "7月5日 Q3 内容日历确认",
-    paymentDue: "7月15日 季度回款",
-    aiSummary:
-      "项目成本健康，内容生产按月推进；客户确认链路较长，建议将选题确认节点提前 3 个工作日。",
-    alerts: [{ role: "PM", type: "进度提醒", text: "Q3 内容日历尚未锁版，可能影响 7 月首周发布。" }],
-    tasks: [
-      ["月度选题", 80],
-      ["内容制作", 42],
-      ["投放优化", 35],
-      ["数据周报", 50],
-    ],
-    costs: [
-      ["内容拍摄", 96000],
-      ["设计剪辑", 74000],
-      ["投流测试", 85000],
-      ["项目管理", 23000],
-    ],
-  },
-  {
-    id: "P-2026-0521",
-    name: "森泊家居618效果投放",
-    client: "森泊家居",
-    brand: "森泊",
-    owner: "许诺",
-    sales: "郭婷",
-    pm: "何佳",
-    status: "已完成",
-    risk: "高",
-    contract: 740000,
-    costBudget: 510000,
-    costUsed: 536000,
-    paid: 290000,
-    receivable: 450000,
-    progress: 100,
-    margin: 28,
-    nextMilestone: "等待客户确认结案报告",
-    paymentDue: "已逾期 9 天",
-    aiSummary:
-      "项目已完成但尾款逾期，且实际成本超过预算 5.1%；建议销售推动结案确认，财务同步发起催收流程。",
-    alerts: [
-      { role: "销售", type: "逾期回款", text: "45 万尾款已逾期 9 天，项目结案报告需客户签收。" },
-      { role: "管理层", type: "毛利预警", text: "毛利率低于 30%，需复盘追加投放审批。" },
-    ],
-    tasks: [
-      ["账户搭建", 100],
-      ["素材测试", 100],
-      ["投放冲刺", 100],
-      ["结案确认", 78],
-    ],
-    costs: [
-      ["信息流投放", 420000],
-      ["素材制作", 46000],
-      ["数据工具", 18000],
-      ["优化服务", 52000],
-    ],
-  },
-  {
-    id: "P-2026-0610",
-    name: "雾岛美妆新品种草矩阵",
-    client: "雾岛美妆",
-    brand: "LumaMist",
-    owner: "梁浅",
-    sales: "赵越",
-    pm: "王祎",
-    status: "筹备中",
-    risk: "低",
-    contract: 560000,
-    costBudget: 330000,
-    costUsed: 92000,
-    paid: 168000,
-    receivable: 392000,
-    progress: 18,
-    margin: 61,
-    nextMilestone: "6月24日 KOL 初筛名单提交",
-    paymentDue: "8月20日 中期回款",
-    aiSummary:
-      "项目刚启动，首付款已到账；达人报价仍在收集中，建议 PM 在名单确认前锁定替补资源池。",
-    alerts: [],
-    tasks: [
-      ["合同归档", 100],
-      ["达人筛选", 24],
-      ["脚本确认", 0],
-      ["发布排期", 0],
-    ],
-    costs: [
-      ["达人定金", 72000],
-      ["脚本策划", 12000],
-      ["样品物流", 8000],
-    ],
-  },
-];
-
 function money(value) {
   const number = Number(value || 0);
   if (Math.abs(number) >= 100000) {
@@ -299,6 +151,61 @@ function projectHealth(project) {
   if (delta <= -12) return { label: "滞后", tone: "danger", timeProgress, completion, text: `完成度低于时间进度 ${Math.abs(delta)}%，建议本周补齐关键交付和核销材料。` };
   if (delta >= 12) return { label: "超前", tone: "good", timeProgress, completion, text: "项目推进快于合同时间，可提前准备下月核销和客户确认材料。" };
   return { label: "正常", tone: "ok", timeProgress, completion, text: "项目节奏基本匹配合同时间，建议保持当前节奏并及时归档材料。" };
+}
+
+function fileKindLabel(source = "") {
+  const text = String(source || "").toLowerCase();
+  if (/quote|报价/.test(text)) return "报价表";
+  if (/verification|核销/.test(text)) return "核销表";
+  if (/execution|cost|成本|费用/.test(text)) return "成本表";
+  if (/contract|合同/.test(text)) return "合同";
+  return "文件";
+}
+
+function projectMaterialStatus(project = {}, files = [], jobs = []) {
+  const fileText = [
+    ...(project.files || []),
+    ...files,
+    ...jobs.flatMap((job) => job.files || [])
+  ].map((file) => `${file.name || ""} ${file.category || ""} ${file.source || ""}`).join(" ");
+  const extracted = project.extractedFields || {};
+  const hasContract = Boolean(project.contract) || /合同|contract/i.test(fileText);
+  const hasQuote = Boolean(extracted.quoteRules?.length || extracted.revenueRules?.length) || /报价|quote/i.test(fileText);
+  const hasCost = Boolean(project.costUsed || (project.costs || []).some(([, value]) => Number(value) > 0)) || /成本|费用|execution|cost/i.test(fileText);
+  const hasVerification = Boolean(extracted.verifications?.length || extracted.verificationRecords?.length) || /核销|verification/i.test(fileText);
+  const items = [
+    { key: "contract", label: "合同", done: hasContract, tip: hasContract ? "合同信息已进入项目" : "请上传合同或补充合同金额" },
+    { key: "quote", label: "报价表", done: hasQuote, tip: hasQuote ? "报价规则已归档" : "建议上传报价表，方便后续核销匹配" },
+    { key: "cost", label: "成本表", done: hasCost, tip: hasCost ? "成本记录已沉淀" : "执行成本还不完整，建议补成本表或报销记录" },
+    { key: "verification", label: "核销表", done: hasVerification, tip: hasVerification ? "核销材料已记录" : "月度核销表待补，影响回款判断" },
+  ];
+  return {
+    items,
+    missing: items.filter((item) => !item.done),
+    doneCount: items.filter((item) => item.done).length
+  };
+}
+
+function projectActionItems({ project, files, jobs, approvals, health, isManagement }) {
+  const materials = projectMaterialStatus(project, files, jobs);
+  const pendingApprovals = approvals.filter((item) => String(item.status || "").includes("待"));
+  const receivable = Number(project.receivable || 0);
+  const costRate = project.costBudget ? Math.round((Number(project.costUsed || 0) / Number(project.costBudget || 1)) * 100) : 0;
+  const actions = [];
+  if (materials.missing.length) {
+    actions.push({
+      tone: "warn",
+      title: `补齐${materials.missing.map((item) => item.label).join("、")}`,
+      text: materials.missing[0].tip
+    });
+  } else {
+    actions.push({ tone: "good", title: "关键材料完整", text: "合同、报价、成本和核销材料都有记录，可以进入更细的复盘和回款跟进。" });
+  }
+  if (health.label === "滞后") actions.push({ tone: "danger", title: "进度需要追赶", text: health.text });
+  if (receivable > 0) actions.push({ tone: "warn", title: "跟进项目回款", text: `当前待回款 ${money(receivable)}，回款节点：${project.paymentDue || "待确认"}。` });
+  if (pendingApprovals.length) actions.push({ tone: "warn", title: "处理待审批", text: `${pendingApprovals.length} 条审批仍在流程中，可能影响备用金、报销或供应商付款。` });
+  if (isManagement && costRate >= 85) actions.push({ tone: "danger", title: "成本接近预算", text: `已使用预算 ${costRate}%，建议冻结非必要新增支出。` });
+  return actions.slice(0, 5);
 }
 
 function operatingSettings(settings = {}) {
@@ -478,19 +385,28 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [activeView, setActiveView] = useState("dashboard");
   const [activeSubView, setActiveSubView] = useState("项目大盘");
   const [openNav, setOpenNav] = useState({ dashboard: true });
-  const [selectedId, setSelectedId] = useState(demoProjects[0].id);
+  const [selectedId, setSelectedId] = useState("");
   const [role, setRole] = useState("全部角色");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [searchText, setSearchText] = useState("");
   const isAdmin = session?.role === "admin";
   const isManagement = canSeeManagement(session);
   const aiConfigured = Boolean(state?.settings?.aiService?.["API Key"]);
+  const feishuConfigured = Boolean(state?.settings?.feishu?.appId && state?.settings?.feishu?.appSecret);
+  const wechatConfigured = Boolean(state?.settings?.wechat?.webhookUrl || state?.settings?.wechat?.corpId);
   const projects = useMemo(() => {
     const realProjects = Array.isArray(state?.projects) ? state.projects.map(normalizeProject) : [];
-    return realProjects.length ? realProjects : demoProjects.map(normalizeProject);
+    return realProjects;
   }, [state]);
-  const selected = projects.find((project) => project.id === selectedId) || projects[0];
+  const visibleProjects = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    if (!query) return projects;
+    return projects.filter((project) => [project.name, project.client, project.owner, project.pm, project.sales, project.status]
+      .some((value) => String(value || "").toLowerCase().includes(query)));
+  }, [projects, searchText]);
+  const selected = visibleProjects.find((project) => project.id === selectedId) || visibleProjects[0] || projects[0] || null;
 
   function loadState() {
     return fetch("/api/state", { headers: { "x-user-id": session.id } })
@@ -499,7 +415,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         if (!payload.ok) throw new Error(payload.error || "读取项目数据失败");
         setState(payload.data);
         const first = payload.data?.projects?.[0];
-        if (first?.id) setSelectedId(first.id);
+        if (first?.id && !payload.data.projects.some((project) => project.id === selectedId)) setSelectedId(first.id);
       })
       .catch(() => setState({ projects: [] }));
   }
@@ -509,12 +425,12 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   }, [session.id]);
 
   const stats = useMemo(() => {
-    const contract = projects.reduce((sum, item) => sum + item.contract, 0);
-    const used = projects.reduce((sum, item) => sum + item.costUsed, 0);
-    const paid = projects.reduce((sum, item) => sum + item.paid, 0);
-    const receivable = projects.reduce((sum, item) => sum + item.receivable, 0);
+    const contract = visibleProjects.reduce((sum, item) => sum + item.contract, 0);
+    const used = visibleProjects.reduce((sum, item) => sum + item.costUsed, 0);
+    const paid = visibleProjects.reduce((sum, item) => sum + item.paid, 0);
+    const receivable = visibleProjects.reduce((sum, item) => sum + item.receivable, 0);
     return { contract, used, paid, receivable };
-  }, [projects]);
+  }, [visibleProjects]);
 
   const progressRef = useChart({
     tooltip: { trigger: "item" },
@@ -529,11 +445,11 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         label: { color: "#4e5969", fontSize: 12 },
         labelLine: { lineStyle: { color: "#c9d2e3" } },
         data: [
-          { value: 2, name: "执行中" },
-          { value: 1, name: "已完成" },
-          { value: 1, name: "筹备中" },
-          { value: 1, name: "高风险" },
-        ],
+          { value: visibleProjects.filter((item) => item.status === "执行中").length, name: "执行中" },
+          { value: visibleProjects.filter((item) => item.status === "已完成").length, name: "已完成" },
+          { value: visibleProjects.filter((item) => item.status === "筹备中" || item.status === "草稿").length, name: "筹备中" },
+          { value: visibleProjects.filter((item) => item.risk === "高").length, name: "高风险" },
+        ].filter((item) => item.value > 0),
       },
     ],
   });
@@ -544,7 +460,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     textStyle: { color: "#4e5969", fontFamily: "Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif", fontSize: 12 },
     xAxis: {
       type: "category",
-      data: projects.map((item) => item.client),
+      data: visibleProjects.map((item) => item.client),
       axisLabel: { interval: 0, color: "#6b778c", fontSize: 12 },
       axisLine: { lineStyle: { color: "#d8dee9" } },
       axisTick: { show: false }
@@ -556,8 +472,8 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     },
     color: ["#3370ff", "#8fb4ff"],
     series: [
-      { name: "已回款", type: "bar", data: projects.map((item) => item.paid), barMaxWidth: 22, itemStyle: { borderRadius: [5, 5, 0, 0] } },
-      { name: "待回款", type: "bar", data: projects.map((item) => item.receivable), barMaxWidth: 22, itemStyle: { borderRadius: [5, 5, 0, 0] } },
+      { name: "已回款", type: "bar", data: visibleProjects.map((item) => item.paid), barMaxWidth: 22, itemStyle: { borderRadius: [5, 5, 0, 0] } },
+      { name: "待回款", type: "bar", data: visibleProjects.map((item) => item.receivable), barMaxWidth: 22, itemStyle: { borderRadius: [5, 5, 0, 0] } },
     ],
   });
 
@@ -573,7 +489,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     },
     yAxis: {
       type: "category",
-      data: projects.map((item) => item.pm),
+      data: visibleProjects.map((item) => item.pm),
       axisLabel: { color: "#6b778c", fontSize: 12 },
       axisLine: { show: false },
       axisTick: { show: false }
@@ -582,7 +498,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     series: [
       {
         type: "bar",
-        data: projects.map((item) => item.costBudget ? Math.round((item.costUsed / item.costBudget) * 100) : 0),
+        data: visibleProjects.map((item) => item.costBudget ? Math.round((item.costUsed / item.costBudget) * 100) : 0),
         label: { show: true, position: "right", formatter: "{c}%", color: "#4e5969", fontSize: 12 },
         barMaxWidth: 14,
         itemStyle: { borderRadius: [0, 6, 6, 0] }
@@ -590,7 +506,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     ],
   });
 
-  const visibleAlerts = projects
+  const visibleAlerts = visibleProjects
     .flatMap((project) => {
       const health = projectHealth(project);
       const alerts = project.alerts.length ? project.alerts : [{ role: "PM", type: `进度${health.label}`, text: health.text }];
@@ -703,8 +619,8 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         </nav>
         <div className="integration">
           <p>{session.name} · {roleLabel(session.role)}</p>
-          <button onClick={() => setNotice("飞书机器人入口已预留，下一步需要在后台产品设置里接入飞书 App ID 和事件订阅。")}><MessageSquareText size={16} />飞书机器人</button>
-          <button onClick={() => setNotice("企业微信入口已预留，后续可接收群文件、项目提醒和审批通知。")}><MessageSquareText size={16} />企业微信</button>
+          <button onClick={() => setNotice(feishuConfigured ? "飞书配置已保存。正式收发群文件还需要在飞书开放平台把事件订阅 URL 指向当前服务。" : "飞书未配置：请到后台管理 > 产品设置填写 App ID、App Secret 和事件订阅地址。")}><MessageSquareText size={16} />飞书机器人</button>
+          <button onClick={() => setNotice(wechatConfigured ? "企业微信配置已保存。正式通知需要在企业微信后台启用机器人或应用回调。" : "企业微信未配置：请到后台管理 > 产品设置填写 Webhook 或企业应用信息。")}><MessageSquareText size={16} />企业微信</button>
           <button onClick={onLogout}><LogOut size={16} />退出登录</button>
         </div>
       </aside>
@@ -716,7 +632,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             <p>{isManagement ? "公司经营、项目执行、资金压力与 AI 建议集中管理" : "我的项目、备用金、报销、文件归档和内容辅助"}</p>
           </div>
           <div className="actions">
-            <div className="search"><Search size={16} /><input placeholder="搜索项目、客户、负责人" /></div>
+            <div className="search"><Search size={16} /><input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="搜索项目、客户、负责人" /></div>
             <button className="ghost" onClick={() => setFilterOpen(!filterOpen)}><Filter size={16} />筛选</button>
             {isAdmin && <button className="ghost" onClick={() => setView("admin")}><UserCog size={16} />成员管理</button>}
             {isAdmin && <button className={aiConfigured ? "ghost" : "ghost warning"} onClick={() => setView("admin:ai")}><Bot size={16} />{aiConfigured ? "AI 已接入" : "接入 AI"}</button>}
@@ -731,9 +647,29 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           ))}
         </div>}
 
-        {activeView === "ai" && <AiWorkbench
+        {!projects.length && activeView !== "management" && (
+          <EmptyProjectState
+            isManagement={isManagement}
+            onUpload={() => setUploadOpen(true)}
+            onAdmin={() => setView("admin")}
+            isAdmin={isAdmin}
+          />
+        )}
+
+        {!!projects.length && !visibleProjects.length && (
+          <section className="empty-project-state">
+            <div>
+              <PanelTitle icon={Search} title="没有匹配的项目" />
+              <h2>当前搜索没有结果。</h2>
+              <p>换一个项目名、客户名、负责人或 PM 试试。</p>
+              <button className="ghost" onClick={() => setSearchText("")}>清空搜索</button>
+            </div>
+          </section>
+        )}
+
+        {!!visibleProjects.length && activeView === "ai" && <AiWorkbench
           session={session}
-          projects={projects}
+          projects={visibleProjects}
           approvals={state?.approvals || []}
           settings={state?.settings || {}}
           stats={stats}
@@ -741,8 +677,8 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           onDone={() => loadState()}
           onNotice={setNotice}
         />}
-        {activeView === "approvals" && <ApprovalFunds
-          projects={projects}
+        {!!visibleProjects.length && activeView === "approvals" && <ApprovalFunds
+          projects={visibleProjects}
           approvals={state?.approvals || []}
           selected={selected}
           session={session}
@@ -751,7 +687,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           onDone={() => loadState()}
           onNotice={setNotice}
         />}
-        {activeView === "closeout" && <CloseoutReview project={selected} isManagement={isManagement} />}
+        {!!visibleProjects.length && activeView === "closeout" && <CloseoutReview project={selected} isManagement={isManagement} />}
         {activeView === "management" && isManagement && <ManagementCockpit
           projects={projects}
           approvals={state?.approvals || []}
@@ -763,7 +699,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           onNotice={setNotice}
         />}
 
-        {activeView === "dashboard" && activeSubView === "项目大盘" && (
+        {!!visibleProjects.length && activeView === "dashboard" && activeSubView === "项目大盘" && (
           <section className="overview-layout">
             <div className="overview-center">
               {isManagement ? (
@@ -778,7 +714,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
                 />
               ) : (
                 <EmployeeProjectOverview
-                  projects={projects}
+                  projects={visibleProjects}
                   selected={selected}
                   onSelect={setSelectedId}
                   onUpload={() => setUploadOpen(true)}
@@ -787,7 +723,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             </div>
             <DashboardAiPanel
               session={session}
-              projects={projects}
+              projects={visibleProjects}
               approvals={state?.approvals || []}
               settings={state?.settings || {}}
               stats={stats}
@@ -798,14 +734,14 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           </section>
         )}
 
-        {activeView === "dashboard" && activeSubView === "我的项目" && (
+        {!!visibleProjects.length && activeView === "dashboard" && activeSubView === "我的项目" && (
           <section className="workspace">
             <div className="project-list">
               <div className="section-head">
                 <h2>我的项目</h2>
                 <button onClick={() => setUploadOpen(true)}><UploadCloud size={16} />上传合同/执行表</button>
               </div>
-              {projects.map((project) => (
+              {visibleProjects.map((project) => (
                 <button
                   className={`project-row ${project.id === selectedId ? "selected" : ""}`}
                   key={project.id}
@@ -907,6 +843,28 @@ function ProjectOverview({ stats, cashRef, progressRef, costRef, role, setRole, 
         </div>
       </section>
     </>
+  );
+}
+
+function EmptyProjectState({ isManagement, isAdmin, onUpload, onAdmin }) {
+  return (
+    <section className="empty-project-state">
+      <div>
+        <PanelTitle icon={FileText} title="还没有真实项目" />
+        <h2>先上传第一份合同或报价表，OA 才会开始生成项目数据。</h2>
+        <p>{isManagement ? "上传后会自动进入项目台账、审批、回款、成本复盘和经营舱统计。" : "如果你还看不到项目，可能是管理员还没有把你绑定到项目里。"}</p>
+        <div className="button-row">
+          <button className="primary" onClick={onUpload}><UploadCloud size={16} />上传合同创建项目</button>
+          {isAdmin && <button className="ghost" onClick={onAdmin}><UserCog size={16} />成员与权限</button>}
+        </div>
+      </div>
+      <div className="empty-steps">
+        <div><strong>1</strong><span>上传合同 / 报价表</span></div>
+        <div><strong>2</strong><span>AI 预览识别字段</span></div>
+        <div><strong>3</strong><span>确认入库生成项目</span></div>
+        <div><strong>4</strong><span>审批、回款、成本复盘开始流转</span></div>
+      </div>
+    </section>
   );
 }
 
@@ -1104,6 +1062,8 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
   const pettyCashLeft = Math.max(Number(project.pettyCashBudget || 0) - Number(project.pettyCashUsed || 0), 0);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [commenting, setCommenting] = useState(false);
   const [form, setForm] = useState({});
   useEffect(() => {
     setForm({
@@ -1137,6 +1097,8 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
   const projectApprovals = approvals.filter((item) => item.projectId === project.id || item.projectName === project.name || item.project === project.name);
   const projectComments = comments.filter((item) => item.project === project.name);
   const projectLogs = auditLogs.filter((item) => item.target === project.name);
+  const materialStatus = projectMaterialStatus(project, uniqueFiles, projectJobs);
+  const actionItems = projectActionItems({ project, files: uniqueFiles, jobs: projectJobs, approvals: projectApprovals, health, isManagement });
   const activityItems = [
     ...projectJobs.map((job) => ({ at: job.updatedAt || job.createdAt, title: "AI 解析", text: `${job.projectName} · ${job.status} · ${job.progress || 0}%` })),
     ...projectApprovals.map((item) => ({ at: item.updatedAt || item.createdAt, title: item.typeLabel || "审批", text: `${item.status} · ${money(item.amount)} · ${item.applicantName || ""}` })),
@@ -1180,6 +1142,29 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
     }
   }
 
+  async function submitComment(event) {
+    event.preventDefault();
+    const body = commentText.trim();
+    if (!body) {
+      onNotice("先写一句项目进展，比如“客户已确认脚本，明天补核销表”。");
+      return;
+    }
+    setCommenting(true);
+    try {
+      await apiRequest("/api/comments", session, {
+        method: "POST",
+        body: JSON.stringify({ project: project.name, body })
+      });
+      setCommentText("");
+      onNotice("项目进展已记录");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    } finally {
+      setCommenting(false);
+    }
+  }
+
   return (
     <div className="detail">
       <div className="detail-head">
@@ -1202,6 +1187,29 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
         <Mini label="已回款" value={money(project.paid)} />
         <Mini label={isManagement ? "毛利率" : "项目状态"} value={isManagement ? `${project.margin}%` : health.label} />
       </div>
+
+      <section className="detail-section workbench-block">
+        <div className="section-head">
+          <h2>项目推进清单</h2>
+          <span className="muted">{materialStatus.doneCount}/4 项关键材料已完成</span>
+        </div>
+        <div className="material-grid">
+          {materialStatus.items.map((item) => (
+            <div className={item.done ? "done" : "todo"} key={item.key}>
+              <strong>{item.label}</strong>
+              <span>{item.tip}</span>
+            </div>
+          ))}
+        </div>
+        <div className="action-list">
+          {actionItems.map((item) => (
+            <div className={item.tone} key={`${item.title}-${item.text}`}>
+              <strong>{item.title}</strong>
+              <span>{item.text}</span>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="detail-section">
         <div className="section-head">
@@ -1314,6 +1322,14 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
           <h2>项目动态</h2>
           <span className="muted">{activityItems.length} 条</span>
         </div>
+        <form className="comment-form" onSubmit={submitComment}>
+          <input
+            value={commentText}
+            onChange={(event) => setCommentText(event.target.value)}
+            placeholder="记录一句项目进展、客户反馈、材料补充或风险提醒"
+          />
+          <button className="primary" disabled={commenting}>{commenting ? "记录中" : "记录"}</button>
+        </form>
         <div className="activity-list">
           {activityItems.length ? activityItems.map((item, index) => (
             <div key={`${item.title}-${index}`}>
@@ -1809,6 +1825,7 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
   const [confirmed, setConfirmed] = useState(false);
   const targetProject = projects.find((project) => project.id === projectId) || selected || projects[0];
   const needsProject = type !== "create-project";
+  const hasProjects = projects.length > 0;
 
   async function pickFiles(event) {
     const picked = Array.from(event.target.files || []);
@@ -1828,8 +1845,12 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
   }
 
   async function requestPreview() {
+    if (needsProject && !targetProject?.id) {
+      setMessage("请先创建项目，再上传成本表、报价表或核销表。");
+      return;
+    }
     setLoading(true);
-    setMessage("AI 正在预览识别结果，暂时不会写入项目...");
+    setMessage("AI 正在预览识别结果，预览阶段不会写入项目。");
     try {
       const data = await apiRequest("/api/projects/upload-preview", session, {
         method: "POST",
@@ -1846,6 +1867,10 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
   }
 
   async function confirmUpload() {
+    if (needsProject && !targetProject?.id) {
+      setMessage("请先创建项目，再上传项目资料。");
+      return;
+    }
     setLoading(true);
     setMessage("正在确认入库，请稍候...");
     try {
@@ -1921,13 +1946,13 @@ function UploadDialog({ session, projects, selected, onClose, onDone }) {
             setMessage("");
           }}>
             <option value="create-project">新项目：合同 / 报价表</option>
-            <option value="cost-sheet">已有项目：执行成本表</option>
-            <option value="quote-sheet">已有项目：合同报价表</option>
-            <option value="verification-sheet">已有项目：月度核销表</option>
+            {hasProjects && <option value="cost-sheet">已有项目：执行成本表</option>}
+            {hasProjects && <option value="quote-sheet">已有项目：合同报价表</option>}
+            {hasProjects && <option value="verification-sheet">已有项目：月度核销表</option>}
           </select>
         </label>
 
-        {needsProject && (
+        {needsProject && hasProjects && (
           <label>
             <span>归属项目</span>
             <select value={projectId} onChange={(event) => {
@@ -2120,6 +2145,28 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     "默认执行预算占比": "60%",
     "大文件提醒阈值MB": "40",
   });
+  const [feishuSettings, setFeishuSettings] = useState({
+    appId: "",
+    appSecret: "",
+    eventUrl: "",
+    verificationToken: "",
+  });
+  const [wechatSettings, setWechatSettings] = useState({
+    webhookUrl: "",
+    corpId: "",
+    agentId: "",
+    secret: "",
+  });
+  const [storageSettings, setStorageSettings] = useState({
+    provider: "local",
+    bucket: "",
+    publicBaseUrl: "",
+  });
+  const [approvalSettings, setApprovalSettings] = useState({
+    pettyCashDirectorLimit: "3000",
+    financeRequiredAmount: "1000",
+    ownerRequiredAmount: "10000",
+  });
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -2155,6 +2202,10 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     const settings = payload.data?.settings || {};
     setAiSettings((current) => ({ ...current, ...(settings.aiService || {}) }));
     setProductSettings((current) => ({ ...current, ...(settings.product || {}) }));
+    setFeishuSettings((current) => ({ ...current, ...(settings.feishu || {}) }));
+    setWechatSettings((current) => ({ ...current, ...(settings.wechat || {}) }));
+    setStorageSettings((current) => ({ ...current, ...(settings.storage || {}) }));
+    setApprovalSettings((current) => ({ ...current, ...(settings.approvalRules || {}) }));
   }
 
   useEffect(() => {
@@ -2254,6 +2305,20 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
         body: JSON.stringify({ type: "product", values: productSettings }),
       });
       setSettingsMessage("产品设置已保存");
+    } catch (err) {
+      setSettingsMessage(err.message);
+    }
+  }
+
+  async function saveTypedSetting(type, values, label) {
+    setSettingsMessage(`正在保存${label}...`);
+    try {
+      await api("/api/settings", {
+        method: "POST",
+        body: JSON.stringify({ type, values }),
+      });
+      setSettingsMessage(`${label}已保存`);
+      await loadSettings();
     } catch (err) {
       setSettingsMessage(err.message);
     }
@@ -2372,11 +2437,64 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
             <button className="primary">保存产品设置</button>
           </form>
           <div className="member-table settings-help">
-            <div className="section-head"><h2>后续可接入</h2></div>
-            <div className="logic-list">
-              <LogicItem title="飞书组织同步" text="后续在这里填 App ID、App Secret，同步公司成员和部门。" />
-              <LogicItem title="对象存储" text="大 PDF 和图片建议后续接入对象存储，避免请求体过大。" />
-              <LogicItem title="审批规则" text="后续把备用金、报销、供应商付款的金额阈值和审批链配置化。" />
+            <div className="section-head"><h2>协同与生产配置</h2></div>
+            <div className="settings-block">
+              <h3>飞书机器人</h3>
+              {[
+                ["appId", "App ID"],
+                ["appSecret", "App Secret"],
+                ["eventUrl", "事件订阅 URL"],
+                ["verificationToken", "Verification Token"]
+              ].map(([key, label]) => (
+                <label key={key}>
+                  <span>{label}</span>
+                  <input value={feishuSettings[key]} onChange={(event) => setFeishuSettings({ ...feishuSettings, [key]: event.target.value })} />
+                </label>
+              ))}
+              <button className="ghost" onClick={() => saveTypedSetting("feishu", feishuSettings, "飞书配置")}>保存飞书配置</button>
+            </div>
+            <div className="settings-block">
+              <h3>企业微信</h3>
+              {[
+                ["webhookUrl", "群机器人 Webhook"],
+                ["corpId", "Corp ID"],
+                ["agentId", "Agent ID"],
+                ["secret", "应用 Secret"]
+              ].map(([key, label]) => (
+                <label key={key}>
+                  <span>{label}</span>
+                  <input value={wechatSettings[key]} onChange={(event) => setWechatSettings({ ...wechatSettings, [key]: event.target.value })} />
+                </label>
+              ))}
+              <button className="ghost" onClick={() => saveTypedSetting("wechat", wechatSettings, "企业微信配置")}>保存企业微信配置</button>
+            </div>
+            <div className="settings-block">
+              <h3>对象存储</h3>
+              {[
+                ["provider", "服务商"],
+                ["bucket", "Bucket"],
+                ["publicBaseUrl", "访问域名"]
+              ].map(([key, label]) => (
+                <label key={key}>
+                  <span>{label}</span>
+                  <input value={storageSettings[key]} onChange={(event) => setStorageSettings({ ...storageSettings, [key]: event.target.value })} />
+                </label>
+              ))}
+              <button className="ghost" onClick={() => saveTypedSetting("storage", storageSettings, "对象存储配置")}>保存存储配置</button>
+            </div>
+            <div className="settings-block">
+              <h3>审批阈值</h3>
+              {[
+                ["pettyCashDirectorLimit", "备用金总监审批线"],
+                ["financeRequiredAmount", "财务介入金额"],
+                ["ownerRequiredAmount", "老板审批金额"]
+              ].map(([key, label]) => (
+                <label key={key}>
+                  <span>{label}</span>
+                  <input value={approvalSettings[key]} onChange={(event) => setApprovalSettings({ ...approvalSettings, [key]: event.target.value })} />
+                </label>
+              ))}
+              <button className="ghost" onClick={() => saveTypedSetting("approvalRules", approvalSettings, "审批规则")}>保存审批规则</button>
             </div>
           </div>
         </section>}

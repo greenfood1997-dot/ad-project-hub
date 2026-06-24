@@ -194,7 +194,11 @@ function canAccessProject(db, user, projectId) {
 function scopedSettings(settings = {}, user) {
   const result = {
     product: settings.product || {},
-    interestRate: settings.interestRate || {}
+    interestRate: settings.interestRate || {},
+    feishu: settings.feishu ? { configured: Boolean(settings.feishu.appId && settings.feishu.appSecret) } : null,
+    wechat: settings.wechat ? { configured: Boolean(settings.wechat.webhookUrl || settings.wechat.corpId) } : null,
+    storage: settings.storage ? { configured: Boolean(settings.storage.bucket || settings.storage.publicBaseUrl), provider: settings.storage.provider } : null,
+    approvalRules: settings.approvalRules || null
   };
   if (settings.aiService) {
     result.aiService = {
@@ -208,6 +212,11 @@ function scopedSettings(settings = {}, user) {
   }
   if (MANAGEMENT_ROLES.includes(user.role)) {
     result.companyFinance = settings.companyFinance || settings.product?.companyFinance || {};
+  }
+  if (ADMIN_ROLES.includes(user.role)) {
+    result.feishu = settings.feishu || null;
+    result.wechat = settings.wechat || null;
+    result.storage = settings.storage || null;
   }
   return result;
 }

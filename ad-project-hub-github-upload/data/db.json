@@ -50,22 +50,10 @@
       "department": "执行部",
       "status": "active",
       "pin": "123456"
-    },
-    {
-      "id": "u-mqn8yab0-inety",
-      "name": "Codex测试成员",
-      "email": "codex-test-1782013709480@company.local",
-      "role": "member",
-      "department": "测试部",
-      "status": "disabled",
-      "pin": "654321",
-      "createdAt": "2026-06-21T03:48:29.484Z"
     }
   ],
   "settings": {
     "aiService": null,
-    "feishu": null,
-    "wechat": null,
     "baseSettings": null,
     "collabSettings": null,
     "alertSettings": null,
@@ -102,6 +90,14 @@
       "monthlyOtherCost": 45000,
       "connection": null,
       "savedAt": "2026-06-23T15:03:21.470Z",
+      "savedBy": "u-admin"
+    },
+    "approvalRules": {
+      "pettyCashDirectorLimit": "3333",
+      "financeRequiredAmount": "1111",
+      "ownerRequiredAmount": "9999",
+      "connection": null,
+      "savedAt": "2026-06-23T15:39:39.243Z",
       "savedBy": "u-admin"
     }
   },
@@ -646,6 +642,54 @@
   "comments": [],
   "auditLogs": [
     {
+      "type": "settings",
+      "target": "approvalRules",
+      "user": "中台管理员",
+      "at": "2026-06-23T15:39:39.243Z"
+    },
+    {
+      "type": "settings",
+      "target": "storage",
+      "user": "中台管理员",
+      "at": "2026-06-23T15:39:39.233Z"
+    },
+    {
+      "type": "settings",
+      "target": "wechat",
+      "user": "中台管理员",
+      "at": "2026-06-23T15:39:39.228Z"
+    },
+    {
+      "type": "settings",
+      "target": "feishu",
+      "user": "中台管理员",
+      "at": "2026-06-23T15:39:39.220Z"
+    },
+    {
+      "type": "settings",
+      "target": "approvalRules",
+      "user": "中台管理员",
+      "at": "2026-06-23T15:38:26.288Z"
+    },
+    {
+      "type": "settings",
+      "target": "storage",
+      "user": "中台管理员",
+      "at": "2026-06-23T15:38:26.279Z"
+    },
+    {
+      "type": "settings",
+      "target": "wechat",
+      "user": "中台管理员",
+      "at": "2026-06-23T15:38:26.271Z"
+    },
+    {
+      "type": "settings",
+      "target": "feishu",
+      "user": "中台管理员",
+      "at": "2026-06-23T15:38:26.262Z"
+    },
+    {
       "type": "approval",
       "target": "管理员专属项目",
       "action": "submit",
@@ -844,20 +888,6 @@
       "action": "create",
       "user": "中台管理员",
       "at": "2026-06-21T04:37:21.701Z"
-    },
-    {
-      "type": "member",
-      "target": "codex-test-1782013709480@company.local",
-      "action": "disabled",
-      "user": "中台管理员",
-      "at": "2026-06-21T03:48:29.498Z"
-    },
-    {
-      "type": "member",
-      "target": "codex-test-1782013709480@company.local",
-      "action": "create",
-      "user": "中台管理员",
-      "at": "2026-06-21T03:48:29.484Z"
     }
   ]
 }
