@@ -124,6 +124,99 @@ function settingMembers(db) {
   return Array.isArray(db.settings?.members?.items) ? db.settings.members.items : [];
 }
 
+function memberDisplayName(user = {}) {
+  return user.name || user.email || user.id || "";
+}
+
+function assignmentBindingsForProject(db, project) {
+  return settingMembers(db).filter((member) => projectMatchesMember(project, member));
+}
+
+function projectAssignments(db) {
+  return (db.projects || []).map((project) => ({
+    id: project.id,
+    name: project.name,
+    client: project.client || "",
+    status: project.status || "",
+    department: projectDepartment(project),
+    owner: project.owner || "",
+    pm: project.pm || project.extractedFields?.pm || "",
+    sales: project.sales || project.extractedFields?.sales || "",
+    members: assignmentBindingsForProject(db, project)
+      .map((member) => member.contact || member.name)
+      .filter(Boolean)
+  }));
+}
+
+function saveProjectAssignment(db, body, actor) {
+  const project = (db.projects || []).find((item) => item.id === body.projectId);
+  if (!project) throw new Error("项目不存在");
+
+  const users = (db.users || []).map(ensureMemberFields);
+  const userById = new Map(users.map((item) => [item.id, item]));
+  const findUser = (id) => userById.get(id) || null;
+  const pm = findUser(body.pmId);
+  const sales = findUser(body.salesId);
+  const memberIds = Array.isArray(body.memberIds) ? body.memberIds : [];
+  const assignedUsers = memberIds.map(findUser).filter(Boolean);
+  const now = new Date().toISOString();
+
+  project.pm = pm ? memberDisplayName(pm) : "";
+  project.sales = sales ? memberDisplayName(sales) : "";
+  project.department = body.department || project.department || pm?.department || "";
+  project.extractedFields = {
+    ...(project.extractedFields || {}),
+    pm: project.pm || "待分派",
+    sales: project.sales || "待确认",
+    assignedMemberIds: memberIds,
+    assignedMembers: assignedUsers.map((member) => ({
+      id: member.id,
+      name: member.name,
+      role: member.role,
+      email: member.email,
+      department: member.department
+    }))
+  };
+  project.updatedAt = now;
+
+  db.settings = db.settings || {};
+  const currentMembers = settingMembers(db);
+  const scopedOut = currentMembers.filter((member) => !projectMatchesMember(project, member));
+  const assignmentRows = assignedUsers.map((member) => ({
+    id: `assign-${project.id}-${member.id}`,
+    userId: member.id,
+    name: member.name,
+    role: member.role === "pm" ? "PM" : member.role === "sales" ? "销售" : member.role === "finance" ? "财务" : "执行",
+    department: member.department || "",
+    project: project.name,
+    projectId: project.id,
+    feishuName: member.feishuName || member.name,
+    contact: member.email,
+    assignedAt: now,
+    assignedBy: actor.id
+  }));
+  db.settings.members = {
+    ...(db.settings.members || {}),
+    items: [...scopedOut, ...assignmentRows],
+    savedAt: now,
+    savedBy: actor.id
+  };
+
+  db.auditLogs.unshift({
+    type: "project",
+    target: project.name,
+    action: "assign",
+    user: actor.name,
+    meta: {
+      pm: project.pm,
+      sales: project.sales,
+      members: assignedUsers.map((member) => member.name)
+    },
+    at: now
+  });
+  return { project, assignments: projectAssignments(db), members: db.settings.members.items };
+}
+
 function textMatches(a = "", b = "") {
   const left = String(a || "").trim().toLowerCase();
   const right = String(b || "").trim().toLowerCase();
@@ -278,6 +371,20 @@ export async function handleApi(req, res) {
     if (!requireRole(user, ADMIN_ROLES, res)) return;
     const body = await readBody(req);
     const data = await mutateDb((db) => setMemberStatus(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/project-assignments") {
+    if (!requireRole(user, DIRECTOR_ROLES, res)) return;
+    sendJson(res, 200, { ok: true, data: projectAssignments(snapshot) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/project-assignments") {
+    if (!requireRole(user, DIRECTOR_ROLES, res)) return;
+    const body = await readBody(req);
+    const data = await mutateDb((db) => saveProjectAssignment(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }

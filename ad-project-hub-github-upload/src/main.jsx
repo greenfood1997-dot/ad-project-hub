@@ -2203,6 +2203,7 @@ function LoginScreen({ onLogin }) {
 function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
   const [adminTab, setAdminTab] = useState(initialTab);
   const [members, setMembers] = useState([]);
+  const [assignments, setAssignments] = useState([]);
   const [editingId, setEditingId] = useState("");
   const [message, setMessage] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
@@ -2267,6 +2268,10 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     setMembers(await api("/api/members"));
   }
 
+  async function loadAssignments() {
+    setAssignments(await api("/api/project-assignments"));
+  }
+
   async function loadSettings() {
     const res = await fetch("/api/state", { headers: { "x-user-id": session.id } });
     const payload = await res.json();
@@ -2282,6 +2287,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
 
   useEffect(() => {
     loadMembers().catch((err) => setMessage(err.message));
+    loadAssignments().catch((err) => setSettingsMessage(err.message));
     loadSettings().catch((err) => setSettingsMessage(err.message));
   }, []);
 
@@ -2410,6 +2416,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
         <nav>
           <button type="button" className="admin-nav-link" onClick={() => setView("app")}><LayoutDashboard size={18} />返回员工端</button>
           <button type="button" className={`admin-nav-link ${adminTab === "members" ? "active" : ""}`} onClick={() => setAdminTab("members")}><UsersRound size={18} />成员管理</button>
+          <button type="button" className={`admin-nav-link ${adminTab === "assignments" ? "active" : ""}`} onClick={() => setAdminTab("assignments")}><UserCog size={18} />项目分派</button>
           <button type="button" className={`admin-nav-link ${adminTab === "ai" ? "active" : ""}`} onClick={() => setAdminTab("ai")}><Bot size={18} />AI 接入</button>
           <button type="button" className={`admin-nav-link ${adminTab === "product" ? "active" : ""}`} onClick={() => setAdminTab("product")}><Settings2 size={18} />产品设置</button>
         </nav>
@@ -2421,8 +2428,8 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
       <main>
         <header className="topbar">
           <div>
-            <h1>{adminTab === "members" ? "成员管理" : adminTab === "ai" ? "AI 接入" : "产品设置"}</h1>
-            <p>{adminTab === "members" ? "维护内部账号、角色和后台访问权限" : adminTab === "ai" ? "配置 DeepSeek、Kimi、OpenAI 或兼容模型，用于合同和表格智能解析" : "维护产品基础参数和上传提醒"}</p>
+            <h1>{adminTab === "members" ? "成员管理" : adminTab === "assignments" ? "项目分派" : adminTab === "ai" ? "AI 接入" : "产品设置"}</h1>
+            <p>{adminTab === "members" ? "维护内部账号、角色和后台访问权限" : adminTab === "assignments" ? "把项目分给 PM、销售和执行成员，员工端会按这里展示自己的项目" : adminTab === "ai" ? "配置 DeepSeek、Kimi、OpenAI 或兼容模型，用于合同和表格智能解析" : "维护产品基础参数和上传提醒"}</p>
           </div>
           {adminTab === "members" && <button type="button" className="ghost" onClick={resetForm}><Plus size={16} />新增成员</button>}
         </header>
@@ -2460,6 +2467,18 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
             ))}
           </div>
         </section>}
+
+        {adminTab === "assignments" && (
+          <ProjectAssignmentPanel
+            api={api}
+            members={members}
+            assignments={assignments}
+            onReload={async () => {
+              await loadAssignments();
+              await loadSettings();
+            }}
+          />
+        )}
 
         {adminTab === "ai" && <section className="admin-grid">
           <form className="member-form settings-form" onSubmit={saveAi}>
@@ -2573,6 +2592,163 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
         </section>}
       </main>
     </div>
+  );
+}
+
+function ProjectAssignmentPanel({ api, members, assignments, onReload }) {
+  const activeMembers = members.filter((member) => member.status !== "disabled");
+  const [selectedProjectId, setSelectedProjectId] = useState(assignments[0]?.id || "");
+  const selected = assignments.find((item) => item.id === selectedProjectId) || assignments[0] || null;
+  const memberByNameOrContact = useMemo(() => {
+    const map = new Map();
+    activeMembers.forEach((member) => {
+      [member.name, member.email].filter(Boolean).forEach((key) => map.set(String(key).toLowerCase(), member.id));
+    });
+    return map;
+  }, [activeMembers]);
+  const [form, setForm] = useState({ pmId: "", salesId: "", memberIds: [], department: "" });
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!assignments.length) return;
+    if (!selectedProjectId || !assignments.some((item) => item.id === selectedProjectId)) {
+      setSelectedProjectId(assignments[0].id);
+    }
+  }, [assignments, selectedProjectId]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const pmId = memberByNameOrContact.get(String(selected.pm || "").toLowerCase()) || "";
+    const salesId = memberByNameOrContact.get(String(selected.sales || "").toLowerCase()) || "";
+    const memberIds = (selected.members || [])
+      .map((item) => memberByNameOrContact.get(String(item || "").toLowerCase()))
+      .filter(Boolean);
+    setForm({
+      pmId,
+      salesId,
+      memberIds: Array.from(new Set(memberIds)),
+      department: selected.department || "",
+    });
+    setMessage("");
+  }, [selected?.id, memberByNameOrContact]);
+
+  function toggleMember(id) {
+    setForm((current) => ({
+      ...current,
+      memberIds: current.memberIds.includes(id)
+        ? current.memberIds.filter((item) => item !== id)
+        : [...current.memberIds, id],
+    }));
+  }
+
+  async function save(event) {
+    event.preventDefault();
+    if (!selected) return;
+    setSaving(true);
+    setMessage("正在保存项目分派...");
+    try {
+      await api("/api/project-assignments", {
+        method: "POST",
+        body: JSON.stringify({
+          projectId: selected.id,
+          pmId: form.pmId,
+          salesId: form.salesId,
+          memberIds: form.memberIds,
+          department: form.department,
+        }),
+      });
+      await onReload();
+      setMessage("项目分派已保存，员工端会按这里展示自己的项目。");
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!assignments.length) {
+    return (
+      <section className="empty-project-state">
+        <div>
+          <PanelTitle icon={UserCog} title="项目分派" />
+          <h2>还没有可分派的项目</h2>
+          <p>先上传合同或报价表创建项目，再回来把 PM、销售和执行成员分配进去。</p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="assignment-layout">
+      <div className="member-table assignment-list">
+        <div className="section-head"><h2>项目列表</h2><span>{assignments.length} 个</span></div>
+        {assignments.map((project) => (
+          <button
+            type="button"
+            className={`project-row ${project.id === selected?.id ? "selected" : ""}`}
+            key={project.id}
+            onClick={() => setSelectedProjectId(project.id)}
+          >
+            <div>
+              <strong>{project.name}</strong>
+              <span>{project.client || "未填写客户"} · {project.status || "未设置状态"}</span>
+            </div>
+            <div className="row-right">
+              <span>{project.pm || "待分派 PM"}</span>
+              <ChevronRight size={16} />
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <form className="member-form assignment-form" onSubmit={save}>
+        <div className="section-head">
+          <h2>{selected?.name}</h2>
+          <span>{selected?.client || "未填写客户"}</span>
+        </div>
+        <label>
+          <span>项目部门</span>
+          <input value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} placeholder="例如 项目部 / 内容部" />
+        </label>
+        <label>
+          <span>PM</span>
+          <select value={form.pmId} onChange={(event) => setForm({ ...form, pmId: event.target.value })}>
+            <option value="">待分派</option>
+            {activeMembers.filter((member) => ["pm", "director", "admin"].includes(member.role)).map((member) => (
+              <option value={member.id} key={member.id}>{member.name} · {roleLabel(member.role)}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>销售</span>
+          <select value={form.salesId} onChange={(event) => setForm({ ...form, salesId: event.target.value })}>
+            <option value="">待确认</option>
+            {activeMembers.filter((member) => ["sales", "director", "admin"].includes(member.role)).map((member) => (
+              <option value={member.id} key={member.id}>{member.name} · {roleLabel(member.role)}</option>
+            ))}
+          </select>
+        </label>
+        <div className="assignment-members">
+          <span>执行成员</span>
+          <div>
+            {activeMembers.filter((member) => !["shareholder", "viewer"].includes(member.role)).map((member) => (
+              <label className="member-check" key={member.id}>
+                <input
+                  type="checkbox"
+                  checked={form.memberIds.includes(member.id)}
+                  onChange={() => toggleMember(member.id)}
+                />
+                <strong>{member.name}</strong>
+                <small>{roleLabel(member.role)} · {member.department || "未分组"}</small>
+              </label>
+            ))}
+          </div>
+        </div>
+        {message && <p className="form-message">{message}</p>}
+        <button type="submit" className="primary" disabled={saving}>{saving ? "保存中" : "保存项目分派"}</button>
+      </form>
+    </section>
   );
 }
 

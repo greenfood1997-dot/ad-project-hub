@@ -54,6 +54,8 @@
   ],
   "settings": {
     "aiService": null,
+    "feishu": null,
+    "wechat": null,
     "baseSettings": null,
     "collabSettings": null,
     "alertSettings": null,
@@ -75,10 +77,23 @@
           "project": "普通员工可见项目",
           "feishuName": "普通员工",
           "contact": "member@company.local"
+        },
+        {
+          "id": "assign-P-1782016641713-u-member",
+          "userId": "u-member",
+          "name": "普通员工",
+          "role": "执行",
+          "department": "执行部",
+          "project": "管理员专属项目",
+          "projectId": "P-1782016641713",
+          "feishuName": "普通员工",
+          "contact": "member@company.local",
+          "assignedAt": "2026-06-24T17:36:29.793Z",
+          "assignedBy": "u-admin"
         }
       ],
       "connection": null,
-      "savedAt": "2026-06-21T04:37:21.719Z",
+      "savedAt": "2026-06-24T17:36:29.793Z",
       "savedBy": "u-admin"
     },
     "companyFinance": {
@@ -121,8 +136,8 @@
       "tasks": [],
       "costs": [],
       "extractedFields": {
-        "pm": "待分派",
-        "sales": "待确认",
+        "pm": "项目经理",
+        "sales": "销售成员",
         "executionBudgetRatio": "",
         "executionBudget": 0,
         "profitBreakdown": {
@@ -165,7 +180,19 @@
             ]
           ]
         },
-        "profit": 3000000
+        "profit": 3000000,
+        "assignedMemberIds": [
+          "u-member"
+        ],
+        "assignedMembers": [
+          {
+            "id": "u-member",
+            "name": "普通员工",
+            "role": "member",
+            "email": "member@company.local",
+            "department": "执行部"
+          }
+        ]
       },
       "createdAt": "2026-06-21T04:37:21.713Z",
       "createdBy": "u-admin",
@@ -178,8 +205,10 @@
           "text": "项目已回款 0，待回款 3000000，回款进度 0%，请销售跟进客户付款。"
         }
       ],
-      "pm": "待分派",
-      "sales": "待确认"
+      "pm": "项目经理",
+      "sales": "销售成员",
+      "department": "项目部",
+      "updatedAt": "2026-06-24T17:36:29.793Z"
     },
     {
       "id": "P-1782016641703",
@@ -641,6 +670,20 @@
   ],
   "comments": [],
   "auditLogs": [
+    {
+      "type": "project",
+      "target": "管理员专属项目",
+      "action": "assign",
+      "user": "中台管理员",
+      "meta": {
+        "pm": "项目经理",
+        "sales": "销售成员",
+        "members": [
+          "普通员工"
+        ]
+      },
+      "at": "2026-06-24T17:36:29.793Z"
+    },
     {
       "type": "settings",
       "target": "approvalRules",

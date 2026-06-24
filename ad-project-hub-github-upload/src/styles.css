@@ -3532,6 +3532,84 @@ select {
   background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
 }
 
+.assignment-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.assignment-list,
+.assignment-form {
+  min-width: 0;
+}
+
+.assignment-list .project-row {
+  width: 100%;
+}
+
+.assignment-form .section-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.assignment-members {
+  display: grid;
+  gap: 10px;
+}
+
+.assignment-members > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.assignment-members > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.member-check {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-areas:
+    "check name"
+    "check meta";
+  column-gap: 8px;
+  align-items: center;
+  min-height: 52px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fff;
+  padding: 9px 10px;
+  cursor: pointer;
+}
+
+.member-check input {
+  grid-area: check;
+  width: 16px;
+  height: 16px;
+}
+
+.member-check strong {
+  grid-area: name;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-check small {
+  grid-area: meta;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 1180px) {
   .app-shell {
     height: auto;
@@ -3559,6 +3637,7 @@ select {
   .dashboard-grid,
   .workspace,
   .feature-grid,
+  .assignment-layout,
   .empty-project-state {
     grid-template-columns: 1fr;
   }
