@@ -320,6 +320,187 @@ export function updateProject(db, body, user) {
   return project;
 }
 
+function nextPaymentId() {
+  return `pay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function syncRevenuePaymentStatus(project) {
+  const revenue = project.extractedFields?.revenueRecognition;
+  if (!revenue) return;
+  const records = Array.isArray(revenue.verificationRecords) ? revenue.verificationRecords : [];
+  let remainingPaid = Number(project.paid || 0);
+  const syncedRecords = records.map((record) => {
+    const amount = Number(record.amount || 0);
+    const paidAmount = Math.min(amount, Math.max(remainingPaid, 0));
+    remainingPaid -= paidAmount;
+    return {
+      ...record,
+      paidAmount,
+      unpaidAmount: Math.max(amount - paidAmount, 0),
+      paymentStatus: amount && paidAmount >= amount ? "已回款" : paidAmount > 0 ? "部分回款" : "未回款"
+    };
+  });
+  const recognizedRevenue = Number(revenue.recognizedRevenue || records.reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  project.extractedFields.revenueRecognition = {
+    ...revenue,
+    recognizedUnpaid: Math.max(recognizedRevenue - Number(project.paid || 0), 0),
+    verificationRecords: syncedRecords,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function recordProjectPayment(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body?.projectId || item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  const amount = parseMoney(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("请填写正确的回款金额");
+  const contract = parseMoney(project.contract);
+  const currentPaid = parseMoney(project.paid);
+  if (contract && currentPaid + amount > contract * 1.05) throw new Error("回款金额超过合同金额过多，请核对后再记录");
+
+  const at = new Date().toISOString();
+  const payment = {
+    id: nextPaymentId(),
+    projectId: project.id,
+    projectName: project.name,
+    client: project.client || "",
+    amount,
+    payer: String(body.payer || body.client || project.client || "").trim(),
+    method: String(body.method || "").trim(),
+    note: String(body.note || body.remark || "").trim(),
+    receivedAt: body.receivedAt || at,
+    recordedBy: user.id,
+    recordedByName: user.name,
+    createdAt: at
+  };
+
+  db.payments = db.payments || [];
+  db.payments.unshift(payment);
+  project.paid = currentPaid + amount;
+  project.receivable = Math.max(contract - Number(project.paid || 0), 0);
+  project.risk = inferRisk({
+    contract,
+    costBudget: project.costBudget,
+    costUsed: project.costUsed,
+    receivable: project.receivable
+  });
+  syncRevenuePaymentStatus(project);
+  project.alerts = projectRiskAlerts(project);
+  project.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "payment",
+    target: project.name,
+    action: "record",
+    user: user.name,
+    meta: { paymentId: payment.id, amount, paid: project.paid, receivable: project.receivable },
+    at
+  });
+  return { payment, project };
+}
+
+function nextTaskId() {
+  return `task-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function normalizeProjectTask(task, index = 0) {
+  if (Array.isArray(task)) {
+    const progress = Math.max(0, Math.min(100, Number(task[1] || 0)));
+    return {
+      id: task[2] || `legacy-task-${index}`,
+      title: String(task[0] || `任务 ${index + 1}`).trim(),
+      progress,
+      status: progress >= 100 ? "done" : progress > 0 ? "doing" : "todo",
+      owner: "",
+      dueDate: "",
+      note: "",
+      updatedAt: ""
+    };
+  }
+  const progress = Math.max(0, Math.min(100, Number(task?.progress || 0)));
+  return {
+    id: task?.id || `legacy-task-${index}`,
+    title: String(task?.title || task?.name || `任务 ${index + 1}`).trim(),
+    progress,
+    status: task?.status || (progress >= 100 ? "done" : progress > 0 ? "doing" : "todo"),
+    owner: task?.owner || "",
+    dueDate: task?.dueDate || "",
+    note: task?.note || "",
+    createdAt: task?.createdAt || "",
+    createdBy: task?.createdBy || "",
+    updatedAt: task?.updatedAt || "",
+    updatedBy: task?.updatedBy || ""
+  };
+}
+
+function syncProjectProgressFromTasks(project) {
+  const tasks = (project.tasks || []).map(normalizeProjectTask);
+  project.tasks = tasks;
+  const values = tasks.map((task) => Number(task.progress || 0)).filter(Number.isFinite);
+  const progress = values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0;
+  project.progress = progress;
+  project.extractedFields = {
+    ...(project.extractedFields || {}),
+    taskProgress: progress,
+    taskSummary: {
+      total: tasks.length,
+      done: tasks.filter((task) => task.status === "done" || Number(task.progress || 0) >= 100).length,
+      doing: tasks.filter((task) => task.status === "doing").length,
+      todo: tasks.filter((task) => task.status === "todo").length,
+      updatedAt: new Date().toISOString()
+    }
+  };
+  return progress;
+}
+
+export function upsertProjectTask(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body?.projectId || item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  const at = new Date().toISOString();
+  const tasks = (project.tasks || []).map(normalizeProjectTask);
+  const taskId = body.taskId || body.task?.id || "";
+  const existingIndex = tasks.findIndex((task) => task.id === taskId);
+  const rawProgress = body.progress ?? body.task?.progress;
+  const action = body.action || "";
+  const nextProgress = action === "complete"
+    ? 100
+    : rawProgress !== undefined && rawProgress !== ""
+      ? Math.max(0, Math.min(100, Number(rawProgress)))
+      : existingIndex >= 0 ? tasks[existingIndex].progress : 0;
+  const nextStatus = action === "complete"
+    ? "done"
+    : body.status || body.task?.status || (nextProgress >= 100 ? "done" : nextProgress > 0 ? "doing" : "todo");
+  const candidate = {
+    ...(existingIndex >= 0 ? tasks[existingIndex] : {}),
+    id: existingIndex >= 0 ? tasks[existingIndex].id : nextTaskId(),
+    title: String(body.title || body.task?.title || body.task?.name || (existingIndex >= 0 ? tasks[existingIndex].title : "")).trim(),
+    owner: String(body.owner || body.task?.owner || (existingIndex >= 0 ? tasks[existingIndex].owner : "")).trim(),
+    dueDate: String(body.dueDate || body.task?.dueDate || (existingIndex >= 0 ? tasks[existingIndex].dueDate : "")).trim(),
+    note: String(body.note || body.task?.note || (existingIndex >= 0 ? tasks[existingIndex].note : "")).trim(),
+    progress: nextProgress,
+    status: nextStatus,
+    createdAt: existingIndex >= 0 ? tasks[existingIndex].createdAt : at,
+    createdBy: existingIndex >= 0 ? tasks[existingIndex].createdBy : user.id,
+    updatedAt: at,
+    updatedBy: user.id
+  };
+  if (!candidate.title) throw new Error("请填写任务名称");
+  if (existingIndex >= 0) tasks[existingIndex] = candidate;
+  else tasks.unshift(candidate);
+  project.tasks = tasks;
+  syncProjectProgressFromTasks(project);
+  project.alerts = projectRiskAlerts(project);
+  project.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "task",
+    target: project.name,
+    action: existingIndex >= 0 ? "update" : "create",
+    user: user.name,
+    meta: { taskId: candidate.id, title: candidate.title, progress: candidate.progress, status: candidate.status },
+    at
+  });
+  return { project, task: candidate };
+}
+
 export function deleteProject(db, body, user) {
   const project = (db.projects || []).find((item) => item.id === body?.id);
   if (!project) throw new Error("项目不存在");
@@ -328,6 +509,7 @@ export function deleteProject(db, body, user) {
   db.parseJobs = (db.parseJobs || []).filter((item) => item.projectId !== project.id);
   db.files = (db.files || []).filter((item) => item.projectId !== project.id && item.projectName !== project.name);
   db.suppliers = (db.suppliers || []).filter((item) => item.projectId !== project.id && item.project !== project.name);
+  db.payments = (db.payments || []).filter((item) => item.projectId !== project.id && item.projectName !== project.name);
   const at = new Date().toISOString();
   db.auditLogs.unshift({ type: "project", target: project.name, action: "delete", user: user.name, at });
   return { id: project.id, name: project.name };
@@ -999,6 +1181,265 @@ export function addComment(db, body, user) {
   return comment;
 }
 
+function nextNotificationId(seed = "") {
+  return `notice-${Date.now().toString(36)}-${String(seed).replace(/[^a-zA-Z0-9]/g, "").slice(0, 10)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function notificationKey(item = {}) {
+  return [item.type, item.projectId || item.projectName || "", item.sourceId || ""].join("::");
+}
+
+function projectHasAssignedPm(project = {}) {
+  const pm = String(project.pm || project.extractedFields?.pm || "").trim();
+  const owner = String(project.owner || "").trim();
+  return Boolean(pm && !/待分派|待确认|未分配|暂无/.test(pm)) || Boolean(owner && !/飞书机器人|待分派|待确认|未分配/.test(owner));
+}
+
+function notificationRecipientsForRole(role) {
+  const map = {
+    management: ["shareholder", "admin", "director"],
+    finance: ["shareholder", "admin", "finance"],
+    pm: ["shareholder", "admin", "director", "pm"],
+    sales: ["shareholder", "admin", "director", "sales"]
+  };
+  return map[role] || ["shareholder", "admin"];
+}
+
+function upsertSystemNotification(db, draft) {
+  db.systemNotifications = db.systemNotifications || [];
+  const key = draft.key || notificationKey(draft);
+  const at = new Date().toISOString();
+  const existing = db.systemNotifications.find((item) => item.key === key && !["已处理", "已忽略"].includes(item.status));
+  if (existing) {
+    Object.assign(existing, {
+      ...draft,
+      key,
+      status: existing.status || "待处理",
+      createdAt: existing.createdAt || at,
+      updatedAt: at
+    });
+    return existing;
+  }
+  const record = {
+    id: nextNotificationId(key),
+    key,
+    type: draft.type || "system",
+    title: draft.title || "系统提醒",
+    text: draft.text || "",
+    severity: draft.severity || "中",
+    role: draft.role || "management",
+    recipients: draft.recipients || notificationRecipientsForRole(draft.role || "management"),
+    projectId: draft.projectId || "",
+    projectName: draft.projectName || "",
+    source: draft.source || "scanner",
+    sourceId: draft.sourceId || "",
+    actionLabel: draft.actionLabel || "查看",
+    actionView: draft.actionView || "",
+    status: "待处理",
+    createdAt: at,
+    updatedAt: at
+  };
+  db.systemNotifications.unshift(record);
+  return record;
+}
+
+export function scanSystemNotifications(db, user = { id: "system", name: "系统扫描" }) {
+  db.systemNotifications = db.systemNotifications || [];
+  const now = new Date();
+  const notifications = [];
+
+  for (const project of db.projects || []) {
+    const quoteRules = project.extractedFields?.revenueRecognition?.quoteRules || [];
+    const createdAt = project.createdAt ? new Date(project.createdAt) : now;
+    const hoursSinceCreated = Math.max(0, (now - createdAt) / 36e5);
+    if (!projectHasAssignedPm(project) && (quoteRules.length || /待补|草稿|AI解析中|筹备/.test(String(project.status || "")) || hoursSinceCreated >= 1)) {
+      notifications.push(upsertSystemNotification(db, {
+        type: "project-assignment",
+        title: "项目待分派 PM",
+        text: `「${project.name}」还没有明确 PM。建议总监尽快分派，避免合同/报价已进来但执行没人承接。`,
+        severity: hoursSinceCreated >= 24 ? "高" : "中",
+        role: "management",
+        projectId: project.id,
+        projectName: project.name,
+        source: "project-scanner",
+        sourceId: project.id,
+        actionLabel: "去分派",
+        actionView: "admin:assignments"
+      }));
+    }
+  }
+
+  for (const item of db.feishuPendingFiles || []) {
+    if (item.status !== "待确认") continue;
+    const createdAt = item.createdAt ? new Date(item.createdAt) : now;
+    const hours = Math.max(0, (now - createdAt) / 36e5);
+    notifications.push(upsertSystemNotification(db, {
+      type: "feishu-pending-file",
+      title: "飞书文件待确认",
+      text: `「${item.file?.name || item.preview?.fileName || "飞书文件"}」来自飞书，等待确认后才会写入「${item.projectName || "待匹配项目"}」。`,
+      severity: hours >= 24 ? "高" : "中",
+      role: "pm",
+      recipients: notificationRecipientsForRole("pm"),
+      projectId: item.projectId || "",
+      projectName: item.projectName || "",
+      source: "feishu",
+      sourceId: item.id,
+      actionLabel: "处理文件",
+      actionView: "project-files"
+    }));
+  }
+
+  for (const approval of db.approvals || []) {
+    if (!["待审批", "待处理", "审批中"].includes(approval.status)) continue;
+    const createdAt = approval.createdAt ? new Date(approval.createdAt) : now;
+    const hours = Math.max(0, (now - createdAt) / 36e5);
+    if (hours < 24) continue;
+    const financeRole = approval.currentRole === "finance" || /财务/.test(String(approval.currentRole || ""));
+    notifications.push(upsertSystemNotification(db, {
+      type: "approval-stale",
+      title: "审批等待超过 24 小时",
+      text: `「${approval.projectName || "项目"}」的${approval.typeLabel || approval.type || "审批"} ${approval.amount || 0} 元已等待较久，请${financeRole ? "财务" : "负责人"}及时处理。`,
+      severity: hours >= 48 ? "高" : "中",
+      role: financeRole ? "finance" : "management",
+      projectId: approval.projectId || "",
+      projectName: approval.projectName || "",
+      source: "approval",
+      sourceId: approval.id,
+      actionLabel: "看审批",
+      actionView: "approvals"
+    }));
+  }
+
+  db.systemNotifications = db.systemNotifications.slice(0, 200);
+  db.auditLogs.unshift({
+    type: "notification",
+    target: "system",
+    action: "scan",
+    user: user.name || "系统扫描",
+    meta: { active: db.systemNotifications.filter((item) => item.status === "待处理").length, generated: notifications.length },
+    at: new Date().toISOString()
+  });
+  return db.systemNotifications;
+}
+
+export function updateSystemNotification(db, body, user) {
+  const id = String(body?.id || "").trim();
+  const action = body?.action === "ignore" ? "已忽略" : "已处理";
+  const item = (db.systemNotifications || []).find((notice) => notice.id === id);
+  if (!item) throw new Error("系统通知不存在");
+  const at = new Date().toISOString();
+  item.status = action;
+  item.handledAt = at;
+  item.handledBy = user.id;
+  item.handledByName = user.name;
+  item.note = String(body.note || "").trim();
+  item.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "notification",
+    target: item.title,
+    action: body?.action === "ignore" ? "ignore" : "resolve",
+    user: user.name,
+    meta: { notificationId: item.id, source: item.source, sourceId: item.sourceId },
+    at
+  });
+  return item;
+}
+
+function feishuMessageTextForNotification(item = {}) {
+  const lines = [
+    `【${item.title || "OA 待办"}】`,
+    item.projectName ? `项目：${item.projectName}` : "",
+    item.severity ? `优先级：${item.severity}` : "",
+    item.text || "",
+    item.actionLabel ? `建议动作：${item.actionLabel}` : ""
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
+function candidateUsersForNotification(db, item = {}) {
+  const roles = Array.isArray(item.recipients) && item.recipients.length ? item.recipients : notificationRecipientsForRole(item.role);
+  const activeUsers = (db.users || []).filter((user) => user.status !== "disabled");
+  const project = (db.projects || []).find((row) => row.id === item.projectId || row.name === item.projectName);
+  const projectNames = new Set([project?.pm, project?.owner, project?.sales].filter(Boolean).map((name) => String(name).toLowerCase()));
+  let users = activeUsers.filter((user) => roles.includes(user.role));
+  if (item.projectId && projectNames.size) {
+    const projectUsers = activeUsers.filter((user) => projectNames.has(String(user.name || "").toLowerCase()) || projectNames.has(String(user.email || "").toLowerCase()));
+    users = [...projectUsers, ...users];
+  }
+  return Array.from(new Map(users.map((user) => [user.id, user])).values());
+}
+
+async function sendFeishuTextMessage(settings = {}, openId, text) {
+  if (!openId) throw new Error("缺少飞书 open_id");
+  const mockSend = settings.mockSend === true || settings.mockSend === "true" || settings.mockNotificationSend === true || settings.mockNotificationSend === "true";
+  if (mockSend) {
+    return { mocked: true, receiveId: openId, messageId: `mock-${Date.now()}` };
+  }
+  const token = await getFeishuTenantAccessToken(settings);
+  const res = await fetch("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      receive_id: openId,
+      msg_type: "text",
+      content: JSON.stringify({ text })
+    })
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload.code !== 0) {
+    throw new Error(`飞书私聊发送失败：${payload.msg || res.status}`);
+  }
+  return { messageId: payload.data?.message_id || "", receiveId: openId, raw: payload.data || {} };
+}
+
+export async function sendSystemNotificationToFeishu(db, body, user) {
+  const id = String(body?.id || "").trim();
+  const item = (db.systemNotifications || []).find((notice) => notice.id === id);
+  if (!item) throw new Error("系统通知不存在");
+  const settings = db.settings?.feishu || {};
+  const recipients = candidateUsersForNotification(db, item)
+    .map((recipient) => ({
+      id: recipient.id,
+      name: recipient.name,
+      role: recipient.role,
+      openId: recipient.feishuOpenId || recipient.feishuUserId || "",
+      feishuName: recipient.feishuName || recipient.name
+    }));
+  const targets = recipients.filter((recipient) => recipient.openId);
+  if (!targets.length) throw new Error("没有找到已绑定飞书 Open ID 的收件人，请先在成员管理里填写飞书 Open ID。");
+  const text = String(body.text || feishuMessageTextForNotification(item)).trim();
+  const at = new Date().toISOString();
+  const results = [];
+  for (const target of targets) {
+    try {
+      const result = await sendFeishuTextMessage(settings, target.openId, text);
+      results.push({ ...target, ok: true, ...result });
+    } catch (error) {
+      results.push({ ...target, ok: false, error: error.message });
+    }
+  }
+  item.feishuDelivery = {
+    sentAt: at,
+    sentBy: user.id,
+    sentByName: user.name,
+    text,
+    results
+  };
+  item.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "feishu",
+    target: item.title,
+    action: "send-notification",
+    user: user.name,
+    meta: { notificationId: item.id, total: results.length, ok: results.filter((row) => row.ok).length },
+    at
+  });
+  return item.feishuDelivery;
+}
+
 const APPROVAL_LABELS = {
   petty_cash: "项目备用金",
   reimbursement: "报销",
@@ -1081,6 +1522,29 @@ function applyApprovedFinanceImpact(db, approval) {
     else costs.push(["员工报销", amount]);
     project.costs = costs;
   }
+  if (approval.type === "supplier_payment") {
+    project.costUsed = Number(project.costUsed || 0) + amount;
+    const costs = Array.isArray(project.costs) ? project.costs : [];
+    const supplierName = approval.payee || "供应商付款";
+    const row = costs.find((item) => Array.isArray(item) && item[0] === supplierName);
+    if (row) row[1] = Number(row[1] || 0) + amount;
+    else costs.push([supplierName, amount]);
+    project.costs = costs;
+    db.suppliers = db.suppliers || [];
+    db.suppliers.unshift({
+      supplier: supplierName,
+      project: project.name,
+      type: approval.reason || "供应商付款",
+      amount,
+      status: "已付款",
+      approvalId: approval.id,
+      paidAt: new Date().toISOString()
+    });
+  }
+  project.receivable = Math.max(Number(project.contract || 0) - Number(project.paid || 0), 0);
+  project.margin = Number(project.contract || 0)
+    ? Math.round(((Number(project.contract || 0) - Number(project.costUsed || 0)) / Number(project.contract || 1)) * 100)
+    : 0;
   project.updatedAt = new Date().toISOString();
   approval.appliedAt = project.updatedAt;
 }
@@ -1155,6 +1619,718 @@ export function supplierCsv(db) {
   const rows = db.suppliers.map((item) => [item.supplier, item.project, item.type, item.amount, item.status]
     .map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(","));
   return header + rows.join("\n");
+}
+
+function supplierProfileFor(db, supplierName) {
+  db.supplierProfiles = db.supplierProfiles || [];
+  const name = String(supplierName || "").trim();
+  let profile = db.supplierProfiles.find((item) => item.supplier === name);
+  if (!profile) {
+    profile = { supplier: name, market: "", contact: "", note: "", ratings: [], updatedAt: new Date().toISOString() };
+    db.supplierProfiles.unshift(profile);
+  }
+  profile.ratings = Array.isArray(profile.ratings) ? profile.ratings : [];
+  return profile;
+}
+
+export function supplierLibrary(db) {
+  const profiles = new Map((db.supplierProfiles || []).map((item) => [item.supplier, { ...item, ratings: Array.isArray(item.ratings) ? item.ratings : [] }]));
+  for (const row of db.suppliers || []) {
+    const name = String(row.supplier || "未命名供应商").trim();
+    if (!profiles.has(name)) profiles.set(name, { supplier: name, market: "", contact: "", note: "", ratings: [], updatedAt: "" });
+  }
+  return Array.from(profiles.values()).map((profile) => {
+    const rows = (db.suppliers || []).filter((item) => String(item.supplier || "").trim() === profile.supplier);
+    const projects = Array.from(new Set(rows.map((item) => item.project).filter(Boolean)));
+    const types = Array.from(new Set(rows.map((item) => item.type).filter(Boolean)));
+    const totalAmount = rows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const paidCount = rows.filter((item) => /已付|已结/.test(String(item.status || ""))).length;
+    const ratings = profile.ratings || [];
+    const averageRating = ratings.length
+      ? Number((ratings.reduce((sum, item) => sum + Number(item.score || 0), 0) / ratings.length).toFixed(1))
+      : 0;
+    const reuseScore = Math.min(5, projects.length + Math.floor(rows.length / 3));
+    const ratingScore = averageRating || 3;
+    const star = Math.max(1, Math.min(5, Math.round((reuseScore + ratingScore) / 2)));
+    return {
+      ...profile,
+      cooperationCount: rows.length,
+      projectCount: projects.length,
+      projects,
+      types,
+      totalAmount,
+      paidCount,
+      averageRating,
+      ratingCount: ratings.length,
+      star,
+      recommendationReason: rows.length
+        ? `合作 ${rows.length} 次，覆盖 ${projects.length} 个项目，累计金额 ${Math.round(totalAmount)}，内部评分 ${averageRating || "待评分"}。`
+        : "暂无项目结算记录，建议合作后补充评分。"
+    };
+  }).sort((a, b) => b.star - a.star || b.cooperationCount - a.cooperationCount || b.totalAmount - a.totalAmount);
+}
+
+export function rateSupplier(db, body, user) {
+  const supplierName = String(body.supplier || "").trim();
+  if (!supplierName) throw new Error("请填写供应商名称");
+  const score = Number(body.score || 0);
+  if (!Number.isFinite(score) || score < 1 || score > 5) throw new Error("评分需要在 1-5 之间");
+  const at = new Date().toISOString();
+  const profile = supplierProfileFor(db, supplierName);
+  profile.market = String(body.market || profile.market || "").trim();
+  profile.contact = String(body.contact || profile.contact || "").trim();
+  profile.note = String(body.note || profile.note || "").trim();
+  profile.ratings.unshift({
+    score,
+    project: String(body.project || "").trim(),
+    comment: String(body.comment || "").trim(),
+    user: user.name,
+    userId: user.id,
+    at
+  });
+  profile.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "supplier",
+    target: supplierName,
+    action: "rate",
+    user: user.name,
+    meta: { score, project: body.project || "" },
+    at
+  });
+  return supplierLibrary(db).find((item) => item.supplier === supplierName);
+}
+
+function splitLines(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
+  return String(value || "")
+    .split(/\n|；|;/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function clientProfileFor(db, clientName) {
+  db.clientProfiles = db.clientProfiles || [];
+  const client = String(clientName || "").trim();
+  let profile = db.clientProfiles.find((item) => item.client === client);
+  if (!profile) {
+    profile = { client, likes: [], dislikes: [], pitfalls: [], handoffNote: "", contactStyle: "", updatedAt: new Date().toISOString() };
+    db.clientProfiles.unshift(profile);
+  }
+  profile.likes = Array.isArray(profile.likes) ? profile.likes : splitLines(profile.likes);
+  profile.dislikes = Array.isArray(profile.dislikes) ? profile.dislikes : splitLines(profile.dislikes);
+  profile.pitfalls = Array.isArray(profile.pitfalls) ? profile.pitfalls : splitLines(profile.pitfalls);
+  return profile;
+}
+
+export function clientLibrary(db) {
+  const profiles = new Map((db.clientProfiles || []).map((item) => [item.client, {
+    ...item,
+    likes: splitLines(item.likes),
+    dislikes: splitLines(item.dislikes),
+    pitfalls: splitLines(item.pitfalls)
+  }]));
+  for (const project of db.projects || []) {
+    const client = String(project.client || project.brand || project.name || "").trim();
+    if (!client) continue;
+    if (!profiles.has(client)) profiles.set(client, { client, likes: [], dislikes: [], pitfalls: [], handoffNote: "", contactStyle: "", updatedAt: "" });
+  }
+  return Array.from(profiles.values()).map((profile) => {
+    const projects = (db.projects || []).filter((project) => String(project.client || project.brand || project.name || "").trim() === profile.client);
+    const comments = (db.comments || []).filter((comment) => projects.some((project) => project.name === comment.project));
+    const totalContract = projects.reduce((sum, project) => sum + Number(project.contract || 0), 0);
+    const receivable = projects.reduce((sum, project) => sum + Number(project.receivable || 0), 0);
+    const latestProject = [...projects].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))[0];
+    const inferredPitfalls = comments
+      .map((comment) => String(comment.body || ""))
+      .filter((text) => /雷区|不要|被骂|客户不喜欢|驳回|吐槽|差评|不满意/.test(text))
+      .slice(0, 5);
+    const pitfalls = Array.from(new Set([...profile.pitfalls, ...inferredPitfalls]));
+    return {
+      ...profile,
+      pitfalls,
+      projectCount: projects.length,
+      projects: projects.map((project) => project.name),
+      totalContract,
+      receivable,
+      latestProject: latestProject?.name || "",
+      latestStatus: latestProject?.status || "",
+      commentCount: comments.length,
+      handoffSummary: [
+        profile.likes.length ? `客户偏好：${profile.likes.slice(0, 3).join("；")}` : "",
+        pitfalls.length ? `注意雷区：${pitfalls.slice(0, 3).join("；")}` : "",
+        profile.handoffNote ? `交接备注：${profile.handoffNote}` : "",
+        latestProject ? `最近项目：${latestProject.name}（${latestProject.status || "状态待补"}）` : ""
+      ].filter(Boolean).join("。") || "暂无客户偏好沉淀，建议 PM 在项目动态中记录客户反馈。"
+    };
+  }).sort((a, b) => b.projectCount - a.projectCount || b.totalContract - a.totalContract);
+}
+
+export function saveClientProfile(db, body, user) {
+  const client = String(body.client || "").trim();
+  if (!client) throw new Error("请填写客户名称");
+  const at = new Date().toISOString();
+  const profile = clientProfileFor(db, client);
+  profile.likes = splitLines(body.likes ?? profile.likes);
+  profile.dislikes = splitLines(body.dislikes ?? profile.dislikes);
+  profile.pitfalls = splitLines(body.pitfalls ?? profile.pitfalls);
+  profile.handoffNote = String(body.handoffNote ?? profile.handoffNote ?? "").trim();
+  profile.contactStyle = String(body.contactStyle ?? profile.contactStyle ?? "").trim();
+  profile.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "client",
+    target: client,
+    action: "profile",
+    user: user.name,
+    meta: { likes: profile.likes.length, pitfalls: profile.pitfalls.length },
+    at
+  });
+  return clientLibrary(db).find((item) => item.client === client);
+}
+
+function nextCollectionScriptId() {
+  return `collection-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function sameProject(row, project) {
+  return row.projectId === project.id || row.projectName === project.name || row.project === project.name;
+}
+
+function collectionStats(db, salesName = "") {
+  const rows = db.collectionScripts || [];
+  const completed = rows.filter((item) => item.outcome || typeof item.success === "boolean");
+  const bySales = completed.filter((item) => item.salesName === salesName);
+  const successful = completed.filter((item) => item.success);
+  const best = [...successful].sort((a, b) => Number(b.score || 0) - Number(a.score || 0))[0];
+  return {
+    total: completed.length,
+    ownTotal: bySales.length,
+    ownSuccess: bySales.filter((item) => item.success).length,
+    bestScript: best?.script || "",
+    bestSalesName: best?.salesName || "",
+    bestStyle: best?.style || ""
+  };
+}
+
+function inferSalesStyle(db, user, body = {}) {
+  if (body.style) return String(body.style).trim();
+  const ownRows = (db.collectionScripts || []).filter((item) => item.salesName === user.name && item.style);
+  if (ownRows[0]?.style) return ownRows[0].style;
+  if (user.role === "sales") return "自然、轻松、先同步项目进展，再温和确认付款安排";
+  return "专业、清楚、给客户留出确认空间";
+}
+
+function scriptToneFor(project, clientProfile, body = {}) {
+  if (body.tone) return String(body.tone).trim();
+  const due = String(project.paymentDue || "");
+  if (/逾期|超期|已到期|尾款/.test(due) || Number(project.receivable || 0) > Number(project.contract || 0) * 0.5) {
+    return "礼貌但要推进";
+  }
+  if (clientProfile?.contactStyle) return clientProfile.contactStyle;
+  return "自然提醒";
+}
+
+function humanCollectionScript({ project, user, clientProfile, style, tone, stats }) {
+  const clientName = project.client || project.brand || "客户";
+  const amount = parseMoney(project.receivable);
+  const paymentDue = project.paymentDue || "当前回款节点";
+  const likes = (clientProfile?.likes || []).slice(0, 2).join("、");
+  const pitfalls = (clientProfile?.pitfalls || []).slice(0, 2).join("、");
+  const progress = project.nextMilestone || project.status || "项目正在推进中";
+  const amountText = amount ? `${Math.round(amount).toLocaleString("zh-CN")} 元` : "这期款项";
+  const lines = [
+    `${clientName}老师，我跟您同步下「${project.name}」现在的进展：${progress}，我们这边已经在按节点往前推。`,
+    `我想顺手跟您确认一下${paymentDue}这笔${amountText}的安排，您看大概什么时候方便走一下流程？我这边也好提前配合您补材料、开票或对账。`,
+    `如果财务那边需要合同、报价明细或阶段交付说明，您直接跟我说，我今天就整理好发过去。`
+  ];
+  if (likes) lines.splice(1, 0, `我会按您之前比较认可的方向（${likes}）把交付资料整理得更清楚。`);
+  if (pitfalls) lines.push(`另外我会避开之前提到过的点：${pitfalls}，这次沟通尽量不让您多费时间。`);
+  if (stats.bestScript && stats.bestSalesName && stats.bestSalesName !== user.name) {
+    lines.push(`我参考了${stats.bestSalesName}之前成功率比较高的说法，核心是先把交付和配合讲清楚，再轻轻推动付款节点。`);
+  }
+  return lines.join("\n");
+}
+
+export function collectionLibrary(db) {
+  const rows = db.collectionScripts || [];
+  return rows.map((item) => ({
+    ...item,
+    successRateNote: item.salesName
+      ? (() => {
+          const stats = collectionStats(db, item.salesName);
+          return stats.ownTotal ? `${stats.salesName || item.salesName} 已记录 ${stats.ownTotal} 次，成功 ${stats.ownSuccess} 次` : "暂无结果沉淀";
+        })()
+      : "暂无销售归属"
+  }));
+}
+
+export function suggestCollectionScript(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body?.projectId || item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  const receivable = parseMoney(project.receivable);
+  if (receivable <= 0) throw new Error("这个项目当前没有待回款，不需要生成催收话术");
+  const clientProfile = clientLibrary(db).find((item) => item.client === (project.client || project.brand));
+  const style = inferSalesStyle(db, user, body);
+  const tone = scriptToneFor(project, clientProfile, body);
+  const stats = collectionStats(db, user.name);
+  const at = new Date().toISOString();
+  const record = {
+    id: nextCollectionScriptId(),
+    projectId: project.id,
+    projectName: project.name,
+    client: project.client || project.brand || "",
+    salesId: user.id,
+    salesName: user.name,
+    style,
+    tone,
+    amount: receivable,
+    paymentDue: project.paymentDue || "",
+    script: humanCollectionScript({ project, user, clientProfile, style, tone, stats }),
+    reason: [
+      `待回款 ${receivable.toLocaleString("zh-CN")} 元`,
+      project.paymentDue ? `回款节点：${project.paymentDue}` : "回款节点待补",
+      clientProfile?.pitfalls?.length ? `已避开客户雷区：${clientProfile.pitfalls.slice(0, 2).join("、")}` : "",
+      stats.ownTotal ? `你的历史催收记录 ${stats.ownTotal} 次，成功 ${stats.ownSuccess} 次` : "暂无个人话术结果，先用稳妥模板"
+    ].filter(Boolean).join("；"),
+    outcome: "",
+    success: null,
+    score: null,
+    createdAt: at,
+    updatedAt: at
+  };
+  db.collectionScripts = db.collectionScripts || [];
+  db.collectionScripts.unshift(record);
+  db.auditLogs.unshift({
+    type: "collection",
+    target: project.name,
+    action: "suggest",
+    user: user.name,
+    meta: { scriptId: record.id, amount: receivable },
+    at
+  });
+  return record;
+}
+
+export function saveCollectionOutcome(db, body, user) {
+  const id = String(body?.id || "").trim();
+  const record = (db.collectionScripts || []).find((item) => item.id === id);
+  if (!record) throw new Error("催收记录不存在");
+  const at = new Date().toISOString();
+  record.outcome = String(body.outcome || record.outcome || "").trim();
+  record.success = Boolean(body.success);
+  record.score = Number(body.score || (record.success ? 5 : 2));
+  record.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "collection",
+    target: record.projectName,
+    action: "outcome",
+    user: user.name,
+    meta: { scriptId: record.id, success: record.success, score: record.score },
+    at
+  });
+  return record;
+}
+
+function nextFeishuEventId() {
+  return `feishu-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function nextFeishuPendingFileId() {
+  return `feishu-file-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function normalizeFeishuTextContent(message = {}) {
+  const raw = message.content ?? message.text ?? "";
+  if (typeof raw !== "string") return "";
+  try {
+    const parsed = JSON.parse(raw);
+    return String(parsed.text || parsed.content || raw).trim();
+  } catch {
+    return raw.trim();
+  }
+}
+
+function normalizeFeishuFileName(message = {}) {
+  const raw = message.content ?? "";
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed.file_name || parsed.name || message.fileName || "";
+    } catch {
+      return message.fileName || "";
+    }
+  }
+  return message.fileName || message.name || "";
+}
+
+function normalizeFeishuEvent(payload = {}) {
+  const event = payload.event || payload;
+  const message = event.message || payload.message || {};
+  const sender = event.sender || payload.sender || {};
+  const chatId = message.chat_id || event.chat_id || payload.chatId || payload.chat_id || "";
+  const chatName = message.chat_name || event.chat_name || payload.chatName || payload.chat_name || "";
+  const messageType = message.message_type || payload.messageType || payload.message_type || "text";
+  return {
+    eventId: payload.header?.event_id || payload.event_id || event.event_id || `event-${Date.now()}`,
+    messageId: message.message_id || message.messageId || payload.messageId || payload.message_id || "",
+    chatId,
+    chatName,
+    senderId: sender.sender_id?.open_id || sender.sender_id?.user_id || sender.open_id || payload.senderId || "",
+    senderName: sender.sender_name || sender.name || payload.senderName || "",
+    messageType,
+    text: normalizeFeishuTextContent(message),
+    fileName: normalizeFeishuFileName(message),
+    fileKey: message.file_key || message.fileKey || payload.fileKey || ""
+  };
+}
+
+function findProjectFromText(db, text = "") {
+  const normalized = String(text || "").toLowerCase();
+  return (db.projects || []).find((project) => {
+    const keys = [project.name, project.client, project.brand].filter(Boolean).map((item) => String(item).toLowerCase());
+    return keys.some((key) => key && normalized.includes(key));
+  }) || null;
+}
+
+function feishuBindingFor(db, chatId) {
+  return (db.feishuProjectBindings || []).find((item) => item.chatId === chatId) || null;
+}
+
+function findFeishuSenderUser(db, event) {
+  const senderText = `${event.senderId || ""} ${event.senderName || ""}`.toLowerCase();
+  return (db.users || []).find((user) => {
+    const fields = [user.feishuOpenId, user.feishuUserId, user.feishuName, user.name, user.email]
+      .filter(Boolean)
+      .map((item) => String(item).toLowerCase());
+    return fields.some((field) => field && senderText.includes(field));
+  }) || null;
+}
+
+function inferFeishuUploadType(event = {}, text = "") {
+  const sample = `${event.fileName || ""} ${text || ""}`.toLowerCase();
+  if (/核销|verification/.test(sample)) return "verification-sheet";
+  if (/报价|quote/.test(sample)) return "quote-sheet";
+  if (/成本|支出|费用|结算|cost/.test(sample)) return "cost-sheet";
+  if (/合同|contract/.test(sample)) return "create-project";
+  return "file-reference";
+}
+
+async function getFeishuTenantAccessToken(settings = {}) {
+  if (settings.mockTenantAccessToken) return settings.mockTenantAccessToken;
+  if (settings.tenantAccessToken) return settings.tenantAccessToken;
+  const appId = settings.appId || settings.app_id;
+  const appSecret = settings.appSecret || settings.app_secret;
+  if (!appId || !appSecret) throw new Error("飞书 App ID / App Secret 未配置，无法下载文件");
+  const res = await fetch("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ app_id: appId, app_secret: appSecret })
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload.code !== 0 || !payload.tenant_access_token) {
+    throw new Error(`获取飞书 tenant_access_token 失败：${payload.msg || res.status}`);
+  }
+  return payload.tenant_access_token;
+}
+
+async function downloadFeishuMessageFile(settings = {}, event = {}) {
+  if (settings.mockFileBase64) {
+    return {
+      name: settings.mockFileName || event.fileName || "飞书模拟文件.csv",
+      type: settings.mockFileType || "text/csv",
+      base64: settings.mockFileBase64,
+      size: Buffer.byteLength(settings.mockFileBase64, "base64"),
+      source: "feishu-mock"
+    };
+  }
+  if (!event.messageId || !event.fileKey) throw new Error("飞书消息缺少 message_id 或 file_key，无法下载文件");
+  const token = await getFeishuTenantAccessToken(settings);
+  const url = `https://open.feishu.cn/open-apis/im/v1/messages/${encodeURIComponent(event.messageId)}/resources/${encodeURIComponent(event.fileKey)}?type=file`;
+  const res = await fetch(url, {
+    headers: {
+      authorization: `Bearer ${token}`
+    }
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`下载飞书文件失败：${res.status}${text ? ` ${text.slice(0, 120)}` : ""}`);
+  }
+  const arrayBuffer = await res.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  return {
+    name: event.fileName || `飞书文件-${event.fileKey}`,
+    type: res.headers.get("content-type") || "application/octet-stream",
+    base64: buffer.toString("base64"),
+    size: buffer.length,
+    source: "feishu"
+  };
+}
+
+async function applyFeishuDownloadedFile(db, project, file, uploadType, sender, event) {
+  const payloadFile = {
+    ...file,
+    uploadedBy: sender.id,
+    uploadedByName: sender.name || "飞书成员",
+    uploadedAt: new Date().toISOString(),
+    source: "feishu",
+    feishuFileKey: event.fileKey,
+    feishuMessageId: event.messageId
+  };
+  const actor = {
+    id: sender.id || "feishu-bot",
+    name: sender.name || "飞书成员",
+    role: sender.role || "member"
+  };
+  if (uploadType === "cost-sheet") {
+    return await uploadProjectCostSheet(db, { id: project.id, files: [payloadFile] }, actor);
+  }
+  if (uploadType === "quote-sheet") {
+    return await uploadProjectQuoteSheet(db, { id: project.id, files: [payloadFile] }, actor);
+  }
+  if (uploadType === "verification-sheet") {
+    return await uploadProjectVerificationSheet(db, { id: project.id, files: [payloadFile] }, actor);
+  }
+  if (uploadType === "create-project") {
+    return await createProject(db, { "项目名称": project?.name || file.name.replace(/\.[^.]+$/, "") }, [payloadFile], actor);
+  }
+  return null;
+}
+
+function createFeishuPendingFile(db, { event, project, file, uploadType, sender, note = "" }) {
+  const at = new Date().toISOString();
+  const preview = {
+    fileName: file.name,
+    size: file.size || 0,
+    type: file.type || "",
+    uploadType,
+    projectName: project?.name || "",
+    canConfirm: Boolean(project?.id && file.base64),
+    summary: file.text
+      ? String(file.text).slice(0, 300)
+      : `飞书文件已下载，等待人工确认后写入「${project?.name || "待匹配项目"}」。`
+  };
+  const record = {
+    id: nextFeishuPendingFileId(),
+    eventId: event.eventId,
+    chatId: event.chatId,
+    chatName: event.chatName,
+    senderId: event.senderId,
+    senderName: sender.name || event.senderName || "飞书成员",
+    projectId: project?.id || "",
+    projectName: project?.name || "",
+    uploadType,
+    file,
+    preview,
+    status: "待确认",
+    note,
+    createdAt: at,
+    handledAt: "",
+    handledBy: ""
+  };
+  db.feishuPendingFiles = db.feishuPendingFiles || [];
+  db.feishuPendingFiles.unshift(record);
+  return record;
+}
+
+export function feishuProjectBindings(db) {
+  return (db.feishuProjectBindings || []).map((item) => ({
+    ...item,
+    projectExists: (db.projects || []).some((project) => project.id === item.projectId)
+  }));
+}
+
+export function feishuPendingFiles(db) {
+  return db.feishuPendingFiles || [];
+}
+
+export function saveFeishuProjectBinding(db, body, user) {
+  const chatId = String(body.chatId || body.chat_id || "").trim();
+  const project = (db.projects || []).find((item) => item.id === body.projectId || item.name === body.projectName);
+  if (!chatId) throw new Error("请填写飞书群 Chat ID");
+  if (!project) throw new Error("请选择要绑定的项目");
+  const at = new Date().toISOString();
+  db.feishuProjectBindings = db.feishuProjectBindings || [];
+  const existing = db.feishuProjectBindings.find((item) => item.chatId === chatId);
+  const record = {
+    chatId,
+    chatName: String(body.chatName || body.chat_name || existing?.chatName || "").trim(),
+    projectId: project.id,
+    projectName: project.name,
+    boundBy: user.id,
+    boundAt: existing?.boundAt || at,
+    updatedAt: at
+  };
+  if (existing) Object.assign(existing, record);
+  else db.feishuProjectBindings.unshift(record);
+  db.auditLogs.unshift({
+    type: "feishu",
+    target: record.chatName || record.chatId,
+    action: "bind-project",
+    user: user.name,
+    meta: { projectId: project.id, projectName: project.name },
+    at
+  });
+  return record;
+}
+
+export async function handleFeishuEvent(db, payload, user = { id: "system", name: "飞书机器人", role: "system" }) {
+  if (payload?.challenge) return { challenge: payload.challenge };
+  const token = db.settings?.feishu?.verificationToken;
+  if (token && payload?.token && payload.token !== token) throw new Error("飞书 Verification Token 不匹配");
+  const event = normalizeFeishuEvent(payload);
+  const binding = feishuBindingFor(db, event.chatId);
+  const textProject = findProjectFromText(db, `${event.text} ${event.fileName}`);
+  const project = textProject || (binding ? (db.projects || []).find((item) => item.id === binding.projectId) : null);
+  const sender = findFeishuSenderUser(db, event) || user;
+  const text = event.text || "";
+  const asksNewProject = /新谈|新项目|登记.*项目|创建项目|立项/.test(text);
+  const fileLike = event.messageType !== "text" || event.fileName || event.fileKey;
+  const uploadType = inferFeishuUploadType(event, text);
+  const at = new Date().toISOString();
+  let action = "message";
+  let status = "已记录";
+  let reply = "已收到，我会把这条消息沉淀到 OA。";
+
+  if (asksNewProject && !project) {
+    const projectName = event.fileName
+      ? event.fileName.replace(/\.[^.]+$/, "")
+      : `飞书新项目-${new Date().toLocaleString("zh-CN", { hour12: false })}`;
+    const draft = {
+      id: `P-${Date.now()}`,
+      name: projectName,
+      client: "",
+      owner: sender.name || user.name || "飞书机器人",
+      contract: 0,
+      costBudget: 0,
+      costUsed: 0,
+      paid: 0,
+      receivable: 0,
+      status: "待补合同/报价",
+      risk: "低",
+      aiSummary: "飞书机器人已接收销售的新项目线索。请在 OA 上传/补齐合同与报价表后确认入库。",
+      nextMilestone: "等待销售补齐合同/报价表",
+      paymentDue: "",
+      margin: 0,
+      tasks: [],
+      costs: [],
+      extractedFields: { source: "feishu-bot", feishuChatId: event.chatId, feishuEventId: event.eventId },
+      createdAt: at,
+      createdBy: sender.id || user.id,
+      files: []
+    };
+    draft.alerts = projectRiskAlerts(draft);
+    db.projects.unshift(draft);
+    action = "create-project-draft";
+    status = "已创建项目草稿";
+    reply = `已创建「${draft.name}」项目草稿。请补齐合同/报价表，AI 会继续解析项目金额、客户和回款节点。`;
+  } else if (project && fileLike) {
+    const fileRecord = {
+      name: event.fileName || `飞书文件-${event.eventId}`,
+      size: 0,
+      type: event.messageType,
+      category: "feishu-intake",
+      storageUrl: event.fileKey ? `feishu://${event.fileKey}` : "",
+      uploadedAt: at,
+      uploadedBy: sender.id || user.id,
+      uploadedByName: sender.name || event.senderName || "飞书成员",
+      source: "feishu"
+    };
+    try {
+      const downloaded = await downloadFeishuMessageFile(db.settings?.feishu || {}, event);
+      const pending = createFeishuPendingFile(db, { event, project, file: downloaded, uploadType, sender });
+      action = `download-and-pending-${uploadType}`;
+      status = "待人工确认";
+      reply = `已下载飞书文件「${downloaded.name}」，已进入待确认队列。确认后才会写入「${project.name}」。`;
+      fileRecord.pendingFileId = pending.id;
+    } catch (error) {
+      fileRecord.downloadStatus = `下载/解析待处理：${error.message}`;
+      project.files = [...(project.files || []), fileRecord];
+      db.files.unshift({ files: [fileRecord], projectId: project.id, projectName: project.name, user: fileRecord.uploadedByName, at });
+      action = "record-file-reference";
+      status = "已记录文件引用";
+      reply = `已把飞书文件「${fileRecord.name}」登记到「${project.name}」，但暂未完成下载解析：${error.message}`;
+    }
+  } else if (project) {
+    db.comments.unshift({
+      project: project.name,
+      body: `飞书群消息：${text || "无文本内容"}`,
+      mentions: "",
+      user: sender.name || event.senderName || "飞书成员",
+      at
+    });
+    action = "record-comment";
+    status = "已记录到项目动态";
+    reply = `已把消息记录到「${project.name}」项目动态。`;
+  } else {
+    status = "待匹配项目";
+    reply = "已收到，但还没匹配到项目。请在后台把飞书群 Chat ID 绑定项目，或在消息里写清项目/客户名称。";
+  }
+
+  const record = {
+    id: nextFeishuEventId(),
+    ...event,
+    projectId: project?.id || "",
+    projectName: project?.name || "",
+    action,
+    status,
+    reply,
+    createdAt: at
+  };
+  db.feishuEvents = db.feishuEvents || [];
+  db.feishuEvents.unshift(record);
+  db.auditLogs.unshift({
+    type: "feishu",
+    target: project?.name || event.chatName || event.chatId || "飞书事件",
+    action,
+    user: sender.name || event.senderName || "飞书机器人",
+    meta: { eventId: record.id, chatId: event.chatId, status },
+    at
+  });
+  return { event: record, reply };
+}
+
+export async function handleFeishuPendingFile(db, body, user) {
+  const id = String(body?.id || "").trim();
+  const action = body?.action === "reject" ? "reject" : "confirm";
+  const pending = (db.feishuPendingFiles || []).find((item) => item.id === id);
+  if (!pending) throw new Error("飞书待确认文件不存在");
+  if (pending.status !== "待确认") throw new Error(`该文件已处理：${pending.status}`);
+  const at = new Date().toISOString();
+  if (action === "reject") {
+    pending.status = "已驳回";
+    pending.note = String(body.note || "人工驳回").trim();
+    pending.handledAt = at;
+    pending.handledBy = user.id;
+    db.auditLogs.unshift({
+      type: "feishu",
+      target: pending.projectName || pending.file?.name || pending.id,
+      action: "reject-pending-file",
+      user: user.name,
+      meta: { pendingFileId: pending.id, uploadType: pending.uploadType },
+      at
+    });
+    return pending;
+  }
+
+  const project = (db.projects || []).find((item) => item.id === pending.projectId);
+  if (!project && pending.uploadType !== "create-project") throw new Error("待确认文件未匹配到项目，无法确认入库");
+  await applyFeishuDownloadedFile(db, project, pending.file, pending.uploadType, user, {
+    eventId: pending.eventId,
+    fileKey: pending.file?.feishuFileKey || "",
+    messageId: pending.file?.feishuMessageId || ""
+  });
+  pending.status = "已确认入库";
+  pending.note = String(body.note || "人工确认入库").trim();
+  pending.handledAt = at;
+  pending.handledBy = user.id;
+  db.auditLogs.unshift({
+    type: "feishu",
+    target: pending.projectName || pending.file?.name || pending.id,
+    action: "confirm-pending-file",
+    user: user.name,
+    meta: { pendingFileId: pending.id, uploadType: pending.uploadType },
+    at
+  });
+  return pending;
 }
 
 export function normalizeAiSettings(values = {}) {

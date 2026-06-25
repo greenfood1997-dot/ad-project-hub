@@ -12,6 +12,9 @@ create table if not exists users (
 alter table users add column if not exists email text;
 alter table users add column if not exists status text not null default 'active';
 alter table users add column if not exists pin text not null default '123456';
+alter table users add column if not exists feishu_open_id text;
+alter table users add column if not exists feishu_user_id text;
+alter table users add column if not exists feishu_name text;
 create unique index if not exists users_email_unique on users (lower(email)) where email is not null;
 
 create table if not exists settings (
@@ -75,6 +78,16 @@ create table if not exists project_files (
 alter table project_files add column if not exists data_url text;
 alter table project_files add column if not exists category text;
 
+create table if not exists client_profiles (
+  client text primary key,
+  likes jsonb not null default '[]'::jsonb,
+  dislikes jsonb not null default '[]'::jsonb,
+  pitfalls jsonb not null default '[]'::jsonb,
+  handoff_note text,
+  contact_style text,
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists parse_jobs (
   id text primary key,
   project_id text references projects(id) on delete cascade,
@@ -101,6 +114,123 @@ create table if not exists suppliers (
   amount numeric not null default 0,
   status text not null default '待结算',
   created_at timestamptz not null default now()
+);
+
+create table if not exists supplier_profiles (
+  supplier text primary key,
+  market text,
+  contact text,
+  note text,
+  ratings jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists payments (
+  id text primary key,
+  project_id text references projects(id) on delete cascade,
+  project_name text,
+  client text,
+  amount numeric not null default 0,
+  payer text,
+  method text,
+  note text,
+  received_at timestamptz not null default now(),
+  recorded_by text references users(id),
+  recorded_by_name text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists collection_scripts (
+  id text primary key,
+  project_id text references projects(id) on delete cascade,
+  project_name text,
+  client text,
+  sales_id text references users(id),
+  sales_name text,
+  style text,
+  tone text,
+  amount numeric not null default 0,
+  payment_due text,
+  script text,
+  reason text,
+  outcome text,
+  success boolean,
+  score numeric,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists feishu_project_bindings (
+  chat_id text primary key,
+  chat_name text,
+  project_id text references projects(id) on delete cascade,
+  project_name text,
+  bound_by text references users(id),
+  bound_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists feishu_events (
+  id text primary key,
+  event_id text,
+  chat_id text,
+  chat_name text,
+  sender_id text,
+  sender_name text,
+  message_type text,
+  text text,
+  file_name text,
+  file_key text,
+  project_id text references projects(id) on delete set null,
+  project_name text,
+  action text,
+  status text,
+  reply text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists feishu_pending_files (
+  id text primary key,
+  event_id text,
+  chat_id text,
+  chat_name text,
+  sender_id text,
+  sender_name text,
+  project_id text references projects(id) on delete set null,
+  project_name text,
+  upload_type text,
+  file jsonb not null default '{}'::jsonb,
+  preview jsonb not null default '{}'::jsonb,
+  status text not null default '待确认',
+  note text,
+  created_at timestamptz not null default now(),
+  handled_at timestamptz,
+  handled_by text references users(id)
+);
+
+create table if not exists system_notifications (
+  id text primary key,
+  notice_key text unique,
+  type text,
+  title text,
+  body text,
+  severity text,
+  role text,
+  recipients jsonb not null default '[]'::jsonb,
+  project_id text references projects(id) on delete set null,
+  project_name text,
+  source text,
+  source_id text,
+  action_label text,
+  action_view text,
+  status text not null default '待处理',
+  note text,
+  feishu_delivery jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  handled_at timestamptz,
+  handled_by text references users(id),
+  handled_by_name text
 );
 
 create table if not exists alert_updates (

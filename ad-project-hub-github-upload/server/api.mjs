@@ -6,16 +6,33 @@ import {
   createApproval,
   advanceParseJob,
   createProject,
+  clientLibrary,
+  collectionLibrary,
   deleteProject,
+  feishuProjectBindings,
+  feishuPendingFiles,
+  handleFeishuPendingFile,
+  handleFeishuEvent,
   previewProjectUpload,
+  recordProjectPayment,
   recordFiles,
+  rateSupplier,
   reparseProject,
   refreshInterestRate,
   saveSetting,
+  saveClientProfile,
+  saveCollectionOutcome,
+  saveFeishuProjectBinding,
+  sendSystemNotificationToFeishu,
   supplierCsv,
+  supplierLibrary,
+  suggestCollectionScript,
+  scanSystemNotifications,
   testAiSettings,
   updateAlert,
+  updateSystemNotification,
   updateProject,
+  upsertProjectTask,
   uploadProjectCostSheet,
   uploadProjectQuoteSheet,
   uploadProjectVerificationSheet
@@ -87,6 +104,9 @@ function saveMember(db, body, actor) {
     email,
     role,
     department: body.department?.trim() || "",
+    feishuOpenId: String(body.feishuOpenId || existing?.feishuOpenId || "").trim(),
+    feishuUserId: String(body.feishuUserId || existing?.feishuUserId || "").trim(),
+    feishuName: String(body.feishuName || existing?.feishuName || body.name || "").trim(),
     status: body.status || "active",
     pin: body.pin || existing?.pin || "123456",
     createdAt: existing?.createdAt || new Date().toISOString()
@@ -171,10 +191,13 @@ function saveProjectAssignment(db, body, actor) {
     assignedMemberIds: memberIds,
     assignedMembers: assignedUsers.map((member) => ({
       id: member.id,
-      name: member.name,
-      role: member.role,
-      email: member.email,
-      department: member.department
+    name: member.name,
+    role: member.role,
+    email: member.email,
+    department: member.department,
+    feishuOpenId: member.feishuOpenId || "",
+    feishuUserId: member.feishuUserId || "",
+    feishuName: member.feishuName || member.name
     }))
   };
   project.updatedAt = now;
@@ -248,7 +271,7 @@ function projectDepartment(project) {
 }
 
 function visibleProjectsForUser(db, user) {
-  if (ADMIN_ROLES.includes(user.role)) return db.projects || [];
+  if ([...ADMIN_ROLES, "finance"].includes(user.role)) return db.projects || [];
   if (user.role === "director") {
     const departments = new Set([user.department, ...memberDepartmentsForUser(db, user)].filter(Boolean));
     return (db.projects || []).filter((project) => {
@@ -270,8 +293,19 @@ function scopedSnapshot(db, user) {
   return {
     ...db,
     projects,
+    clientProfiles: clientLibrary({ ...db, projects }),
     suppliers: (db.suppliers || []).filter((item) => projectNames.has(item.project)),
+    supplierProfiles: supplierLibrary({
+      ...db,
+      suppliers: (db.suppliers || []).filter((item) => projectNames.has(item.project))
+    }),
     approvals: (db.approvals || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)),
+    payments: (db.payments || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)),
+    collectionScripts: (db.collectionScripts || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)),
+    feishuProjectBindings: (db.feishuProjectBindings || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName)),
+    feishuEvents: (db.feishuEvents || []).filter((item) => !item.projectId || projectIds.has(item.projectId) || projectNames.has(item.projectName)).slice(0, 50),
+    feishuPendingFiles: (db.feishuPendingFiles || []).filter((item) => !item.projectId || projectIds.has(item.projectId) || projectNames.has(item.projectName)).slice(0, 50),
+    systemNotifications: visibleSystemNotificationsFor(db, user),
     files: (db.files || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName)),
     parseJobs: (db.parseJobs || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName)),
     comments: (db.comments || []).filter((item) => projectNames.has(item.project)),
@@ -282,6 +316,25 @@ function scopedSnapshot(db, user) {
 
 function canAccessProject(db, user, projectId) {
   return visibleProjectsForUser(db, ensureMemberFields(user)).some((project) => project.id === projectId);
+}
+
+function visibleSystemNotificationsFor(db, user) {
+  const actor = ensureMemberFields(user);
+  const projects = visibleProjectsForUser(db, actor);
+  const projectIds = new Set(projects.map((project) => project.id));
+  const projectNames = new Set(projects.map((project) => project.name));
+  const adminLike = ADMIN_ROLES.includes(actor.role);
+  const managementLike = MANAGEMENT_ROLES.includes(actor.role);
+  return (db.systemNotifications || [])
+    .filter((item) => {
+      if (item.status !== "待处理") return false;
+      if (adminLike) return true;
+      const hasProjectAccess = item.projectId ? projectIds.has(item.projectId) : projectNames.has(item.projectName);
+      if (hasProjectAccess) return true;
+      if (managementLike && Array.isArray(item.recipients) && item.recipients.includes(actor.role)) return true;
+      return false;
+    })
+    .slice(0, 50);
 }
 
 function scopedSettings(settings = {}, user) {
@@ -317,6 +370,13 @@ function scopedSettings(settings = {}, user) {
 function publicState(db, user) {
   return {
     ...db,
+    clientProfiles: clientLibrary(db),
+    supplierProfiles: supplierLibrary(db),
+    collectionScripts: collectionLibrary(db),
+    feishuProjectBindings: ADMIN_ROLES.includes(user.role) ? feishuProjectBindings(db) : db.feishuProjectBindings || [],
+    feishuEvents: ADMIN_ROLES.includes(user.role) ? (db.feishuEvents || []).slice(0, 50) : (db.feishuEvents || []).slice(0, 20),
+    feishuPendingFiles: ADMIN_ROLES.includes(user.role) ? feishuPendingFiles(db).slice(0, 50) : (db.feishuPendingFiles || []).slice(0, 20),
+    systemNotifications: visibleSystemNotificationsFor(db, user),
     settings: scopedSettings(db.settings || {}, user),
     users: ADMIN_ROLES.includes(user.role)
       ? (db.users || []).map((item) => publicUser(ensureMemberFields(item)))
@@ -343,13 +403,49 @@ export async function handleApi(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/state") {
-    const scoped = scopedSnapshot(snapshot, ensureMemberFields(user));
+    await mutateDb((db) => scanSystemNotifications(db, { id: "system", name: "系统扫描" }));
+    const fresh = await readDb();
+    const scoped = scopedSnapshot(fresh, ensureMemberFields(user));
     sendJson(res, 200, {
       ok: true,
       data: publicState(scoped, ensureMemberFields(user)),
       currentUser: publicUser(ensureMemberFields(user)),
       dbMode: dbMode()
     });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/notifications/action") {
+    const body = await readBody(req);
+    const notice = (snapshot.systemNotifications || []).find((item) => item.id === body.id);
+    if (!notice) {
+      sendJson(res, 404, { ok: false, error: "系统通知不存在" });
+      return;
+    }
+    const visible = visibleSystemNotificationsFor(snapshot, ensureMemberFields(user)).some((item) => item.id === notice.id);
+    if (!visible) {
+      sendJson(res, 403, { ok: false, error: "无权限处理该通知" });
+      return;
+    }
+    const data = await mutateDb((db) => updateSystemNotification(db, body, ensureMemberFields(user)));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/notifications/feishu/send") {
+    const body = await readBody(req);
+    const notice = (snapshot.systemNotifications || []).find((item) => item.id === body.id);
+    if (!notice) {
+      sendJson(res, 404, { ok: false, error: "系统通知不存在" });
+      return;
+    }
+    const visible = visibleSystemNotificationsFor(snapshot, ensureMemberFields(user)).some((item) => item.id === notice.id);
+    if (!visible || !["shareholder", "admin", "director", "pm", "finance"].includes(user.role)) {
+      sendJson(res, 403, { ok: false, error: "无权限发送该飞书通知" });
+      return;
+    }
+    const data = await mutateDb((db) => sendSystemNotificationToFeishu(db, body, ensureMemberFields(user)));
+    sendJson(res, 200, { ok: true, data });
     return;
   }
 
@@ -408,6 +504,45 @@ export async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/settings/interest-rate/refresh") {
     if (!requireRole(user, ADMIN_ROLES, res)) return;
     const data = await mutateDb((db) => refreshInterestRate(db, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/integrations/feishu/bindings") {
+    if (!requireRole(user, ADMIN_ROLES, res)) return;
+    sendJson(res, 200, { ok: true, data: feishuProjectBindings(snapshot) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/integrations/feishu/bindings") {
+    if (!requireRole(user, ADMIN_ROLES, res)) return;
+    const body = await readBody(req);
+    const data = await mutateDb((db) => saveFeishuProjectBinding(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/integrations/feishu/events") {
+    const body = await readBody(req);
+    const data = await mutateDb(async (db) => handleFeishuEvent(db, body, { id: "feishu-bot", name: "飞书机器人", role: "bot" }));
+    if (data.challenge) sendJson(res, 200, { challenge: data.challenge });
+    else sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/integrations/feishu/pending-files/action") {
+    if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance"], res)) return;
+    const body = await readBody(req);
+    const pending = (snapshot.feishuPendingFiles || []).find((item) => item.id === body.id);
+    if (!pending) {
+      sendJson(res, 404, { ok: false, error: "飞书待确认文件不存在" });
+      return;
+    }
+    if (pending.projectId && !canAccessProject(snapshot, user, pending.projectId) && !ADMIN_ROLES.includes(user.role)) {
+      sendJson(res, 403, { ok: false, error: "无权限处理该飞书文件" });
+      return;
+    }
+    const data = await mutateDb(async (db) => handleFeishuPendingFile(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }
@@ -490,6 +625,30 @@ export async function handleApi(req, res) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/payments") {
+    if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance"], res)) return;
+    const body = await readBody(req);
+    if (!canAccessProject(snapshot, user, body.projectId || body.id)) {
+      sendJson(res, 403, { ok: false, error: "无权限为该项目记录回款" });
+      return;
+    }
+    const data = await mutateDb((db) => recordProjectPayment(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/project-tasks") {
+    if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance", "member"], res)) return;
+    const body = await readBody(req);
+    if (!canAccessProject(snapshot, user, body.projectId || body.id)) {
+      sendJson(res, 403, { ok: false, error: "无权限更新该项目任务" });
+      return;
+    }
+    const data = await mutateDb((db) => upsertProjectTask(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/files/record") {
     if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
     const body = await readBody(req);
@@ -552,6 +711,81 @@ export async function handleApi(req, res) {
       "content-disposition": "attachment; filename=supplier-settlements.csv"
     });
     res.end(supplierCsv(snapshot));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/suppliers") {
+    const scoped = scopedSnapshot(snapshot, ensureMemberFields(user));
+    sendJson(res, 200, { ok: true, data: supplierLibrary(scoped) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/suppliers/rate") {
+    if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance", "member"], res)) return;
+    const body = await readBody(req);
+    const scoped = scopedSnapshot(snapshot, ensureMemberFields(user));
+    const visibleNames = new Set((scoped.suppliers || []).map((item) => item.supplier));
+    if (!visibleNames.has(body.supplier) && !["shareholder", "admin", "finance"].includes(user.role)) {
+      sendJson(res, 403, { ok: false, error: "无权限评价该供应商" });
+      return;
+    }
+    const data = await mutateDb((db) => rateSupplier(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/clients") {
+    const scoped = scopedSnapshot(snapshot, ensureMemberFields(user));
+    sendJson(res, 200, { ok: true, data: publicState(scoped, ensureMemberFields(user)).clientProfiles });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/clients/profile") {
+    if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance", "member"], res)) return;
+    const body = await readBody(req);
+    const scoped = scopedSnapshot(snapshot, ensureMemberFields(user));
+    const visibleClients = new Set((scoped.projects || []).map((project) => String(project.client || project.brand || project.name || "").trim()));
+    if (!visibleClients.has(String(body.client || "").trim()) && !["shareholder", "admin", "finance"].includes(user.role)) {
+      sendJson(res, 403, { ok: false, error: "无权限维护该客户档案" });
+      return;
+    }
+    const data = await mutateDb((db) => saveClientProfile(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/collections") {
+    const scoped = scopedSnapshot(snapshot, ensureMemberFields(user));
+    sendJson(res, 200, { ok: true, data: collectionLibrary(scoped) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/collections/suggest") {
+    if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance"], res)) return;
+    const body = await readBody(req);
+    if (!canAccessProject(snapshot, user, body.projectId || body.id)) {
+      sendJson(res, 403, { ok: false, error: "无权限为该项目生成催收话术" });
+      return;
+    }
+    const data = await mutateDb((db) => suggestCollectionScript(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/collections/outcome") {
+    if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance"], res)) return;
+    const body = await readBody(req);
+    const record = (snapshot.collectionScripts || []).find((item) => item.id === body.id);
+    if (!record) {
+      sendJson(res, 404, { ok: false, error: "催收记录不存在" });
+      return;
+    }
+    if (!canAccessProject(snapshot, user, record.projectId) && !["shareholder", "admin", "finance"].includes(user.role)) {
+      sendJson(res, 403, { ok: false, error: "无权限更新该催收记录" });
+      return;
+    }
+    const data = await mutateDb((db) => saveCollectionOutcome(db, body, user));
+    sendJson(res, 200, { ok: true, data });
     return;
   }
 

@@ -18,6 +18,7 @@ import {
   LogOut,
   Mail,
   MessageSquareText,
+  MessagesSquare,
   Plus,
   Search,
   Settings2,
@@ -65,6 +66,32 @@ function fileSize(value) {
   return `${number} B`;
 }
 
+function normalizeTask(task, index = 0) {
+  if (Array.isArray(task)) {
+    const progress = Number(task[1] || 0);
+    return {
+      id: task[2] || `task-${index}`,
+      title: task[0] || `任务 ${index + 1}`,
+      progress,
+      status: progress >= 100 ? "done" : progress > 0 ? "doing" : "todo",
+      owner: "",
+      dueDate: "",
+      note: ""
+    };
+  }
+  const progress = Number(task?.progress || 0);
+  return {
+    id: task?.id || `task-${index}`,
+    title: task?.title || task?.name || `任务 ${index + 1}`,
+    progress,
+    status: task?.status || (progress >= 100 ? "done" : progress > 0 ? "doing" : "todo"),
+    owner: task?.owner || "",
+    dueDate: task?.dueDate || "",
+    note: task?.note || "",
+    updatedAt: task?.updatedAt || ""
+  };
+}
+
 function fileToPayload(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -102,7 +129,9 @@ function normalizeProject(project) {
   const receivable = Number(project.receivable || Math.max(contract - paid, 0));
   const costBudget = Number(project.costBudget || project.cost_budget || 0);
   const costUsed = Number(project.costUsed || project.cost_used || 0);
-  const tasks = Array.isArray(project.tasks) && project.tasks.length ? project.tasks : [["资料归档", project.files?.length ? 100 : 35], ["月度执行", 42], ["核销确认", 18]];
+  const tasks = Array.isArray(project.tasks) && project.tasks.length
+    ? project.tasks.map(normalizeTask)
+    : [["资料归档", project.files?.length ? 100 : 35], ["月度执行", 42], ["核销确认", 18]].map(normalizeTask);
   const progress = Number(project.progress || averageProgress(tasks) || inferTimeProgress(project));
   return {
     ...project,
@@ -162,36 +191,117 @@ function fileKindLabel(source = "") {
   return "文件";
 }
 
+function materialMatches(materialKey, text = "") {
+  if (materialKey === "contract") return /合同|contract|协议|甲方|乙方/i.test(text);
+  if (materialKey === "quote") return /报价|quote|刊例|报价单|报价表/i.test(text);
+  if (materialKey === "cost") return /成本|费用|execution|cost|供应商结算|利润测算/i.test(text);
+  if (materialKey === "verification") return /核销|verification|验收|月度/i.test(text);
+  return false;
+}
+
+function materialStatusLabel(item) {
+  if (item.status === "parsed") return "已解析";
+  if (item.status === "review") return "需复核";
+  if (item.status === "parsing") return "解析中";
+  if (item.status === "uploaded") return "已上传";
+  return "待补";
+}
+
 function projectMaterialStatus(project = {}, files = [], jobs = []) {
-  const fileText = [
+  const allFiles = [
     ...(project.files || []),
     ...files,
     ...jobs.flatMap((job) => job.files || [])
-  ].map((file) => `${file.name || ""} ${file.category || ""} ${file.source || ""}`).join(" ");
-  const extracted = project.extractedFields || {};
-  const hasContract = Boolean(project.contract) || /合同|contract/i.test(fileText);
-  const hasQuote = Boolean(extracted.quoteRules?.length || extracted.revenueRules?.length) || /报价|quote/i.test(fileText);
-  const hasCost = Boolean(project.costUsed || (project.costs || []).some(([, value]) => Number(value) > 0)) || /成本|费用|execution|cost/i.test(fileText);
-  const hasVerification = Boolean(extracted.verifications?.length || extracted.verificationRecords?.length) || /核销|verification/i.test(fileText);
-  const items = [
-    { key: "contract", label: "合同", done: hasContract, tip: hasContract ? "合同信息已进入项目" : "请上传合同或补充合同金额" },
-    { key: "quote", label: "报价表", done: hasQuote, tip: hasQuote ? "报价规则已归档" : "建议上传报价表，方便后续核销匹配" },
-    { key: "cost", label: "成本表", done: hasCost, tip: hasCost ? "成本记录已沉淀" : "执行成本还不完整，建议补成本表或报销记录" },
-    { key: "verification", label: "核销表", done: hasVerification, tip: hasVerification ? "核销材料已记录" : "月度核销表待补，影响回款判断" },
   ];
+  const extracted = project.extractedFields || {};
+  const revenue = extracted.revenueRecognition || {};
+  const specs = [
+    {
+      key: "contract",
+      label: "合同",
+      uploadType: "create-project",
+      parsed: Boolean(project.contract),
+      review: Boolean(project.contract) && (!project.client || !project.paymentDue || project.paymentDue === "待确认回款节点"),
+      emptyTip: "请上传合同或补充合同金额"
+    },
+    {
+      key: "quote",
+      label: "报价表",
+      uploadType: "quote-sheet",
+      parsed: Boolean(revenue.quoteRules?.length || extracted.quoteRules?.length || extracted.revenueRules?.length),
+      review: Boolean(revenue.quoteRules?.length) && !revenue.updatedAt,
+      emptyTip: "建议上传报价表，方便后续核销匹配"
+    },
+    {
+      key: "cost",
+      label: "成本表",
+      uploadType: "cost-sheet",
+      parsed: Boolean(project.costUsed || (project.costs || []).some((row) => Number(Array.isArray(row) ? row[1] : row.amount) > 0)),
+      review: Boolean(project.costBudget && project.costUsed > project.costBudget),
+      emptyTip: "执行成本还不完整，建议补成本表或报销记录"
+    },
+    {
+      key: "verification",
+      label: "核销表",
+      uploadType: "verification-sheet",
+      parsed: Boolean(revenue.verificationRecords?.length || extracted.verifications?.length || extracted.verificationRecords?.length),
+      review: Boolean((revenue.verificationRecords || []).some((record) => String(record.status || "").includes("复核"))),
+      emptyTip: "月度核销表待补，影响回款判断"
+    },
+  ];
+  const items = specs.map((spec) => {
+    const matchedFiles = allFiles.filter((file) => materialMatches(spec.key, `${file.name || ""} ${file.category || ""} ${file.source || ""} ${file.type || ""}`));
+    const matchedJobs = jobs.filter((job) => materialMatches(spec.key, `${job.projectName || ""} ${job.status || ""} ${(job.files || []).map((file) => file.name || file.category || "").join(" ")}`));
+    const parsing = matchedJobs.some((job) => !/完成|失败/.test(String(job.status || "")) && Number(job.progress || 0) < 100);
+    const failed = matchedJobs.some((job) => /失败|错误/.test(String(job.status || "")));
+    const status = failed || spec.review
+      ? "review"
+      : spec.parsed
+        ? "parsed"
+        : parsing
+          ? "parsing"
+          : matchedFiles.length
+            ? "uploaded"
+            : "missing";
+    return {
+      ...spec,
+      done: status === "parsed",
+      status,
+      statusLabel: materialStatusLabel({ status }),
+      files: matchedFiles,
+      jobs: matchedJobs,
+      tip: status === "missing"
+        ? spec.emptyTip
+        : status === "uploaded"
+          ? "文件已上传，等待 AI 解析或确认入库"
+          : status === "parsing"
+            ? "AI 正在解析，请稍后刷新查看结果"
+            : status === "review"
+              ? "已发现需复核信息，请查看解析结果或补充字段"
+              : "材料已归档并进入项目数据"
+    };
+  });
   return {
     items,
-    missing: items.filter((item) => !item.done),
+    missing: items.filter((item) => item.status === "missing" || item.status === "review"),
     doneCount: items.filter((item) => item.done).length
   };
 }
 
-function projectActionItems({ project, files, jobs, approvals, health, isManagement }) {
+function projectActionItems({ project, files, jobs, approvals, health, isManagement, feishuPending = [] }) {
   const materials = projectMaterialStatus(project, files, jobs);
   const pendingApprovals = approvals.filter((item) => String(item.status || "").includes("待"));
   const receivable = Number(project.receivable || 0);
   const costRate = project.costBudget ? Math.round((Number(project.costUsed || 0) / Number(project.costBudget || 1)) * 100) : 0;
   const actions = [];
+  const pendingFeishuCount = feishuPending.filter((item) => item.status === "待确认").length;
+  if (pendingFeishuCount) {
+    actions.push({
+      tone: "warn",
+      title: "确认飞书文件",
+      text: `${pendingFeishuCount} 个飞书文件等待确认，确认前不会写入项目成本/报价/核销。`
+    });
+  }
   if (materials.missing.length) {
     actions.push({
       tone: "warn",
@@ -206,6 +316,38 @@ function projectActionItems({ project, files, jobs, approvals, health, isManagem
   if (pendingApprovals.length) actions.push({ tone: "warn", title: "处理待审批", text: `${pendingApprovals.length} 条审批仍在流程中，可能影响备用金、报销或供应商付款。` });
   if (isManagement && costRate >= 85) actions.push({ tone: "danger", title: "成本接近预算", text: `已使用预算 ${costRate}%，建议冻结非必要新增支出。` });
   return actions.slice(0, 5);
+}
+
+function projectAiAdvice({ project, materialStatus, approvals, health, isManagement, feishuPending = [] }) {
+  const advice = [];
+  const pendingFeishuCount = feishuPending.filter((item) => item.status === "待确认").length;
+  if (pendingFeishuCount) {
+    advice.push(`先处理 ${pendingFeishuCount} 个飞书待确认文件，避免项目材料已经到群里但还没入库。`);
+  }
+  if (materialStatus.missing.length) {
+    advice.push(`优先补齐${materialStatus.missing.map((item) => item.label).join("、")}，否则后续成本归集、核销和回款判断会不完整。`);
+  }
+  if (health.label === "滞后") advice.push("当前完成度落后于时间进度，建议 PM 明确本周交付物，并把客户确认材料先归档。");
+  if (Number(project.receivable || 0) > 0) advice.push(`待回款 ${money(project.receivable)}，建议销售结合节点「${project.paymentDue || "待确认"}」跟进客户确认。`);
+  if (approvals.some((item) => String(item.status || "").includes("待"))) advice.push("项目内仍有待处理审批，可能影响执行备用金、报销或供应商付款。");
+  if (isManagement && Number(project.margin || 0) < 25) advice.push("该项目毛利率偏低，管理层应复盘报价、供应商支出和临时追加成本。");
+  if (!advice.length) advice.push("项目关键材料和节奏较稳定，可以提前准备下月核销、客户确认和结案复盘材料。");
+  return advice.slice(0, 4);
+}
+
+function currentApprovalStepInfo(approval = {}) {
+  return (approval.steps || []).find((step) => step.status === "current") || null;
+}
+
+function canHandleApproval(session = {}, approval = {}) {
+  if (!approval.id || !String(approval.status || "").includes("待")) return false;
+  if (["shareholder", "admin"].includes(session.role)) return true;
+  const step = currentApprovalStepInfo(approval);
+  if (!step) return false;
+  if (step.role === "pm") return ["pm", "director"].includes(session.role);
+  if (step.role === "director") return session.role === "director";
+  if (step.role === "finance") return session.role === "finance";
+  return false;
 }
 
 function operatingSettings(settings = {}) {
@@ -339,6 +481,13 @@ function aiReplyFor({ query, session, projects, approvals = [], settings = {}, s
     if (!projectApprovals.length) return `「${target.name}」当前没有审批记录。你可以说“帮我提交 500 元报销到${target.name}”，我会直接生成审批单。`;
     return `「${target.name}」共有 ${projectApprovals.length} 条审批：${projectApprovals.slice(0, 3).map((item) => `${item.typeLabel || item.type} ${money(item.amount)} ${item.status}`).join("；")}。`;
   }
+  if (/回款|收款|催收|待收|尾款|首款/.test(query)) {
+    const rate = target.contract ? Math.round((Number(target.paid || 0) / Number(target.contract || 1)) * 100) : 0;
+    const advice = target.receivable > 0
+      ? `建议销售围绕「${target.paymentDue || "待确认回款节点"}」跟客户确认付款时间，话术可以更像人话：先同步项目已完成/正在推进的节点，再温和确认本期款项安排。`
+      : "当前项目没有待回款，可以准备结案资料和复盘。";
+    return `「${target.name}」合同 ${money(target.contract)}，已回款 ${money(target.paid)}，待回款 ${money(target.receivable)}，回款率 ${rate}%。${advice}`;
+  }
   if (/登记|上传|归档|成本/.test(query)) {
     const matches = projects.filter((project) => query.includes(project.name) || (project.client && query.includes(project.client)));
     if (!matches.length && projects.length > 1) {
@@ -389,6 +538,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [role, setRole] = useState("全部角色");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [searchText, setSearchText] = useState("");
   const isAdmin = ["shareholder", "admin"].includes(session?.role);
@@ -407,6 +557,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
       .some((value) => String(value || "").toLowerCase().includes(query)));
   }, [projects, searchText]);
   const selected = visibleProjects.find((project) => project.id === selectedId) || visibleProjects[0] || projects[0] || null;
+  const systemNotifications = (state?.systemNotifications || []).filter((item) => item.status === "待处理");
 
   function loadState() {
     return fetch("/api/state", { headers: { "x-user-id": session.id } })
@@ -423,6 +574,53 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   useEffect(() => {
     loadState();
   }, [session.id]);
+
+  async function handleNotification(item, action = "resolve") {
+    try {
+      await apiRequest("/api/notifications/action", session, {
+        method: "POST",
+        body: JSON.stringify({ id: item.id, action })
+      });
+      setNotice(action === "ignore" ? "通知已忽略。" : "通知已标记处理。");
+      await loadState();
+    } catch (error) {
+      setNotice(error.message);
+    }
+  }
+
+  async function sendNotificationToFeishu(item) {
+    try {
+      const data = await apiRequest("/api/notifications/feishu/send", session, {
+        method: "POST",
+        body: JSON.stringify({ id: item.id })
+      });
+      const okCount = (data.results || []).filter((row) => row.ok).length;
+      setNotice(`飞书通知已发送：${okCount}/${(data.results || []).length} 人。`);
+      await loadState();
+    } catch (error) {
+      setNotice(error.message);
+    }
+  }
+
+  function openNotificationTarget(item) {
+    if (item.projectId) setSelectedId(item.projectId);
+    if (item.actionView === "admin:assignments" && isAdmin) {
+      setView("admin");
+      return;
+    }
+    if (item.actionView === "approvals") {
+      setActiveView("approvals");
+      setActiveSubView("待我审批");
+      return;
+    }
+    if (item.actionView === "project-files") {
+      setActiveView("dashboard");
+      setActiveSubView("我的项目");
+      return;
+    }
+    setActiveView("dashboard");
+    setActiveSubView("我的项目");
+  }
 
   const stats = useMemo(() => {
     const contract = visibleProjects.reduce((sum, item) => sum + item.contract, 0);
@@ -512,6 +710,15 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
       const alerts = project.alerts.length ? project.alerts : [{ role: "PM", type: `进度${health.label}`, text: health.text }];
       return alerts.map((alert) => ({ ...alert, project: project.name }));
     })
+    .concat((state?.feishuPendingFiles || [])
+      .filter((item) => item.status === "待确认")
+      .map((item) => ({
+        role: "PM",
+        type: "飞书文件待确认",
+        severity: "中",
+        project: item.projectName || "待匹配项目",
+        text: `飞书文件「${item.file?.name || item.preview?.fileName || "未命名文件"}」等待确认入库，确认前不会影响项目成本/报价/核销。`
+      })))
     .filter((alert) => role === "全部角色" || alert.role === role);
 
   const navGroups = [
@@ -536,7 +743,8 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
       children: [
         ["approvals", "待我审批"],
         ["approvals", "项目备用金"],
-        ["approvals", "报销"]
+        ["approvals", "报销"],
+        ["approvals", "供应商付款"]
       ]
     },
     {
@@ -547,6 +755,21 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         ["closeout", "结案复盘"],
         ["closeout", "支出排行"]
       ]
+    },
+    {
+      key: "suppliers",
+      icon: UsersRound,
+      label: "供应商库"
+    },
+    {
+      key: "clients",
+      icon: MessageSquareText,
+      label: "客户偏好"
+    },
+    {
+      key: "collections",
+      icon: MessagesSquare,
+      label: "催收助手"
     },
     ...(isManagement ? [{
       key: "management",
@@ -637,12 +860,23 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           <div className="actions">
             <div className="search"><Search size={16} /><input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="搜索项目、客户、负责人" /></div>
             <button type="button" className="ghost" onClick={() => setFilterOpen(!filterOpen)}><Filter size={16} />筛选</button>
+            <button type="button" className={`ghost notification-trigger ${systemNotifications.length ? "has-items" : ""}`} onClick={() => setNotificationsOpen(true)}>
+              <BellRing size={16} />待办
+              {systemNotifications.length > 0 && <b>{systemNotifications.length}</b>}
+            </button>
             {isAdmin && <button type="button" className="ghost" onClick={() => setView("admin")}><UserCog size={16} />成员管理</button>}
             {isAdmin && <button type="button" className={aiConfigured ? "ghost" : "ghost warning"} onClick={() => setView("admin:ai")}><Bot size={16} />{aiConfigured ? "AI 已接入" : "接入 AI"}</button>}
             <button type="button" className="primary" onClick={() => setUploadOpen(true)}><Plus size={16} />新建项目</button>
           </div>
         </header>
         {notice && <div className="notice-bar"><span>{notice}</span><button type="button" onClick={() => setNotice("")}>知道了</button></div>}
+        {notificationsOpen && <NotificationDrawer
+          items={systemNotifications}
+          onClose={() => setNotificationsOpen(false)}
+          onOpenTarget={openNotificationTarget}
+          onAction={handleNotification}
+          onSendFeishu={sendNotificationToFeishu}
+        />}
         {filterOpen && <div className="filter-panel">
           <button type="button" className={role === "全部角色" ? "active" : ""} onClick={() => setRole("全部角色")}>全部提醒</button>
           {["PM", "销售", "管理层"].map((item) => (
@@ -691,6 +925,25 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           onNotice={setNotice}
         />}
         {!!visibleProjects.length && activeView === "closeout" && <CloseoutReview project={selected} isManagement={isManagement} subView={activeSubView} />}
+        {!!visibleProjects.length && activeView === "suppliers" && <SupplierLibrary
+          suppliers={state?.supplierProfiles || []}
+          session={session}
+          onDone={() => loadState()}
+          onNotice={setNotice}
+        />}
+        {!!visibleProjects.length && activeView === "clients" && <ClientLibrary
+          clients={state?.clientProfiles || []}
+          session={session}
+          onDone={() => loadState()}
+          onNotice={setNotice}
+        />}
+        {!!visibleProjects.length && activeView === "collections" && <CollectionAssistant
+          projects={visibleProjects}
+          scripts={state?.collectionScripts || []}
+          session={session}
+          onDone={() => loadState()}
+          onNotice={setNotice}
+        />}
         {activeView === "management" && isManagement && <ManagementCockpit
           projects={projects}
           approvals={state?.approvals || []}
@@ -719,6 +972,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
                 <EmployeeProjectOverview
                   projects={visibleProjects}
                   selected={selected}
+                  feishuPendingFiles={state?.feishuPendingFiles || []}
                   onSelect={setSelectedId}
                   onUpload={() => setUploadOpen(true)}
                 />
@@ -771,6 +1025,11 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
               files={state?.files || []}
               parseJobs={state?.parseJobs || []}
               approvals={state?.approvals || []}
+              suppliers={state?.suppliers || []}
+              clients={state?.clientProfiles || []}
+              payments={state?.payments || []}
+              collectionScripts={state?.collectionScripts || []}
+              feishuPendingFiles={state?.feishuPendingFiles || []}
               comments={state?.comments || []}
               auditLogs={state?.auditLogs || []}
               onDone={() => loadState()}
@@ -786,6 +1045,49 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           onDone={() => loadState()}
         />}
       </main>
+    </div>
+  );
+}
+
+function NotificationDrawer({ items = [], onClose, onOpenTarget, onAction, onSendFeishu }) {
+  const highCount = items.filter((item) => item.severity === "高").length;
+  return (
+    <div className="notification-backdrop" onClick={onClose}>
+      <aside className="notification-drawer" onClick={(event) => event.stopPropagation()}>
+        <div className="notification-head">
+          <div>
+            <span>智能待办</span>
+            <h2>需要处理的 OA 提醒</h2>
+            <p>{highCount ? `${highCount} 个高优先级事项需要先看。` : "系统会从项目、审批和飞书文件里自动扫描。"}</p>
+          </div>
+          <button type="button" className="ghost" onClick={onClose}>关闭</button>
+        </div>
+        <div className="notification-list">
+          {items.length ? items.map((item) => (
+            <div className={`notification-card ${item.severity === "高" ? "high" : ""}`} key={item.id}>
+              <div className="notification-title">
+                <strong>{item.title}</strong>
+                <span>{item.severity || "中"}</span>
+              </div>
+              <p>{item.text}</p>
+              <em>{item.projectName || "系统"} · {item.source || "scanner"}</em>
+              <div className="notification-actions">
+                <button type="button" className="primary" onClick={() => onOpenTarget(item)}>{item.actionLabel || "查看"}</button>
+                <button type="button" className="ghost" onClick={() => onSendFeishu(item)}>发送飞书</button>
+                <button type="button" className="ghost" onClick={() => onAction(item, "resolve")}>标记处理</button>
+                <button type="button" className="ghost" onClick={() => onAction(item, "ignore")}>忽略</button>
+              </div>
+              {item.feishuDelivery?.sentAt && <small className="notification-delivery">飞书已发送 · {new Date(item.feishuDelivery.sentAt).toLocaleString("zh-CN", { hour12: false })}</small>}
+            </div>
+          )) : (
+            <div className="notification-empty">
+              <CheckCircle2 size={22} />
+              <strong>当前没有待办</strong>
+              <span>项目分派、飞书文件、逾期审批出现时会自动进入这里。</span>
+            </div>
+          )}
+        </div>
+      </aside>
     </div>
   );
 }
@@ -872,7 +1174,7 @@ function EmptyProjectState({ isManagement, isAdmin, onUpload, onAdmin }) {
   );
 }
 
-function EmployeeProjectOverview({ projects, selected, onSelect, onUpload }) {
+function EmployeeProjectOverview({ projects, selected, feishuPendingFiles = [], onSelect, onUpload }) {
   const activeProjects = projects.filter((project) => project.status !== "已完成");
   const health = projectHealth(selected);
   const pettyLeft = Math.max(Number(selected.pettyCashBudget || 0) - Number(selected.pettyCashUsed || 0), 0);
@@ -882,7 +1184,11 @@ function EmployeeProjectOverview({ projects, selected, onSelect, onUpload }) {
     selected.paymentDue && selected.paymentDue !== "待确认回款节点" ? null : "回款节点待确认",
     selected.costUsed ? null : "成本表待归集",
   ].filter(Boolean);
-  const displayMissing = missingItems.length ? missingItems : ["合同、成本、核销材料目前没有明显缺口"];
+  const projectPendingFeishu = feishuPendingFiles.filter((item) => item.status === "待确认" && (item.projectId === selected.id || item.projectName === selected.name));
+  const displayMissing = [
+    ...projectPendingFeishu.map((item) => `飞书文件待确认：${item.file?.name || item.preview?.fileName || "未命名文件"}`),
+    ...(missingItems.length ? missingItems : ["合同、成本、核销材料目前没有明显缺口"])
+  ];
   return (
     <>
       <section className="employee-hero">
@@ -1061,15 +1367,26 @@ function RiskBadge({ risk }) {
   return <b className={`risk risk-${risk}`}>{risk}风险</b>;
 }
 
-function ProjectDetail({ project, isManagement, session, files, parseJobs, approvals, comments, auditLogs, onDone, onNotice }) {
+function ProjectDetail({ project, isManagement, session, files, parseJobs, approvals, suppliers = [], clients = [], payments = [], collectionScripts = [], feishuPendingFiles = [], comments, auditLogs, onDone, onNotice }) {
   const usedRate = project.costBudget ? Math.round((project.costUsed / project.costBudget) * 100) : 0;
   const health = projectHealth(project);
   const pettyCashLeft = Math.max(Number(project.pettyCashBudget || 0) - Number(project.pettyCashUsed || 0), 0);
+  const canRecordPayment = ["shareholder", "admin", "director", "pm", "sales", "finance"].includes(session.role);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [commenting, setCommenting] = useState(false);
   const [form, setForm] = useState({});
+  const [paymentForm, setPaymentForm] = useState({ amount: "", payer: "", method: "", note: "" });
+  const [recordingPayment, setRecordingPayment] = useState(false);
+  const [collectionDraft, setCollectionDraft] = useState(null);
+  const [generatingCollection, setGeneratingCollection] = useState(false);
+  const [handlingFeishuFile, setHandlingFeishuFile] = useState("");
+  const [taskForm, setTaskForm] = useState({ title: "", owner: session.name || "", dueDate: "", progress: 0, note: "" });
+  const [savingTask, setSavingTask] = useState(false);
+  const [quickUploadType, setQuickUploadType] = useState("");
+  const [approvalForm, setApprovalForm] = useState({ type: "reimbursement", amount: "", payee: "", reason: "" });
+  const [submittingApproval, setSubmittingApproval] = useState(false);
   useEffect(() => {
     setForm({
       name: project.name || "",
@@ -1100,13 +1417,23 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
   const uniqueFiles = Array.from(new Map(projectFiles.map((file, index) => [`${file.name}-${file.uploadedAt || index}`, file])).values());
   const projectJobs = parseJobs.filter((job) => job.projectId === project.id || job.projectName === project.name);
   const projectApprovals = approvals.filter((item) => item.projectId === project.id || item.projectName === project.name || item.project === project.name);
+  const projectSuppliers = suppliers.filter((item) => item.project === project.name || item.projectId === project.id);
+  const clientProfile = clients.find((item) => item.client === project.client || item.client === project.brand);
+  const projectPayments = payments.filter((item) => item.projectId === project.id || item.projectName === project.name || item.project === project.name);
+  const projectCollectionScripts = collectionScripts.filter((item) => item.projectId === project.id || item.projectName === project.name);
+  const projectFeishuPendingFiles = feishuPendingFiles.filter((item) => item.projectId === project.id || item.projectName === project.name);
+  const projectFeishuHandledFiles = projectFeishuPendingFiles.filter((item) => item.status !== "待确认");
   const projectComments = comments.filter((item) => item.project === project.name);
   const projectLogs = auditLogs.filter((item) => item.target === project.name);
   const materialStatus = projectMaterialStatus(project, uniqueFiles, projectJobs);
-  const actionItems = projectActionItems({ project, files: uniqueFiles, jobs: projectJobs, approvals: projectApprovals, health, isManagement });
+  const actionItems = projectActionItems({ project, files: uniqueFiles, jobs: projectJobs, approvals: projectApprovals, health, isManagement, feishuPending: projectFeishuPendingFiles });
+  const aiAdvice = projectAiAdvice({ project, materialStatus, approvals: projectApprovals, health, isManagement, feishuPending: projectFeishuPendingFiles });
   const activityItems = [
     ...projectJobs.map((job) => ({ at: job.updatedAt || job.createdAt, title: "AI 解析", text: `${job.projectName} · ${job.status} · ${job.progress || 0}%` })),
     ...projectApprovals.map((item) => ({ at: item.updatedAt || item.createdAt, title: item.typeLabel || "审批", text: `${item.status} · ${money(item.amount)} · ${item.applicantName || ""}` })),
+    ...projectSuppliers.map((item) => ({ at: item.paidAt || item.updatedAt || item.createdAt, title: "供应商结算", text: `${item.supplier || "供应商"} · ${item.status || "待结算"} · ${money(item.amount)}` })),
+    ...projectPayments.map((item) => ({ at: item.receivedAt || item.createdAt, title: "项目回款", text: `${item.payer || project.client || "客户"} · ${money(item.amount)} · ${item.recordedByName || ""}` })),
+    ...projectFeishuPendingFiles.map((item) => ({ at: item.handledAt || item.createdAt, title: item.status === "待确认" ? "飞书文件待确认" : "飞书文件已处理", text: `${item.status} · ${item.file?.name || item.preview?.fileName || "飞书文件"} · ${item.uploadType || "文件"}${item.handledBy ? ` · 处理人 ${item.handledBy}` : ""}` })),
     ...projectComments.map((item) => ({ at: item.at, title: "项目评论", text: `${item.user || ""}：${item.body || ""}` })),
     ...projectLogs.map((item) => ({ at: item.at, title: "系统记录", text: `${item.user || ""} · ${item.action || item.type || ""}` })),
     ...uniqueFiles.map((file) => ({ at: file.uploadedAt, title: "文件上传", text: `${file.name} · ${file.uploadedByName || file.uploadedBy || "未知"}` }))
@@ -1170,6 +1497,143 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
     }
   }
 
+  function updatePaymentForm(field, value) {
+    setPaymentForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateTaskForm(field, value) {
+    setTaskForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submitPayment(event) {
+    event.preventDefault();
+    if (!Number(paymentForm.amount)) {
+      onNotice("请填写回款金额");
+      return;
+    }
+    setRecordingPayment(true);
+    try {
+      await apiRequest("/api/payments", session, {
+        method: "POST",
+        body: JSON.stringify({ projectId: project.id, ...paymentForm })
+      });
+      setPaymentForm({ amount: "", payer: "", method: "", note: "" });
+      onNotice("回款已记录，项目已回款和待回款已更新");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    } finally {
+      setRecordingPayment(false);
+    }
+  }
+
+  async function generateCollectionScript() {
+    if (!Number(project.receivable || 0)) {
+      onNotice("这个项目当前没有待回款，不需要生成催收话术。");
+      return;
+    }
+    setGeneratingCollection(true);
+    try {
+      const data = await apiRequest("/api/collections/suggest", session, {
+        method: "POST",
+        body: JSON.stringify({ projectId: project.id })
+      });
+      setCollectionDraft(data);
+      onNotice("催收话术已生成，并已保存到催收助手。");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    } finally {
+      setGeneratingCollection(false);
+    }
+  }
+
+  async function markCollectionOutcome(record, success) {
+    try {
+      await apiRequest("/api/collections/outcome", session, {
+        method: "POST",
+        body: JSON.stringify({
+          id: record.id,
+          success,
+          score: success ? 5 : 2,
+          outcome: success ? "客户已回复/推进付款" : "暂未推进，需要调整话术或再次跟进"
+        })
+      });
+      onNotice(success ? "已记录为有效话术" : "已记录为待优化话术");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    }
+  }
+
+  async function handleFeishuPendingFile(item, action) {
+    setHandlingFeishuFile(item.id);
+    try {
+      await apiRequest("/api/integrations/feishu/pending-files/action", session, {
+        method: "POST",
+        body: JSON.stringify({ id: item.id, action })
+      });
+      onNotice(action === "reject" ? "飞书文件已驳回，不会写入项目。" : "飞书文件已确认入库，项目数据已刷新。");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    } finally {
+      setHandlingFeishuFile("");
+    }
+  }
+
+  async function saveTask(payload) {
+    setSavingTask(true);
+    try {
+      await apiRequest("/api/project-tasks", session, {
+        method: "POST",
+        body: JSON.stringify({ projectId: project.id, ...payload })
+      });
+      setTaskForm({ title: "", owner: session.name || "", dueDate: "", progress: 0, note: "" });
+      onNotice(payload.action === "complete" ? "任务已标记完成，项目进度已更新" : "任务已保存，项目进度已更新");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    } finally {
+      setSavingTask(false);
+    }
+  }
+
+  async function submitTask(event) {
+    event.preventDefault();
+    if (!taskForm.title.trim()) {
+      onNotice("请先写任务名称");
+      return;
+    }
+    await saveTask(taskForm);
+  }
+
+  function updateApprovalForm(field, value) {
+    setApprovalForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submitProjectApproval(event) {
+    event.preventDefault();
+    if (!Number(approvalForm.amount)) {
+      onNotice("请填写审批金额");
+      return;
+    }
+    setSubmittingApproval(true);
+    try {
+      await apiRequest("/api/approvals", session, {
+        method: "POST",
+        body: JSON.stringify({ projectId: project.id, ...approvalForm })
+      });
+      setApprovalForm({ type: "reimbursement", amount: "", payee: "", reason: "" });
+      onNotice("项目审批已提交，会进入 PM、总监、财务流程。");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    } finally {
+      setSubmittingApproval(false);
+    }
+  }
+
   return (
     <div className="detail">
       <div className="detail-head">
@@ -1186,12 +1650,54 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
         <p>{project.aiSummary}</p>
       </div>
 
+      {clientProfile && <section className="detail-section client-handoff">
+        <div className="section-head">
+          <h2>客户交接摘要</h2>
+          <span className="muted">{clientProfile.client}</span>
+        </div>
+        <p>{clientProfile.handoffSummary}</p>
+        <div className="handoff-tags">
+          {(clientProfile.likes || []).slice(0, 3).map((item) => <span className="good" key={item}>{item}</span>)}
+          {(clientProfile.pitfalls || []).slice(0, 3).map((item) => <span className="danger" key={item}>{item}</span>)}
+        </div>
+      </section>}
+
       <div className="detail-metrics">
         <Mini label="合同金额" value={money(project.contract)} />
         <Mini label="备用金余额" value={money(pettyCashLeft)} />
         <Mini label="已回款" value={money(project.paid)} />
+        <Mini label="待回款" value={money(project.receivable)} />
         <Mini label={isManagement ? "毛利率" : "项目状态"} value={isManagement ? `${project.margin}%` : health.label} />
       </div>
+
+      <section className="detail-section project-command-center">
+        <div className="section-head">
+          <h2>项目工作台</h2>
+          <span className="muted">围绕当前项目上传、审批、记录和查看 AI 建议</span>
+        </div>
+        <div className="project-command-grid">
+          <button type="button" onClick={() => setQuickUploadType("cost-sheet")}>
+            <UploadCloud size={16} />
+            <strong>上传成本表</strong>
+            <span>执行支出、供应商费用、内部成本</span>
+          </button>
+          <button type="button" onClick={() => setQuickUploadType("quote-sheet")}>
+            <FileSpreadsheet size={16} />
+            <strong>上传报价表</strong>
+            <span>用于后续月度核销匹配</span>
+          </button>
+          <button type="button" onClick={() => setQuickUploadType("verification-sheet")}>
+            <CheckCircle2 size={16} />
+            <strong>上传核销表</strong>
+            <span>归集确认收入与核销状态</span>
+          </button>
+          <button type="button" onClick={() => setCommentText((current) => current || "客户已确认：")}>
+            <MessageSquareText size={16} />
+            <strong>记录动态</strong>
+            <span>客户反馈、材料补充、风险提醒</span>
+          </button>
+        </div>
+      </section>
 
       <section className="detail-section workbench-block">
         <div className="section-head">
@@ -1200,9 +1706,16 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
         </div>
         <div className="material-grid">
           {materialStatus.items.map((item) => (
-            <div className={item.done ? "done" : "todo"} key={item.key}>
-              <strong>{item.label}</strong>
+            <div className={`material-card ${item.status}`} key={item.key}>
+              <div>
+                <strong>{item.label}</strong>
+                <b>{item.statusLabel}</b>
+              </div>
               <span>{item.tip}</span>
+              <small>{item.files[0]?.name || item.jobs[0]?.status || "暂无文件记录"}</small>
+              {item.key !== "contract" && <button type="button" onClick={() => setQuickUploadType(item.uploadType)}>
+                {item.status === "missing" ? "上传" : "补充"}
+              </button>}
             </div>
           ))}
         </div>
@@ -1267,30 +1780,85 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
       <div className="split">
         <div>
           <h3>执行进度</h3>
-          {project.tasks.map(([name, value]) => (
-            <div className="progress-row" key={name}>
-              <span>{name}</span>
-              <div><i style={{ width: `${value}%` }} /></div>
-              <b>{value}%</b>
+          <form className="task-form" onSubmit={submitTask}>
+            <input value={taskForm.title} onChange={(event) => updateTaskForm("title", event.target.value)} placeholder="新增交付节点 / 任务" />
+            <input value={taskForm.owner} onChange={(event) => updateTaskForm("owner", event.target.value)} placeholder="负责人" />
+            <input value={taskForm.dueDate} onChange={(event) => updateTaskForm("dueDate", event.target.value)} placeholder="截止时间" />
+            <input value={taskForm.progress} onChange={(event) => updateTaskForm("progress", event.target.value)} placeholder="进度%" />
+            <button type="submit" className="primary" disabled={savingTask}>{savingTask ? "保存中" : "新增任务"}</button>
+          </form>
+          {project.tasks.map((task) => (
+            <div className={`progress-row task-row ${task.status}`} key={task.id || task.title}>
+              <span>{task.title}</span>
+              <div><i style={{ width: `${task.progress}%` }} /></div>
+              <b>{task.progress}%</b>
+              <button type="button" onClick={() => saveTask({ taskId: task.id, title: task.title, owner: task.owner, dueDate: task.dueDate, note: task.note, action: "complete" })} disabled={savingTask || task.progress >= 100}>
+                {task.progress >= 100 ? "已完成" : "完成"}
+              </button>
+              <small>{[task.owner, task.dueDate, task.note].filter(Boolean).join(" · ") || "未补充负责人/节点"}</small>
             </div>
           ))}
         </div>
         <div>
-          <h3>成本构成</h3>
+          <h3>{isManagement ? "成本与利润" : "成本构成"}</h3>
           {project.costs.map(([name, value]) => (
             <div className="cost-row" key={name}>
               <span>{name}</span>
               <b>{money(value)}</b>
             </div>
           ))}
+          {isManagement && <div className="cost-row strong">
+            <span>项目利润</span>
+            <b>{money(project.extractedFields?.profitBreakdown?.profit ?? Number(project.contract || 0) - Number(project.costUsed || 0))}</b>
+          </div>}
+          {isManagement && <div className="cost-row strong">
+            <span>毛利率</span>
+            <b>{project.margin || 0}%</b>
+          </div>}
         </div>
       </div>
+
+      <section className="detail-section">
+        <div className="section-head">
+          <h2>AI 项目建议</h2>
+          <span className="muted">基于当前项目材料、进度、审批和回款</span>
+        </div>
+        <div className="ai-advice-list">
+          {aiAdvice.map((item, index) => (
+            <div key={item}>
+              <b>{index + 1}</b>
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="detail-section">
         <div className="section-head">
           <h2>文件与 AI 解析</h2>
           <span className="muted">{uniqueFiles.length} 个文件 · {projectJobs.length} 个解析任务</span>
         </div>
+        {projectFeishuPendingFiles.length > 0 && <div className="project-feishu-pending">
+          <div className="section-head compact">
+            <h3>飞书待确认文件</h3>
+            <span className="muted">{projectFeishuPendingFiles.filter((item) => item.status === "待确认").length} 个待处理</span>
+          </div>
+          {projectFeishuPendingFiles.slice(0, 5).map((item) => (
+            <div className="project-feishu-card" key={item.id}>
+              <div>
+                <strong>{item.file?.name || item.preview?.fileName || "飞书文件"}</strong>
+                <span>{item.status} · {item.uploadType || "file"} · {item.senderName || "飞书成员"}</span>
+                <p>{item.preview?.summary || item.note || "确认后才会写入项目。"}</p>
+              </div>
+              {item.status === "待确认" && <div className="button-row">
+                <button type="button" className="primary" disabled={handlingFeishuFile === item.id} onClick={() => handleFeishuPendingFile(item, "confirm")}>
+                  {handlingFeishuFile === item.id ? "处理中" : "确认入库"}
+                </button>
+                <button type="button" className="ghost" disabled={handlingFeishuFile === item.id} onClick={() => handleFeishuPendingFile(item, "reject")}>驳回</button>
+              </div>}
+            </div>
+          ))}
+        </div>}
         <div className="detail-list">
           {uniqueFiles.length ? uniqueFiles.slice(0, 8).map((file, index) => (
             <div key={`${file.name}-${index}`}>
@@ -1305,6 +1873,19 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
             </div>
           ))}
         </div>
+        {projectFeishuHandledFiles.length > 0 && <div className="project-feishu-history">
+          <div className="section-head compact">
+            <h3>飞书文件处理历史</h3>
+            <span className="muted">{projectFeishuHandledFiles.length} 条</span>
+          </div>
+          {projectFeishuHandledFiles.slice(0, 5).map((item) => (
+            <div className={`project-feishu-history-row ${item.status === "已驳回" ? "rejected" : "confirmed"}`} key={item.id}>
+              <strong>{item.file?.name || item.preview?.fileName || "飞书文件"}</strong>
+              <span>{item.status} · {item.uploadType || "file"} · {item.note || "暂无备注"}</span>
+              <em>{item.handledAt ? new Date(item.handledAt).toLocaleString("zh-CN") : "时间待记录"}</em>
+            </div>
+          ))}
+        </div>}
       </section>
 
       <section className="detail-section">
@@ -1312,13 +1893,86 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
           <h2>审批与成本记录</h2>
           <span className="muted">{projectApprovals.length} 条审批</span>
         </div>
+        <form className="project-approval-mini" onSubmit={submitProjectApproval}>
+          <select value={approvalForm.type} onChange={(event) => updateApprovalForm("type", event.target.value)}>
+            <option value="reimbursement">报销</option>
+            <option value="petty_cash">项目备用金</option>
+            <option value="supplier_payment">供应商付款</option>
+          </select>
+          <input value={approvalForm.amount} onChange={(event) => updateApprovalForm("amount", event.target.value)} placeholder="金额" />
+          <input value={approvalForm.payee} onChange={(event) => updateApprovalForm("payee", event.target.value)} placeholder="收款人 / 用途" />
+          <input value={approvalForm.reason} onChange={(event) => updateApprovalForm("reason", event.target.value)} placeholder="说明" />
+          <button type="submit" className="primary" disabled={submittingApproval}>{submittingApproval ? "提交中" : "提交审批"}</button>
+        </form>
         <div className="detail-list">
           {projectApprovals.length ? projectApprovals.slice(0, 6).map((item) => (
             <div key={item.id}>
               <strong>{item.typeLabel || item.category || "审批"} · {money(item.amount)}</strong>
-              <span>{item.status} · {item.applicantName || "提交人"} · {item.reason || "暂无说明"}</span>
+              <span>{item.status} · {currentApprovalStepInfo(item)?.label || (item.appliedAt ? "已入账/付款" : "流程中")} · {item.applicantName || "提交人"} · {item.reason || "暂无说明"}</span>
             </div>
           )) : <p className="muted">暂无审批记录。报销和备用金通过后会自动沉淀到这里。</p>}
+        </div>
+      </section>
+
+      <section className="detail-section">
+        <div className="section-head">
+          <h2>回款记录</h2>
+          <span className="muted">已回款 {money(project.paid)} · 待回款 {money(project.receivable)}</span>
+        </div>
+        <div className="collection-callout">
+          <div>
+            <strong>销售催收话术</strong>
+            <span>{project.receivable > 0 ? "根据客户偏好、回款节点和销售风格生成更像真人的提醒。" : "当前无待回款，先不用催收。"}</span>
+          </div>
+          <button type="button" className="ghost" onClick={generateCollectionScript} disabled={generatingCollection || !Number(project.receivable || 0)}>
+            {generatingCollection ? "生成中" : "生成话术"}
+          </button>
+        </div>
+        {collectionDraft && <div className="collection-script-card fresh">
+          <strong>{collectionDraft.projectName} · {collectionDraft.tone}</strong>
+          <pre>{collectionDraft.script}</pre>
+          <span>{collectionDraft.reason}</span>
+        </div>}
+        {projectCollectionScripts.slice(0, 2).map((item) => (
+          <div className="collection-script-card" key={item.id}>
+            <strong>{item.salesName || "销售"} · {item.tone || "自然提醒"} · {money(item.amount)}</strong>
+            <pre>{item.script}</pre>
+            <span>{item.outcome || item.reason || "结果待记录"}</span>
+            <div className="button-row">
+              <button type="button" className="primary" onClick={() => markCollectionOutcome(item, true)}>有效</button>
+              <button type="button" className="ghost" onClick={() => markCollectionOutcome(item, false)}>待优化</button>
+            </div>
+          </div>
+        ))}
+        {canRecordPayment && <form className="project-approval-mini" onSubmit={submitPayment}>
+          <input value={paymentForm.amount} onChange={(event) => updatePaymentForm("amount", event.target.value)} placeholder="回款金额" />
+          <input value={paymentForm.payer} onChange={(event) => updatePaymentForm("payer", event.target.value)} placeholder="付款方 / 客户" />
+          <input value={paymentForm.method} onChange={(event) => updatePaymentForm("method", event.target.value)} placeholder="方式：银行 / 票据等" />
+          <input value={paymentForm.note} onChange={(event) => updatePaymentForm("note", event.target.value)} placeholder="备注：首款 / 尾款 / 第几期" />
+          <button type="submit" className="primary" disabled={recordingPayment}>{recordingPayment ? "记录中" : "记录回款"}</button>
+        </form>}
+        <div className="detail-list">
+          {projectPayments.length ? projectPayments.slice(0, 6).map((item) => (
+            <div key={item.id}>
+              <strong>{item.payer || item.client || project.client || "客户"} · {money(item.amount)}</strong>
+              <span>{item.method || "方式待补"} · {item.note || "暂无备注"} · {item.recordedByName || "记录人"} · {item.receivedAt ? new Date(item.receivedAt).toLocaleString("zh-CN") : "时间待记录"}</span>
+            </div>
+          )) : <p className="muted">暂无回款流水。销售或财务记录后，会自动更新项目已回款和待回款。</p>}
+        </div>
+      </section>
+
+      <section className="detail-section">
+        <div className="section-head">
+          <h2>供应商结算</h2>
+          <span className="muted">{projectSuppliers.length} 条记录</span>
+        </div>
+        <div className="detail-list">
+          {projectSuppliers.length ? projectSuppliers.slice(0, 6).map((item, index) => (
+            <div key={item.approvalId || `${item.supplier}-${index}`}>
+              <strong>{item.supplier || "供应商"} · {money(item.amount)}</strong>
+              <span>{item.status || "待结算"} · {item.type || "项目费用"}{item.paidAt ? ` · ${new Date(item.paidAt).toLocaleString("zh-CN")}` : ""}</span>
+            </div>
+          )) : <p className="muted">暂无供应商结算记录。供应商付款审批通过后会自动进入这里。</p>}
         </div>
       </section>
 
@@ -1359,6 +2013,17 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
           <strong>{project.paymentDue}</strong>
         </div>
       </div>
+      {quickUploadType && <UploadDialog
+        session={session}
+        projects={[project]}
+        selected={project}
+        initialType={quickUploadType}
+        onClose={() => setQuickUploadType("")}
+        onDone={async () => {
+          await onDone();
+          setQuickUploadType("");
+        }}
+      />}
     </div>
   );
 }
@@ -1473,18 +2138,20 @@ function ApprovalFunds({ projects, approvals, selected, session, subView, setSub
     project: item.projectName || item.project || "未命名项目",
     user: item.applicantName || item.user || "提交人",
     typeName: item.typeLabel || item.type || "审批",
-    category: item.type === "petty_cash" ? "项目备用金" : item.type === "reimbursement" ? "报销" : item.category || "待我审批",
+    category: item.type === "petty_cash" ? "项目备用金" : item.type === "reimbursement" ? "报销" : item.type === "supplier_payment" ? "供应商付款" : item.category || "待我审批",
     scope: item.reason || item.scope || "暂无说明",
     steps: Array.isArray(item.steps) ? item.steps : []
   }));
+  const actionableApprovals = normalizedApprovals.filter((item) => canHandleApproval(session, item));
   const categories = [
-    { label: "待我审批", desc: "需要当前角色处理的审批", count: normalizedApprovals.filter((item) => item.status?.includes("待")).length },
+    { label: "待我审批", desc: "需要当前角色处理的审批", count: actionableApprovals.length },
     { label: "项目备用金", desc: "项目预算、已用和剩余额度", count: normalizedApprovals.filter((item) => item.category === "项目备用金").length },
     { label: "报销", desc: "员工报销、票据和入账状态", count: normalizedApprovals.filter((item) => item.category === "报销").length },
+    { label: "供应商付款", desc: "供应商支出、付款和结算状态", count: normalizedApprovals.filter((item) => item.category === "供应商付款").length },
   ];
   const activeCategory = subView || "待我审批";
   const visibleApprovals = activeCategory === "待我审批"
-    ? normalizedApprovals.filter((item) => item.status?.includes("待"))
+    ? actionableApprovals
     : normalizedApprovals.filter((item) => item.category === activeCategory);
   const fallbackApproval = normalizedApprovals[0] || {
     id: "",
@@ -1495,7 +2162,7 @@ function ApprovalFunds({ projects, approvals, selected, session, subView, setSub
     steps: []
   };
   const selectedApproval = visibleApprovals.find((item) => item.id === selectedApprovalKey) || visibleApprovals[0] || fallbackApproval;
-  const canAct = selectedApproval.id && selectedApproval.status?.includes("待") && ["shareholder", "admin", "director", "pm", "finance"].includes(session.role);
+  const canAct = canHandleApproval(session, selectedApproval);
 
   function updateForm(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -1601,7 +2268,7 @@ function ApprovalFunds({ projects, approvals, selected, session, subView, setSub
             <div className="approval-card" key={item.id}>
               <div>
                 <strong>{item.typeName}</strong>
-                <span>{item.project} · {item.user} · {item.scope}</span>
+                <span>{item.project} · {item.user} · {currentApprovalStepInfo(item)?.label || item.status} · {item.scope}</span>
               </div>
               <b>{money(item.amount)}</b>
               <em>{item.status}</em>
@@ -1703,6 +2370,353 @@ function CloseoutReview({ project, isManagement, subView }) {
           </div>
         </div>
       </>}
+    </section>
+  );
+}
+
+function SupplierLibrary({ suppliers = [], session, onDone, onNotice }) {
+  const [selectedName, setSelectedName] = useState(suppliers[0]?.supplier || "");
+  const [form, setForm] = useState({ score: 5, market: "", contact: "", comment: "" });
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!selectedName && suppliers[0]?.supplier) setSelectedName(suppliers[0].supplier);
+  }, [suppliers, selectedName]);
+  const selected = suppliers.find((item) => item.supplier === selectedName) || suppliers[0] || null;
+
+  function update(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!selected?.supplier) {
+      onNotice("暂无可评价的供应商");
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiRequest("/api/suppliers/rate", session, {
+        method: "POST",
+        body: JSON.stringify({ supplier: selected.supplier, ...form })
+      });
+      setForm({ score: 5, market: "", contact: "", comment: "" });
+      onNotice("供应商评分已保存");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!suppliers.length) {
+    return (
+      <section className="feature-panel">
+        <PanelTitle icon={UsersRound} title="供应商库" />
+        <div className="empty-state">暂无供应商记录。上传成本表或完成供应商付款审批后，会自动沉淀供应商档案。</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="supplier-library">
+      <div className="feature-panel wide-feature">
+        <PanelTitle icon={UsersRound} title="供应商库" />
+        <div className="supplier-card-grid">
+          {suppliers.map((item) => (
+            <button
+              type="button"
+              className={`supplier-card ${item.supplier === selected?.supplier ? "active" : ""}`}
+              key={item.supplier}
+              onClick={() => setSelectedName(item.supplier)}
+            >
+              <strong>{item.supplier}</strong>
+              <span>{"★".repeat(item.star || 1)}{"☆".repeat(Math.max(0, 5 - (item.star || 1)))}</span>
+              <em>{item.cooperationCount || 0} 次合作 · {item.projectCount || 0} 个项目</em>
+              <small>{item.recommendationReason}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {selected && <div className="feature-panel wide-feature supplier-detail-panel">
+        <PanelTitle icon={BarChart3} title="供应商画像" />
+        <div className="review-summary">
+          <Mini label="推荐星级" value={`${selected.star || 1} 星`} />
+          <Mini label="合作次数" value={`${selected.cooperationCount || 0} 次`} />
+          <Mini label="合作项目" value={`${selected.projectCount || 0} 个`} />
+          <Mini label="累计金额" value={money(selected.totalAmount)} />
+          <Mini label="内部评分" value={selected.averageRating ? `${selected.averageRating}/5` : "待评分"} />
+          <Mini label="评分人数" value={`${selected.ratingCount || 0} 人`} />
+        </div>
+        <div className="compact-list">
+          <div><strong>合作项目</strong><span>{selected.projects?.join("、") || "暂无"}</span></div>
+          <div><strong>合作类型</strong><span>{selected.types?.join("、") || selected.market || "待沉淀"}</span></div>
+          <div><strong>推荐原因</strong><span>{selected.recommendationReason}</span></div>
+        </div>
+      </div>}
+
+      {selected && <form className="feature-panel settings-form" onSubmit={submit}>
+        <PanelTitle icon={CheckCircle2} title="内部评分" />
+        <label><span>评分 1-5</span><input value={form.score} onChange={(event) => update("score", event.target.value)} /></label>
+        <label><span>合作市场 / 类型</span><input value={form.market} onChange={(event) => update("market", event.target.value)} placeholder="例如 制作 / 达人 / 场地 / 投放" /></label>
+        <label><span>联系方式</span><input value={form.contact} onChange={(event) => update("contact", event.target.value)} placeholder="可选" /></label>
+        <label><span>评价</span><input value={form.comment} onChange={(event) => update("comment", event.target.value)} placeholder="例如 配合快、报价稳、发票慢等" /></label>
+        <button type="submit" className="primary" disabled={saving}>{saving ? "保存中" : "保存评分"}</button>
+      </form>}
+
+      {selected?.ratings?.length > 0 && <div className="feature-panel">
+        <PanelTitle icon={MessageSquareText} title="评分记录" />
+        <div className="compact-list">
+          {selected.ratings.slice(0, 6).map((item) => (
+            <div key={`${item.user}-${item.at}`}>
+              <strong>{item.score}/5 · {item.user}</strong>
+              <span>{item.comment || "暂无评价"} · {item.at ? new Date(item.at).toLocaleString("zh-CN") : "时间待记录"}</span>
+            </div>
+          ))}
+        </div>
+      </div>}
+    </section>
+  );
+}
+
+function ClientLibrary({ clients = [], session, onDone, onNotice }) {
+  const [selectedName, setSelectedName] = useState(clients[0]?.client || "");
+  const [form, setForm] = useState({ likes: "", dislikes: "", pitfalls: "", handoffNote: "", contactStyle: "" });
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!selectedName && clients[0]?.client) setSelectedName(clients[0].client);
+  }, [clients, selectedName]);
+  const selected = clients.find((item) => item.client === selectedName) || clients[0] || null;
+  useEffect(() => {
+    if (!selected) return;
+    setForm({
+      likes: (selected.likes || []).join("\n"),
+      dislikes: (selected.dislikes || []).join("\n"),
+      pitfalls: (selected.pitfalls || []).join("\n"),
+      handoffNote: selected.handoffNote || "",
+      contactStyle: selected.contactStyle || ""
+    });
+  }, [selected?.client]);
+
+  function update(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!selected?.client) {
+      onNotice("暂无可维护的客户");
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiRequest("/api/clients/profile", session, {
+        method: "POST",
+        body: JSON.stringify({ client: selected.client, ...form })
+      });
+      onNotice("客户偏好和交接备注已保存");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!clients.length) {
+    return (
+      <section className="feature-panel">
+        <PanelTitle icon={MessageSquareText} title="客户偏好" />
+        <div className="empty-state">暂无客户项目。创建项目后，这里会自动沉淀客户偏好、雷区和交接摘要。</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="client-library">
+      <div className="feature-panel wide-feature">
+        <PanelTitle icon={MessageSquareText} title="客户偏好 / 交接雷区" />
+        <div className="supplier-card-grid">
+          {clients.map((item) => (
+            <button
+              type="button"
+              className={`supplier-card ${item.client === selected?.client ? "active" : ""}`}
+              key={item.client}
+              onClick={() => setSelectedName(item.client)}
+            >
+              <strong>{item.client}</strong>
+              <em>{item.projectCount || 0} 个项目 · 待回款 {money(item.receivable)}</em>
+              <small>{item.handoffSummary}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {selected && <div className="feature-panel wide-feature supplier-detail-panel">
+        <PanelTitle icon={FileText} title="交接摘要" />
+        <div className="review-summary">
+          <Mini label="项目数" value={`${selected.projectCount || 0} 个`} />
+          <Mini label="合同总额" value={money(selected.totalContract)} />
+          <Mini label="待回款" value={money(selected.receivable)} />
+          <Mini label="动态记录" value={`${selected.commentCount || 0} 条`} />
+        </div>
+        <div className="compact-list">
+          <div><strong>客户喜欢</strong><span>{selected.likes?.join("；") || "待沉淀"}</span></div>
+          <div><strong>客户不喜欢</strong><span>{selected.dislikes?.join("；") || "待沉淀"}</span></div>
+          <div><strong>雷区</strong><span>{selected.pitfalls?.join("；") || "待沉淀"}</span></div>
+          <div><strong>交接摘要</strong><span>{selected.handoffSummary}</span></div>
+        </div>
+      </div>}
+
+      {selected && <form className="feature-panel settings-form" onSubmit={submit}>
+        <PanelTitle icon={CheckCircle2} title="维护客户档案" />
+        <label><span>客户喜欢</span><textarea value={form.likes} onChange={(event) => update("likes", event.target.value)} placeholder="一行一条，例如：喜欢真实场景、喜欢明确执行路径" /></label>
+        <label><span>客户不喜欢</span><textarea value={form.dislikes} onChange={(event) => update("dislikes", event.target.value)} placeholder="一行一条" /></label>
+        <label><span>雷区</span><textarea value={form.pitfalls} onChange={(event) => update("pitfalls", event.target.value)} placeholder="一行一条，例如：不要空概念、不要临时改报价" /></label>
+        <label><span>沟通风格</span><input value={form.contactStyle} onChange={(event) => update("contactStyle", event.target.value)} placeholder="例如 直接、重细节、需要先给依据" /></label>
+        <label><span>交接备注</span><textarea value={form.handoffNote} onChange={(event) => update("handoffNote", event.target.value)} placeholder="给新 PM 的简短交接说明" /></label>
+        <button type="submit" className="primary" disabled={saving}>{saving ? "保存中" : "保存客户档案"}</button>
+      </form>}
+    </section>
+  );
+}
+
+function CollectionAssistant({ projects = [], scripts = [], session, onDone, onNotice }) {
+  const receivableProjects = projects.filter((project) => Number(project.receivable || 0) > 0)
+    .sort((a, b) => Number(b.receivable || 0) - Number(a.receivable || 0));
+  const [selectedId, setSelectedId] = useState(receivableProjects[0]?.id || projects[0]?.id || "");
+  const [style, setStyle] = useState("");
+  const [draft, setDraft] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const selected = projects.find((project) => project.id === selectedId) || receivableProjects[0] || projects[0];
+  const relatedScripts = scripts.filter((item) => !selected || item.projectId === selected.id || item.projectName === selected.name);
+  const ownScripts = scripts.filter((item) => item.salesName === session.name);
+  const ownDone = ownScripts.filter((item) => item.outcome || typeof item.success === "boolean");
+  const ownSuccess = ownDone.filter((item) => item.success).length;
+  const bestScript = [...scripts].filter((item) => item.success).sort((a, b) => Number(b.score || 0) - Number(a.score || 0))[0];
+
+  useEffect(() => {
+    if (!selectedId && receivableProjects[0]?.id) setSelectedId(receivableProjects[0].id);
+  }, [selectedId, receivableProjects[0]?.id]);
+
+  async function generateScript() {
+    if (!selected) {
+      onNotice("当前没有可催收的项目");
+      return;
+    }
+    if (!Number(selected.receivable || 0)) {
+      onNotice("这个项目当前没有待回款。");
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await apiRequest("/api/collections/suggest", session, {
+        method: "POST",
+        body: JSON.stringify({ projectId: selected.id, style })
+      });
+      setDraft(data);
+      onNotice("话术已生成并保存。");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveOutcome(record, success) {
+    try {
+      await apiRequest("/api/collections/outcome", session, {
+        method: "POST",
+        body: JSON.stringify({
+          id: record.id,
+          success,
+          score: success ? 5 : 2,
+          outcome: success ? "客户已回复/确认付款流程" : "客户暂未回复或未推进付款"
+        })
+      });
+      onNotice(success ? "已记录为有效话术，后续会优先学习。" : "已记录为待优化，后续生成会避开。");
+      onDone();
+    } catch (error) {
+      onNotice(error.message);
+    }
+  }
+
+  return (
+    <section className="collection-workbench">
+      <div className="feature-panel collection-hero">
+        <PanelTitle icon={MessagesSquare} title="销售催收助手" />
+        <p>从真实待回款项目里生成更像人说话的跟进消息，并把客户回复结果沉淀下来，后面会慢慢学出每个销售自己的有效风格。</p>
+        <div className="review-summary">
+          <Mini label="待跟进项目" value={receivableProjects.length} />
+          <Mini label="我的成功率" value={ownDone.length ? `${Math.round((ownSuccess / ownDone.length) * 100)}%` : "待沉淀"} />
+          <Mini label="历史话术" value={scripts.length} />
+        </div>
+      </div>
+
+      <div className="feature-panel collection-generator">
+        <PanelTitle icon={Bot} title="生成话术" />
+        <label>
+          <span>选择项目</span>
+          <select value={selectedId} onChange={(event) => {
+            setSelectedId(event.target.value);
+            setDraft(null);
+          }}>
+            {receivableProjects.length ? receivableProjects.map((project) => (
+              <option value={project.id} key={project.id}>{project.name} · 待回款 {money(project.receivable)}</option>
+            )) : projects.map((project) => (
+              <option value={project.id} key={project.id}>{project.name} · 暂无待回款</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>我的说话风格</span>
+          <input value={style} onChange={(event) => setStyle(event.target.value)} placeholder="例如：自然一点、像微信私聊、别太硬" />
+        </label>
+        {selected && <div className="compact-list">
+          <div><strong>{selected.name}</strong><span>{selected.client || "客户待补"} · 回款节点 {selected.paymentDue || "待确认"}</span></div>
+          <div><strong>待回款</strong><span>{money(selected.receivable)}</span></div>
+        </div>}
+        <button type="button" className="primary" onClick={generateScript} disabled={loading || !selected || !Number(selected.receivable || 0)}>
+          {loading ? "生成中" : "生成催收话术"}
+        </button>
+      </div>
+
+      <div className="feature-panel wide-feature">
+        <PanelTitle icon={MessageSquareText} title="当前话术" />
+        {(draft || relatedScripts[0]) ? (
+          <div className="collection-script-card fresh">
+            <strong>{(draft || relatedScripts[0]).projectName} · {(draft || relatedScripts[0]).tone || "自然提醒"}</strong>
+            <pre>{(draft || relatedScripts[0]).script}</pre>
+            <span>{(draft || relatedScripts[0]).reason || (draft || relatedScripts[0]).outcome || "生成后可复制到微信/飞书跟进客户。"}</span>
+          </div>
+        ) : <div className="empty-state">选择一个待回款项目，生成第一条催收话术。</div>}
+      </div>
+
+      <div className="feature-panel">
+        <PanelTitle icon={CheckCircle2} title="有效话术参考" />
+        {bestScript ? <div className="idea-card">
+          <strong>{bestScript.salesName} · {bestScript.projectName}</strong>
+          <p>{bestScript.script}</p>
+        </div> : <p className="muted">还没有成功结果。记录几次后，这里会出现团队里更有效的人话表达。</p>}
+      </div>
+
+      <div className="feature-panel wide-feature">
+        <PanelTitle icon={Clock3} title="话术记录" />
+        <div className="detail-list">
+          {scripts.length ? scripts.slice(0, 10).map((item) => (
+            <div className="collection-history-row" key={item.id}>
+              <strong>{item.projectName} · {item.salesName || "销售"} · {money(item.amount)}</strong>
+              <span>{item.outcome || item.reason || "结果待记录"}</span>
+              <div className="button-row">
+                <button type="button" className="primary" onClick={() => saveOutcome(item, true)}>有效</button>
+                <button type="button" className="ghost" onClick={() => saveOutcome(item, false)}>待优化</button>
+              </div>
+            </div>
+          )) : <p className="muted">暂无话术记录。生成后会保存在这里。</p>}
+        </div>
+      </div>
     </section>
   );
 }
@@ -1881,8 +2895,8 @@ function LogicItem({ title, text }) {
   return <div className="logic-item"><strong>{title}</strong><p>{text}</p></div>;
 }
 
-function UploadDialog({ session, projects, selected, onClose, onDone }) {
-  const [type, setType] = useState("create-project");
+function UploadDialog({ session, projects, selected, initialType = "create-project", onClose, onDone }) {
+  const [type, setType] = useState(initialType);
   const [projectId, setProjectId] = useState(selected?.id || projects[0]?.id || "");
   const [values, setValues] = useState({
     "项目名称": "",
@@ -2204,6 +3218,10 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
   const [adminTab, setAdminTab] = useState(initialTab);
   const [members, setMembers] = useState([]);
   const [assignments, setAssignments] = useState([]);
+  const [feishuBindings, setFeishuBindings] = useState([]);
+  const [feishuEvents, setFeishuEvents] = useState([]);
+  const [feishuPendingFiles, setFeishuPendingFiles] = useState([]);
+  const [systemNotifications, setSystemNotifications] = useState([]);
   const [editingId, setEditingId] = useState("");
   const [message, setMessage] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
@@ -2223,6 +3241,11 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     appSecret: "",
     eventUrl: "",
     verificationToken: "",
+    tenantAccessToken: "",
+    mockSend: "",
+    mockFileBase64: "",
+    mockFileName: "",
+    mockFileType: "",
   });
   const [wechatSettings, setWechatSettings] = useState({
     webhookUrl: "",
@@ -2245,6 +3268,9 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     email: "",
     role: "member",
     department: "",
+    feishuOpenId: "",
+    feishuUserId: "",
+    feishuName: "",
     status: "active",
     pin: "123456",
   });
@@ -2277,6 +3303,10 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     const payload = await res.json();
     if (!payload.ok) throw new Error(payload.error || "读取设置失败");
     const settings = payload.data?.settings || {};
+    setFeishuBindings(payload.data?.feishuProjectBindings || []);
+    setFeishuEvents(payload.data?.feishuEvents || []);
+    setFeishuPendingFiles(payload.data?.feishuPendingFiles || []);
+    setSystemNotifications(payload.data?.systemNotifications || []);
     setAiSettings((current) => ({ ...current, ...(settings.aiService || {}) }));
     setProductSettings((current) => ({ ...current, ...(settings.product || {}) }));
     setFeishuSettings((current) => ({ ...current, ...(settings.feishu || {}) }));
@@ -2298,6 +3328,9 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
       email: member.email || "",
       role: member.role || "member",
       department: member.department || "",
+      feishuOpenId: member.feishuOpenId || "",
+      feishuUserId: member.feishuUserId || "",
+      feishuName: member.feishuName || member.name || "",
       status: member.status || "active",
       pin: "",
     });
@@ -2306,7 +3339,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
 
   function resetForm() {
     setEditingId("");
-    setForm({ name: "", email: "", role: "member", department: "", status: "active", pin: "123456" });
+    setForm({ name: "", email: "", role: "member", department: "", feishuOpenId: "", feishuUserId: "", feishuName: "", status: "active", pin: "123456" });
   }
 
   async function save(event) {
@@ -2403,6 +3436,17 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     }
   }
 
+  async function loadFeishuBindings() {
+    setFeishuBindings(await api("/api/integrations/feishu/bindings"));
+    const res = await fetch("/api/state", { headers: { "x-user-id": session.id } });
+    const payload = await res.json();
+    if (payload.ok) {
+      setFeishuEvents(payload.data?.feishuEvents || []);
+      setFeishuPendingFiles(payload.data?.feishuPendingFiles || []);
+      setSystemNotifications(payload.data?.systemNotifications || []);
+    }
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -2446,6 +3490,9 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
               </select>
             </label>
             <label><span>部门</span><input value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} /></label>
+            <label><span>飞书 Open ID</span><input value={form.feishuOpenId} onChange={(event) => setForm({ ...form, feishuOpenId: event.target.value })} placeholder="用于机器人私聊通知" /></label>
+            <label><span>飞书 User ID（可选）</span><input value={form.feishuUserId} onChange={(event) => setForm({ ...form, feishuUserId: event.target.value })} /></label>
+            <label><span>飞书姓名（可选）</span><input value={form.feishuName} onChange={(event) => setForm({ ...form, feishuName: event.target.value })} /></label>
             <label><span>临时 PIN</span><input value={form.pin} placeholder="留空则保持不变" onChange={(event) => setForm({ ...form, pin: event.target.value })} /></label>
             {message && <p className="form-message">{message}</p>}
             <button type="submit" className="primary">保存成员</button>
@@ -2457,7 +3504,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
               <div className="member-row" key={member.id}>
                 <div>
                   <strong>{member.name}</strong>
-                  <span>{member.email} · {member.department || "未分组"}</span>
+                  <span>{member.email} · {member.department || "未分组"}{member.feishuOpenId ? " · 已绑飞书" : ""}</span>
                 </div>
                 <b className={`role-pill ${member.role}`}>{roleLabel(member.role)}</b>
                 <b className={`status-pill ${member.status}`}>{member.status === "disabled" ? "已停用" : "启用中"}</b>
@@ -2536,15 +3583,34 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
                 ["appId", "App ID"],
                 ["appSecret", "App Secret"],
                 ["eventUrl", "事件订阅 URL"],
-                ["verificationToken", "Verification Token"]
+                ["verificationToken", "Verification Token"],
+                ["tenantAccessToken", "Tenant Access Token（可选）"],
+                ["mockSend", "模拟发送通知（true/false）"],
+                ["mockFileBase64", "测试文件 Base64（可选）"],
+                ["mockFileName", "测试文件名（可选）"],
+                ["mockFileType", "测试文件类型（可选）"]
               ].map(([key, label]) => (
                 <label key={key}>
                   <span>{label}</span>
                   <input value={feishuSettings[key]} onChange={(event) => setFeishuSettings({ ...feishuSettings, [key]: event.target.value })} />
                 </label>
               ))}
+              <label>
+                <span>OA 事件地址</span>
+                <input value="/api/integrations/feishu/events" readOnly />
+              </label>
               <button type="button" className="ghost" onClick={() => saveTypedSetting("feishu", feishuSettings, "飞书配置")}>保存飞书配置</button>
             </div>
+            <FeishuBotPanel
+              api={api}
+              settings={feishuSettings}
+              projects={assignments}
+              bindings={feishuBindings}
+              events={feishuEvents}
+              pendingFiles={feishuPendingFiles}
+              notifications={systemNotifications}
+              onReload={loadFeishuBindings}
+            />
             <div className="settings-block">
               <h3>企业微信</h3>
               {[
@@ -2749,6 +3815,260 @@ function ProjectAssignmentPanel({ api, members, assignments, onReload }) {
         <button type="submit" className="primary" disabled={saving}>{saving ? "保存中" : "保存项目分派"}</button>
       </form>
     </section>
+  );
+}
+
+function FeishuBotPanel({ api, settings = {}, projects = [], bindings = [], events = [], pendingFiles = [], notifications = [], onReload }) {
+  const [form, setForm] = useState({
+    projectId: projects[0]?.id || "",
+    chatId: "",
+    chatName: ""
+  });
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [handlingId, setHandlingId] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [sampleText, setSampleText] = useState("这是项目群测试消息，帮我记录到项目动态里");
+  const latestDownload = events.find((item) => /download|下载|解析|引用/.test(`${item.action || ""} ${item.status || ""} ${item.reply || ""}`));
+  const feishuNotices = notifications.filter((item) => item.type === "feishu-pending-file" && item.status === "待处理");
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const callbackPath = "/api/integrations/feishu/events";
+  const callbackUrl = settings.eventUrl || (origin ? `${origin}${callbackPath}` : callbackPath);
+  const setupChecks = [
+    { label: "App ID", ok: Boolean(settings.appId), text: settings.appId ? "已填写" : "待填写" },
+    { label: "App Secret", ok: Boolean(settings.appSecret), text: settings.appSecret ? "已填写" : "待填写" },
+    { label: "Verification Token", ok: Boolean(settings.verificationToken), text: settings.verificationToken ? "已填写" : "建议填写" },
+    { label: "事件订阅 URL", ok: Boolean(settings.eventUrl || origin), text: callbackUrl },
+    { label: "项目群绑定", ok: bindings.length > 0, text: `${bindings.length} 个群` },
+    { label: "待确认队列", ok: pendingFiles.filter((item) => item.status === "待确认").length === 0, text: `${pendingFiles.filter((item) => item.status === "待确认").length} 个待处理` }
+  ];
+  const readyCount = setupChecks.filter((item) => item.ok).length;
+
+  useEffect(() => {
+    if (!form.projectId && projects[0]?.id) setForm((current) => ({ ...current, projectId: projects[0].id }));
+  }, [projects[0]?.id, form.projectId]);
+
+  async function save(event) {
+    event.preventDefault();
+    if (!form.chatId.trim()) {
+      setMessage("请填写飞书群 Chat ID");
+      return;
+    }
+    if (!form.projectId) {
+      setMessage("请先选择要绑定的项目");
+      return;
+    }
+    setSaving(true);
+    setMessage("正在保存飞书群绑定...");
+    try {
+      await api("/api/integrations/feishu/bindings", {
+        method: "POST",
+        body: JSON.stringify(form)
+      });
+      setMessage("飞书群已绑定项目。群里 @机器人发文件或项目消息后，会进入 OA 事件记录。");
+      setForm((current) => ({ ...current, chatId: "", chatName: "" }));
+      await onReload();
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handlePendingFile(item, action) {
+    setHandlingId(item.id);
+    setMessage(action === "reject" ? "正在驳回飞书文件..." : "正在确认入库飞书文件...");
+    try {
+      await api("/api/integrations/feishu/pending-files/action", {
+        method: "POST",
+        body: JSON.stringify({ id: item.id, action })
+      });
+      setMessage(action === "reject" ? "飞书文件已驳回。" : "飞书文件已确认入库。");
+      await onReload();
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setHandlingId("");
+    }
+  }
+
+  async function copyCallbackUrl() {
+    try {
+      await navigator.clipboard.writeText(callbackUrl);
+      setMessage("事件订阅 URL 已复制，可以粘贴到飞书开放平台。");
+    } catch {
+      setMessage(`请复制这个地址：${callbackUrl}`);
+    }
+  }
+
+  async function testCallback() {
+    setTesting(true);
+    setMessage("正在自测 OA 飞书事件地址...");
+    try {
+      const res = await fetch(callbackPath, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ challenge: "ad-project-hub-feishu-check", token: settings.verificationToken || undefined })
+      });
+      const payload = await res.json();
+      if (payload.challenge !== "ad-project-hub-feishu-check") throw new Error(payload.error || "事件地址没有返回飞书需要的 challenge");
+      setMessage("OA 事件地址自测通过。下一步去飞书开放平台保存事件订阅。");
+    } catch (error) {
+      setMessage(error.message || "事件地址自测失败");
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function testMessageIntake() {
+    const chatId = form.chatId.trim() || bindings[0]?.chatId || "";
+    if (!chatId) {
+      setMessage("请先填写或保存一个飞书群 Chat ID，再测试消息入库。");
+      return;
+    }
+    setTesting(true);
+    setMessage("正在模拟飞书群消息...");
+    try {
+      const res = await fetch(callbackPath, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token: settings.verificationToken || undefined,
+          event: {
+            message: {
+              chat_id: chatId,
+              chat_name: form.chatName || bindings.find((item) => item.chatId === chatId)?.chatName || "OA 测试群",
+              message_type: "text",
+              content: JSON.stringify({ text: sampleText })
+            },
+            sender: {
+              sender_name: "OA 接入测试",
+              sender_id: { open_id: "oa-feishu-setup-test" }
+            }
+          }
+        })
+      });
+      const payload = await res.json();
+      if (!payload.ok) throw new Error(payload.error || "模拟消息没有成功进入 OA");
+      setMessage(payload.data?.reply || "模拟飞书消息已进入 OA。");
+      await onReload();
+    } catch (error) {
+      setMessage(error.message || "模拟飞书消息失败");
+    } finally {
+      setTesting(false);
+    }
+  }
+
+
+  return (
+    <div className="settings-block feishu-bot-panel">
+      <div className="feishu-setup-head">
+        <div>
+          <h3>飞书机器人接入向导</h3>
+          <p>把飞书项目群、合同/报价/成本/核销文件，接进 OA 的待确认入库流程。</p>
+        </div>
+        <span>{readyCount}/{setupChecks.length} 已就绪</span>
+      </div>
+      <div className="feishu-status-grid">
+        {setupChecks.map((item) => (
+          <div className={item.ok ? "ok" : "warn"} key={item.label}>
+            {item.ok ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+            <strong>{item.label}</strong>
+            <span>{item.text}</span>
+          </div>
+        ))}
+      </div>
+      <div className="feishu-guide">
+        <div>
+          <strong>1. 飞书开放平台创建企业自建应用</strong>
+          <span>复制 App ID、App Secret、Verification Token，填到上面的飞书配置并保存。</span>
+        </div>
+        <div>
+          <strong>2. 配置事件订阅地址</strong>
+          <span>{callbackUrl}</span>
+          <button type="button" className="ghost" onClick={copyCallbackUrl}>复制 URL</button>
+        </div>
+        <div>
+          <strong>3. 开启消息与文件权限</strong>
+          <span>给机器人开通读取群消息、读取消息资源文件、接收群消息/被 @ 消息事件，以及发送单聊消息权限，然后把机器人拉进项目群。</span>
+        </div>
+        <div>
+          <strong>4. 绑定项目群并测试</strong>
+          <span>在下方把 Chat ID 绑定到 OA 项目，并在成员管理里填写成员飞书 Open ID。群里 @机器人发文件会进待确认，待办也可以私聊提醒负责人。</span>
+        </div>
+      </div>
+      <div className="button-row">
+        <button type="button" className="ghost" onClick={testCallback} disabled={testing}>{testing ? "自测中" : "自测事件地址"}</button>
+      </div>
+
+      <h3>飞书项目群绑定</h3>
+      <form className="feishu-bind-form" onSubmit={save}>
+        <label>
+          <span>项目</span>
+          <select value={form.projectId} onChange={(event) => setForm({ ...form, projectId: event.target.value })}>
+            {projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>群 Chat ID</span>
+          <input value={form.chatId} onChange={(event) => setForm({ ...form, chatId: event.target.value })} placeholder="飞书群聊 chat_id" />
+        </label>
+        <label>
+          <span>群名称</span>
+          <input value={form.chatName} onChange={(event) => setForm({ ...form, chatName: event.target.value })} placeholder="例如 捷途汽车项目群" />
+        </label>
+        <button type="submit" className="ghost" disabled={saving}>{saving ? "保存中" : "保存群绑定"}</button>
+      </form>
+      <div className="feishu-intake-test">
+        <label>
+          <span>模拟群消息</span>
+          <textarea value={sampleText} onChange={(event) => setSampleText(event.target.value)} rows={2} />
+        </label>
+        <button type="button" className="ghost" onClick={testMessageIntake} disabled={testing}>{testing ? "测试中" : "测试消息入库"}</button>
+      </div>
+      {message && <p className="form-message">{message}</p>}
+      <div className="feishu-download-state">
+        <strong>文件下载与解析</strong>
+        <span>{latestDownload ? `${latestDownload.status || latestDownload.action}：${latestDownload.reply || "已接收飞书文件事件"}` : "配置 App ID / App Secret 后，机器人会尝试用 message_id + file_key 下载文件；下载成功后先进入待确认队列，人工确认后才写入项目。"}</span>
+      </div>
+      <div className="feishu-download-state">
+        <strong>自动提醒</strong>
+        <span>{feishuNotices.length ? `系统已生成 ${feishuNotices.length} 条飞书待办，会出现在顶部「待办」里。超过 24 小时未处理会升为高优先级。` : "暂无飞书待办。待确认文件出现后，系统会自动生成 PM/管理层提醒。"}</span>
+      </div>
+      <div className="feishu-mini-list feishu-pending-list">
+        <strong>待确认文件</strong>
+        {pendingFiles.length ? pendingFiles.slice(0, 6).map((item) => (
+          <div key={item.id}>
+            <span>{item.file?.name || item.preview?.fileName || "飞书文件"} · {item.status}</span>
+            <em>{item.projectName || "待匹配项目"} · {item.uploadType || "file"} · {item.preview?.summary || item.note || "等待确认"}</em>
+            {item.status === "待确认" && <div className="feishu-pending-actions">
+              <button type="button" className="primary" disabled={handlingId === item.id} onClick={() => handlePendingFile(item, "confirm")}>
+                {handlingId === item.id ? "处理中" : "确认入库"}
+              </button>
+              <button type="button" className="ghost" disabled={handlingId === item.id} onClick={() => handlePendingFile(item, "reject")}>驳回</button>
+            </div>}
+          </div>
+        )) : <p>暂无待确认文件。飞书群发来的成本/报价/核销文件下载成功后会先出现在这里。</p>}
+      </div>
+      <div className="feishu-mini-list">
+        <strong>已绑定群</strong>
+        {bindings.length ? bindings.slice(0, 5).map((item) => (
+          <div key={item.chatId}>
+            <span>{item.chatName || item.chatId}</span>
+            <em>{item.projectName}</em>
+          </div>
+        )) : <p>暂无绑定。先填 Chat ID，把飞书项目群和 OA 项目连起来。</p>}
+      </div>
+      <div className="feishu-mini-list">
+        <strong>最近机器人事件</strong>
+        {events.length ? events.slice(0, 5).map((item) => (
+          <div key={item.id}>
+            <span>{item.status || item.action}</span>
+            <em>{item.projectName || item.chatName || item.chatId || "待匹配项目"} · {item.reply || item.text || item.fileName || "无内容"}</em>
+          </div>
+        )) : <p>暂无事件。配置飞书事件订阅后，飞书消息会显示在这里。</p>}
+      </div>
+    </div>
   );
 }
 

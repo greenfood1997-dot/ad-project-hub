@@ -77,19 +77,6 @@
           "project": "普通员工可见项目",
           "feishuName": "普通员工",
           "contact": "member@company.local"
-        },
-        {
-          "id": "assign-P-1782016641713-u-member",
-          "userId": "u-member",
-          "name": "普通员工",
-          "role": "执行",
-          "department": "执行部",
-          "project": "管理员专属项目",
-          "projectId": "P-1782016641713",
-          "feishuName": "普通员工",
-          "contact": "member@company.local",
-          "assignedAt": "2026-06-24T17:36:29.793Z",
-          "assignedBy": "u-admin"
         }
       ],
       "connection": null,
@@ -127,72 +114,48 @@
       "costUsed": 0,
       "paid": 0,
       "receivable": 3000000,
-      "status": "草稿",
+      "status": "解析完成",
       "risk": "低",
-      "aiSummary": "",
-      "nextMilestone": "等待 AI 巡检生成下一节点",
-      "paymentDue": "待确认回款节点",
-      "margin": 100,
+      "aiSummary": "AI 已建立项目档案，可继续上传合同、报价表、成本表和核销表完善项目数据。",
+      "nextMilestone": "",
+      "paymentDue": "",
+      "margin": 0,
       "tasks": [],
       "costs": [],
       "extractedFields": {
-        "pm": "项目经理",
-        "sales": "销售成员",
+        "pm": "待分派",
+        "sales": "待确认",
         "executionBudgetRatio": "",
         "executionBudget": 0,
-        "profitBreakdown": {
-          "advancePayment": 0,
-          "advanceInterest": 0,
-          "executionCost": 0,
-          "executionBudget": 0,
-          "internalLabor": 0,
-          "overhead": 0,
-          "totalDeduction": 0,
-          "profit": 3000000,
-          "margin": 100,
-          "interestRate": 3.45,
-          "interestDays": 0,
-          "interestSource": "无垫款",
-          "costs": [
-            [
-              "项目垫款",
-              0
-            ],
-            [
-              "垫款利息",
-              0
-            ],
-            [
-              "项目执行总成本",
-              0
-            ],
-            [
-              "项目执行预算上限",
-              0
-            ],
-            [
-              "内部人力",
-              0
-            ],
-            [
-              "公摊费用",
-              0
-            ]
-          ]
-        },
-        "profit": 3000000,
-        "assignedMemberIds": [
-          "u-member"
-        ],
-        "assignedMembers": [
-          {
-            "id": "u-member",
-            "name": "普通员工",
-            "role": "member",
-            "email": "member@company.local",
-            "department": "执行部"
-          }
-        ]
+        "projectName": "管理员专属项目",
+        "client": "测试客户B",
+        "contract": 3000000,
+        "projectRevenue": 0,
+        "paid": 0,
+        "receivable": 3000000,
+        "costBudget": 0,
+        "costUsed": 0,
+        "advancePayment": 0,
+        "advanceInterest": 0,
+        "advanceStartDate": "",
+        "advanceEndDate": "",
+        "executionCost": 0,
+        "internalLabor": 0,
+        "overhead": 0,
+        "hasCostSheet": false,
+        "partyA": "",
+        "partyB": "",
+        "servicePeriod": "",
+        "nextMilestone": "",
+        "paymentDue": "",
+        "risk": "高",
+        "costs": [],
+        "suppliers": [],
+        "tasks": [],
+        "archiveTags": [],
+        "confidence": "",
+        "missingFields": [],
+        "extractedFiles": []
       },
       "createdAt": "2026-06-21T04:37:21.713Z",
       "createdBy": "u-admin",
@@ -203,12 +166,18 @@
           "type": "回款进度过慢",
           "severity": "高",
           "text": "项目已回款 0，待回款 3000000，回款进度 0%，请销售跟进客户付款。"
+        },
+        {
+          "role": "PM",
+          "type": "执行成本已超支",
+          "severity": "高",
+          "text": "执行成本 120 已达到预算上限 120 的 100%，请 PM 立即复盘执行成本。"
         }
       ],
-      "pm": "项目经理",
-      "sales": "销售成员",
-      "department": "项目部",
-      "updatedAt": "2026-06-24T17:36:29.793Z"
+      "pm": "待分派",
+      "sales": "待确认",
+      "department": "",
+      "updatedAt": "2026-06-24T18:24:59.425Z"
     },
     {
       "id": "P-1782016641703",
@@ -358,7 +327,13 @@
         "archiveTags": [],
         "confidence": "",
         "missingFields": [],
-        "pettyCashUsed": 0
+        "pettyCashUsed": 0,
+        "taskProgress": 0,
+        "taskSummary": {
+          "total": 0,
+          "done": 0,
+          "updatedAt": "2026-06-24T18:32:57.515Z"
+        }
       },
       "createdAt": "2026-06-21T04:37:21.701Z",
       "createdBy": "u-admin",
@@ -390,10 +365,26 @@
           "text": "执行成本 120 已达到预算上限 120 的 100%，请 PM 立即复盘执行成本。"
         }
       ],
-      "updatedAt": "2026-06-23T09:33:41.613Z"
+      "updatedAt": "2026-06-24T18:32:57.516Z",
+      "progress": 0
     }
   ],
+  "clientProfiles": [],
   "suppliers": [
+    {
+      "supplier": "管理员专属项目,100000,3",
+      "project": "管理员专属项目",
+      "type": "项目费用",
+      "amount": 120,
+      "status": "待结算"
+    },
+    {
+      "supplier": "管理员专属项目,100000,3",
+      "project": "管理员专属项目",
+      "type": "项目费用",
+      "amount": 120,
+      "status": "待结算"
+    },
     {
       "supplier": "项目A,100000,30000",
       "project": "项目A",
@@ -402,7 +393,14 @@
       "status": "待结算"
     }
   ],
+  "supplierProfiles": [],
   "approvals": [],
+  "payments": [],
+  "collectionScripts": [],
+  "feishuEvents": [],
+  "feishuProjectBindings": [],
+  "feishuPendingFiles": [],
+  "systemNotifications": [],
   "files": [
     {
       "files": [
@@ -671,18 +669,43 @@
   "comments": [],
   "auditLogs": [
     {
-      "type": "project",
+      "type": "feishu",
       "target": "管理员专属项目",
-      "action": "assign",
+      "action": "confirm-pending-file",
       "user": "中台管理员",
       "meta": {
-        "pm": "项目经理",
-        "sales": "销售成员",
-        "members": [
-          "普通员工"
-        ]
+        "pendingFileId": "feishu-file-mqsguakq-2dl9t",
+        "uploadType": "cost-sheet"
       },
-      "at": "2026-06-24T17:36:29.793Z"
+      "at": "2026-06-24T19:28:11.029Z"
+    },
+    {
+      "type": "upload",
+      "target": "管理员专属项目",
+      "action": "execution-cost",
+      "count": 1,
+      "user": "中台管理员",
+      "at": "2026-06-24T19:28:11.029Z"
+    },
+    {
+      "type": "settings",
+      "target": "feishu",
+      "user": "中台管理员",
+      "at": "2026-06-24T19:28:11.003Z"
+    },
+    {
+      "type": "upload",
+      "target": "管理员专属项目",
+      "action": "execution-cost",
+      "count": 1,
+      "user": "飞书机器人",
+      "at": "2026-06-24T19:20:59.697Z"
+    },
+    {
+      "type": "settings",
+      "target": "feishu",
+      "user": "中台管理员",
+      "at": "2026-06-24T19:20:59.681Z"
     },
     {
       "type": "settings",
