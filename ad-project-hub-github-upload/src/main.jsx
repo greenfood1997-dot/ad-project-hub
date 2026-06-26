@@ -3255,6 +3255,14 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
           <input type="file" multiple onChange={pickFiles} />
         </label>
 
+        {hasProgress && <UploadProgressPanel
+          loading={loading}
+          confirmed={confirmed}
+          preview={preview}
+          progressLabel={progressLabel}
+          progressPercent={progressPercent}
+        />}
+
         {files.length > 0 && (
           <div className="file-list">
             {files.map((file) => (
@@ -3269,21 +3277,6 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
 
         {preview && <UploadPreview preview={preview} />}
 
-        {hasProgress && (
-          <div className="upload-progress-panel">
-            <div>
-              <strong>{loading ? "AI 正在处理" : confirmed ? "处理完成" : preview ? "等待确认" : "准备识别"}</strong>
-              <span>{progressLabel}</span>
-            </div>
-            <div className="upload-progress-track"><i style={{ width: `${progressPercent}%` }} /></div>
-            <ol>
-              {["读取文件", "AI/OCR识别", "预览确认", "写入项目"].map((step, index) => (
-                <li className={progressPercent >= [12, 62, 82, 100][index] ? "done" : ""} key={step}>{step}</li>
-              ))}
-            </ol>
-          </div>
-        )}
-
         {message && <p className="form-message">{message}</p>}
         <div className="modal-actions">
           <button type="button" className="ghost" onClick={onClose}>取消</button>
@@ -3292,6 +3285,23 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
           <button type="submit" className="primary" disabled={loading || (preview && !preview.canConfirm)}>{loading ? "处理中" : preview ? "确认入库" : "AI 预览识别"}</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function UploadProgressPanel({ loading, confirmed, preview, progressLabel, progressPercent }) {
+  return (
+    <div className="upload-progress-panel">
+      <div>
+        <strong>{loading ? "AI 正在处理" : confirmed ? "处理完成" : preview ? "等待确认" : "准备识别"}</strong>
+        <span>{progressLabel}</span>
+      </div>
+      <div className="upload-progress-track"><i style={{ width: `${progressPercent}%` }} /></div>
+      <ol>
+        {["读取文件", "AI/OCR识别", "预览确认", "写入项目"].map((step, index) => (
+          <li className={progressPercent >= [12, 62, 82, 100][index] ? "done" : ""} key={step}>{step}</li>
+        ))}
+      </ol>
     </div>
   );
 }

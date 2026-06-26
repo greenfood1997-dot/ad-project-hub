@@ -3415,10 +3415,11 @@ main.dashboard-main {
 .upload-progress-panel {
   display: grid;
   gap: 10px;
-  border: 1px solid #cfe0ff;
+  border: 1px solid #9fc0ff;
   border-radius: 8px;
-  background: #f7faff;
+  background: linear-gradient(180deg, #f7faff 0%, #eef5ff 100%);
   padding: 12px;
+  box-shadow: 0 8px 24px rgba(51, 112, 255, 0.1);
 }
 
 .upload-progress-panel > div:first-child {
@@ -3429,7 +3430,8 @@ main.dashboard-main {
 }
 
 .upload-progress-panel strong {
-  font-size: 13px;
+  color: #1d4ed8;
+  font-size: 14px;
 }
 
 .upload-progress-panel span {
