@@ -669,6 +669,83 @@
   "comments": [],
   "auditLogs": [
     {
+      "type": "notification",
+      "target": "system",
+      "action": "scan",
+      "user": "系统扫描",
+      "meta": {
+        "active": 0,
+        "generated": 0
+      },
+      "at": "2026-06-26T07:34:24.264Z"
+    },
+    {
+      "type": "notification",
+      "target": "system",
+      "action": "scan",
+      "user": "系统扫描",
+      "meta": {
+        "active": 0,
+        "generated": 0
+      },
+      "at": "2026-06-26T07:33:54.808Z"
+    },
+    {
+      "type": "notification",
+      "target": "system",
+      "action": "scan",
+      "user": "系统扫描",
+      "meta": {
+        "active": 0,
+        "generated": 0
+      },
+      "at": "2026-06-26T07:23:34.281Z"
+    },
+    {
+      "type": "notification",
+      "target": "system",
+      "action": "scan",
+      "user": "系统扫描",
+      "meta": {
+        "active": 0,
+        "generated": 0
+      },
+      "at": "2026-06-26T07:21:41.868Z"
+    },
+    {
+      "type": "notification",
+      "target": "system",
+      "action": "scan",
+      "user": "系统扫描",
+      "meta": {
+        "active": 0,
+        "generated": 0
+      },
+      "at": "2026-06-26T07:13:26.217Z"
+    },
+    {
+      "type": "notification",
+      "target": "system",
+      "action": "scan",
+      "user": "系统扫描",
+      "meta": {
+        "active": 0,
+        "generated": 0
+      },
+      "at": "2026-06-26T07:12:48.996Z"
+    },
+    {
+      "type": "notification",
+      "target": "system",
+      "action": "scan",
+      "user": "系统扫描",
+      "meta": {
+        "active": 0,
+        "generated": 0
+      },
+      "at": "2026-06-26T07:08:28.048Z"
+    },
+    {
       "type": "feishu",
       "target": "管理员专属项目",
       "action": "confirm-pending-file",

@@ -2014,7 +2014,7 @@ function inferFeishuUploadType(event = {}, text = "") {
   return "file-reference";
 }
 
-async function getFeishuTenantAccessToken(settings = {}) {
+export async function getFeishuTenantAccessToken(settings = {}) {
   if (settings.mockTenantAccessToken) return settings.mockTenantAccessToken;
   if (settings.tenantAccessToken) return settings.tenantAccessToken;
   const appId = settings.appId || settings.app_id;

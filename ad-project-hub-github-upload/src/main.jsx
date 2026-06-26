@@ -42,6 +42,10 @@ const roleOptions = [
 ];
 
 const managementRoles = ["shareholder", "admin", "director", "finance"];
+const projectCreateRoles = ["shareholder", "admin", "director", "pm", "sales"];
+const projectWriteRoles = ["shareholder", "admin", "director", "pm", "sales"];
+const collectionRoles = ["shareholder", "admin", "director", "pm", "sales", "finance"];
+const feishuPendingHandleRoles = ["shareholder", "admin", "director", "pm", "sales", "finance"];
 
 function roleLabel(role) {
   return roleOptions.find(([value]) => value === role)?.[1] || role;
@@ -49,6 +53,22 @@ function roleLabel(role) {
 
 function canSeeManagement(session) {
   return managementRoles.includes(session?.role);
+}
+
+function canCreateProjectRole(session) {
+  return projectCreateRoles.includes(session?.role);
+}
+
+function canWriteProjectRole(session) {
+  return projectWriteRoles.includes(session?.role);
+}
+
+function canUseCollectionRole(session) {
+  return collectionRoles.includes(session?.role);
+}
+
+function canHandleFeishuPendingRole(session) {
+  return feishuPendingHandleRoles.includes(session?.role);
 }
 
 function money(value) {
@@ -89,6 +109,19 @@ function normalizeTask(task, index = 0) {
     dueDate: task?.dueDate || "",
     note: task?.note || "",
     updatedAt: task?.updatedAt || ""
+  };
+}
+
+function normalizeCostRow(row, index = 0) {
+  if (Array.isArray(row)) {
+    return {
+      name: row[0] || `成本 ${index + 1}`,
+      value: Number(row[1] || 0)
+    };
+  }
+  return {
+    name: row?.name || row?.type || row?.category || row?.subject || row?.supplier || `成本 ${index + 1}`,
+    value: Number(row?.value ?? row?.amount ?? row?.cost ?? row?.price ?? 0)
   };
 }
 
@@ -537,12 +570,15 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [selectedId, setSelectedId] = useState("");
   const [role, setRole] = useState("全部角色");
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadInitialType, setUploadInitialType] = useState("create-project");
   const [filterOpen, setFilterOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [searchText, setSearchText] = useState("");
   const isAdmin = ["shareholder", "admin"].includes(session?.role);
   const isManagement = canSeeManagement(session);
+  const canCreateProject = canCreateProjectRole(session);
+  const canUseCollection = canUseCollectionRole(session);
   const aiConfigured = Boolean(state?.settings?.aiService?.configured || state?.settings?.aiService?.["API Key"]);
   const feishuConfigured = Boolean(state?.settings?.feishu?.appId && state?.settings?.feishu?.appSecret);
   const wechatConfigured = Boolean(state?.settings?.wechat?.webhookUrl || state?.settings?.wechat?.corpId);
@@ -574,6 +610,11 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   useEffect(() => {
     loadState();
   }, [session.id]);
+
+  function openUpload(type = "create-project") {
+    setUploadInitialType(type);
+    setUploadOpen(true);
+  }
 
   async function handleNotification(item, action = "resolve") {
     try {
@@ -766,11 +807,11 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
       icon: MessageSquareText,
       label: "客户偏好"
     },
-    {
+    ...(canUseCollection ? [{
       key: "collections",
       icon: MessagesSquare,
       label: "催收助手"
-    },
+    }] : []),
     ...(isManagement ? [{
       key: "management",
       icon: BarChart3,
@@ -866,7 +907,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             </button>
             {isAdmin && <button type="button" className="ghost" onClick={() => setView("admin")}><UserCog size={16} />成员管理</button>}
             {isAdmin && <button type="button" className={aiConfigured ? "ghost" : "ghost warning"} onClick={() => setView("admin:ai")}><Bot size={16} />{aiConfigured ? "AI 已接入" : "接入 AI"}</button>}
-            <button type="button" className="primary" onClick={() => setUploadOpen(true)}><Plus size={16} />新建项目</button>
+            {canCreateProject && <button type="button" className="primary" onClick={() => openUpload("create-project")}><Plus size={16} />新建项目</button>}
           </div>
         </header>
         {notice && <div className="notice-bar"><span>{notice}</span><button type="button" onClick={() => setNotice("")}>知道了</button></div>}
@@ -887,7 +928,8 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         {!projects.length && activeView !== "management" && (
           <EmptyProjectState
             isManagement={isManagement}
-            onUpload={() => setUploadOpen(true)}
+            canCreateProject={canCreateProject}
+            onUpload={() => openUpload("create-project")}
             onAdmin={() => setView("admin")}
             isAdmin={isAdmin}
           />
@@ -951,6 +993,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           session={session}
           stats={stats}
           subView={activeSubView}
+          setSubView={setActiveSubView}
           onDone={() => loadState()}
           onNotice={setNotice}
         />}
@@ -974,7 +1017,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
                   selected={selected}
                   feishuPendingFiles={state?.feishuPendingFiles || []}
                   onSelect={setSelectedId}
-                  onUpload={() => setUploadOpen(true)}
+                  onUpload={() => openUpload("cost-sheet")}
                 />
               )}
             </div>
@@ -996,7 +1039,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             <div className="project-list">
               <div className="section-head">
                 <h2>我的项目</h2>
-                <button type="button" onClick={() => setUploadOpen(true)}><UploadCloud size={16} />上传合同/执行表</button>
+                <button type="button" onClick={() => openUpload(selected ? "cost-sheet" : "create-project")}><UploadCloud size={16} />上传项目文件</button>
               </div>
               {visibleProjects.map((project) => (
                 <button
@@ -1041,6 +1084,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           session={session}
           projects={projects}
           selected={selected}
+          initialType={uploadInitialType}
           onClose={() => setUploadOpen(false)}
           onDone={() => loadState()}
         />}
@@ -1152,23 +1196,32 @@ function ProjectOverview({ stats, cashRef, progressRef, costRef, role, setRole, 
   );
 }
 
-function EmptyProjectState({ isManagement, isAdmin, onUpload, onAdmin }) {
+function EmptyProjectState({ isManagement, isAdmin, canCreateProject, onUpload, onAdmin }) {
   return (
     <section className="empty-project-state">
       <div>
         <PanelTitle icon={FileText} title="还没有真实项目" />
-        <h2>先上传第一份合同或报价表，OA 才会开始生成项目数据。</h2>
-        <p>{isManagement ? "上传后会自动进入项目台账、审批、回款、成本复盘和经营舱统计。" : "如果你还看不到项目，可能是管理员还没有把你绑定到项目里。"}</p>
+        <h2>{canCreateProject ? "先上传第一份合同或报价表，OA 才会开始生成项目数据。" : "你当前还没有被分派到项目。"}</h2>
+        <p>{canCreateProject
+          ? (isManagement ? "上传后会自动进入项目台账、审批、回款、成本复盘和经营舱统计。" : "上传后可以进入我的项目继续归集成本、核销和审批。")
+          : "请让管理员或总监在后台的项目分派里把你加入项目；分派后这里会自动出现你的项目进度、任务、备用金和上传入口。"}</p>
         <div className="button-row">
-          <button type="button" className="primary" onClick={onUpload}><UploadCloud size={16} />上传合同创建项目</button>
+          {canCreateProject && <button type="button" className="primary" onClick={onUpload}><UploadCloud size={16} />上传合同创建项目</button>}
           {isAdmin && <button type="button" className="ghost" onClick={onAdmin}><UserCog size={16} />成员与权限</button>}
         </div>
       </div>
       <div className="empty-steps">
-        <div><strong>1</strong><span>上传合同 / 报价表</span></div>
-        <div><strong>2</strong><span>AI 预览识别字段</span></div>
-        <div><strong>3</strong><span>确认入库生成项目</span></div>
-        <div><strong>4</strong><span>审批、回款、成本复盘开始流转</span></div>
+        {canCreateProject ? <>
+          <div><strong>1</strong><span>上传合同 / 报价表</span></div>
+          <div><strong>2</strong><span>AI 预览识别字段</span></div>
+          <div><strong>3</strong><span>确认入库生成项目</span></div>
+          <div><strong>4</strong><span>审批、回款、成本复盘开始流转</span></div>
+        </> : <>
+          <div><strong>1</strong><span>联系管理员分派项目</span></div>
+          <div><strong>2</strong><span>进入我的项目工作台</span></div>
+          <div><strong>3</strong><span>上传成本 / 核销 / 报销</span></div>
+          <div><strong>4</strong><span>查看进度、任务和 AI 提醒</span></div>
+        </>}
       </div>
     </section>
   );
@@ -1177,6 +1230,7 @@ function EmptyProjectState({ isManagement, isAdmin, onUpload, onAdmin }) {
 function EmployeeProjectOverview({ projects, selected, feishuPendingFiles = [], onSelect, onUpload }) {
   const activeProjects = projects.filter((project) => project.status !== "已完成");
   const health = projectHealth(selected);
+  const tasks = (selected.tasks || []).map(normalizeTask);
   const pettyLeft = Math.max(Number(selected.pettyCashBudget || 0) - Number(selected.pettyCashUsed || 0), 0);
   const missingItems = [
     selected.contract ? null : "合同金额待补",
@@ -1223,13 +1277,14 @@ function EmployeeProjectOverview({ projects, selected, feishuPendingFiles = [], 
         <div className="panel">
           <PanelTitle icon={CheckCircle2} title="当前任务" />
           <div className="employee-task-list">
-            {selected.tasks.map(([name, value]) => (
-              <div className="employee-task" key={name}>
-                <span>{name}</span>
-                <b>{value}%</b>
-                <div><i style={{ width: `${value}%` }} /></div>
+            {tasks.map((task) => (
+              <div className="employee-task" key={task.id || task.title}>
+                <span>{task.title}</span>
+                <b>{task.progress}%</b>
+                <div><i style={{ width: `${task.progress}%` }} /></div>
               </div>
             ))}
+            {!tasks.length && <p className="muted">暂无任务。PM 新增任务后会显示在这里。</p>}
           </div>
         </div>
 
@@ -1371,7 +1426,10 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
   const usedRate = project.costBudget ? Math.round((project.costUsed / project.costBudget) * 100) : 0;
   const health = projectHealth(project);
   const pettyCashLeft = Math.max(Number(project.pettyCashBudget || 0) - Number(project.pettyCashUsed || 0), 0);
+  const canEditProject = canWriteProjectRole(session);
   const canRecordPayment = ["shareholder", "admin", "director", "pm", "sales", "finance"].includes(session.role);
+  const canUseCollection = canUseCollectionRole(session);
+  const canHandleFeishuPending = canHandleFeishuPendingRole(session);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -1425,6 +1483,8 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
   const projectFeishuHandledFiles = projectFeishuPendingFiles.filter((item) => item.status !== "待确认");
   const projectComments = comments.filter((item) => item.project === project.name);
   const projectLogs = auditLogs.filter((item) => item.target === project.name);
+  const projectTasks = (project.tasks || []).map(normalizeTask);
+  const costRows = (project.costs || []).map(normalizeCostRow).filter((row) => row.name);
   const materialStatus = projectMaterialStatus(project, uniqueFiles, projectJobs);
   const actionItems = projectActionItems({ project, files: uniqueFiles, jobs: projectJobs, approvals: projectApprovals, health, isManagement, feishuPending: projectFeishuPendingFiles });
   const aiAdvice = projectAiAdvice({ project, materialStatus, approvals: projectApprovals, health, isManagement, feishuPending: projectFeishuPendingFiles });
@@ -1737,9 +1797,9 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
               <button type="button" className="ghost" onClick={() => setEditing(false)}>取消</button>
               <button type="button" className="primary" onClick={saveProject} disabled={saving}>{saving ? "保存中" : "保存"}</button>
             </div>
-          ) : (
+          ) : canEditProject ? (
             <button type="button" onClick={() => setEditing(true)}>编辑</button>
-          )}
+          ) : <span className="muted">基础信息由 PM / 销售 / 管理层维护</span>}
         </div>
         <div className="detail-form-grid">
           {[
@@ -1787,7 +1847,7 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
             <input value={taskForm.progress} onChange={(event) => updateTaskForm("progress", event.target.value)} placeholder="进度%" />
             <button type="submit" className="primary" disabled={savingTask}>{savingTask ? "保存中" : "新增任务"}</button>
           </form>
-          {project.tasks.map((task) => (
+          {projectTasks.map((task) => (
             <div className={`progress-row task-row ${task.status}`} key={task.id || task.title}>
               <span>{task.title}</span>
               <div><i style={{ width: `${task.progress}%` }} /></div>
@@ -1801,7 +1861,7 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
         </div>
         <div>
           <h3>{isManagement ? "成本与利润" : "成本构成"}</h3>
-          {project.costs.map(([name, value]) => (
+          {costRows.map(({ name, value }) => (
             <div className="cost-row" key={name}>
               <span>{name}</span>
               <b>{money(value)}</b>
@@ -1850,7 +1910,7 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
                 <span>{item.status} · {item.uploadType || "file"} · {item.senderName || "飞书成员"}</span>
                 <p>{item.preview?.summary || item.note || "确认后才会写入项目。"}</p>
               </div>
-              {item.status === "待确认" && <div className="button-row">
+              {item.status === "待确认" && canHandleFeishuPending && <div className="button-row">
                 <button type="button" className="primary" disabled={handlingFeishuFile === item.id} onClick={() => handleFeishuPendingFile(item, "confirm")}>
                   {handlingFeishuFile === item.id ? "处理中" : "确认入库"}
                 </button>
@@ -1922,11 +1982,14 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
         <div className="collection-callout">
           <div>
             <strong>销售催收话术</strong>
-            <span>{project.receivable > 0 ? "根据客户偏好、回款节点和销售风格生成更像真人的提醒。" : "当前无待回款，先不用催收。"}</span>
+            <span>{canUseCollection
+              ? (project.receivable > 0 ? "根据客户偏好、回款节点和销售风格生成更像真人的提醒。" : "当前无待回款，先不用催收。")
+              : "该操作由销售、PM、财务或管理层处理；你可以查看回款状态。"}
+            </span>
           </div>
-          <button type="button" className="ghost" onClick={generateCollectionScript} disabled={generatingCollection || !Number(project.receivable || 0)}>
+          {canUseCollection && <button type="button" className="ghost" onClick={generateCollectionScript} disabled={generatingCollection || !Number(project.receivable || 0)}>
             {generatingCollection ? "生成中" : "生成话术"}
-          </button>
+          </button>}
         </div>
         {collectionDraft && <div className="collection-script-card fresh">
           <strong>{collectionDraft.projectName} · {collectionDraft.tone}</strong>
@@ -1938,10 +2001,10 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
             <strong>{item.salesName || "销售"} · {item.tone || "自然提醒"} · {money(item.amount)}</strong>
             <pre>{item.script}</pre>
             <span>{item.outcome || item.reason || "结果待记录"}</span>
-            <div className="button-row">
+            {canUseCollection && <div className="button-row">
               <button type="button" className="primary" onClick={() => markCollectionOutcome(item, true)}>有效</button>
               <button type="button" className="ghost" onClick={() => markCollectionOutcome(item, false)}>待优化</button>
-            </div>
+            </div>}
           </div>
         ))}
         {canRecordPayment && <form className="project-approval-mini" onSubmit={submitPayment}>
@@ -2321,9 +2384,12 @@ function ApprovalFunds({ projects, approvals, selected, session, subView, setSub
 }
 
 function CloseoutReview({ project, isManagement, subView }) {
-  const costRows = (project.costs || []).filter(([, value]) => Number(value) > 0).sort((a, b) => Number(b[1]) - Number(a[1]));
-  const topCost = costRows[0] || ["待归集成本", project.costUsed];
-  const totalCost = costRows.reduce((sum, [, value]) => sum + Number(value || 0), 0) || Number(project.costUsed || 0);
+  const costRows = (project.costs || [])
+    .map(normalizeCostRow)
+    .filter((row) => Number(row.value) > 0)
+    .sort((a, b) => Number(b.value) - Number(a.value));
+  const topCost = costRows[0] || { name: "待归集成本", value: project.costUsed };
+  const totalCost = costRows.reduce((sum, row) => sum + Number(row.value || 0), 0) || Number(project.costUsed || 0);
   const showRanking = subView === "支出排行";
   return (
     <section className="feature-grid">
@@ -2338,13 +2404,13 @@ function CloseoutReview({ project, isManagement, subView }) {
           </div>
           <div className="idea-card">
             <strong>AI 优化建议</strong>
-            <p>当前最大支出为「{topCost[0]}」{money(topCost[1])}。建议复盘供应商报价、追加审批和月度核销节奏，沉淀到下次同类项目启动清单。</p>
+            <p>当前最大支出为「{topCost.name}」{money(topCost.value)}。建议复盘供应商报价、追加审批和月度核销节奏，沉淀到下次同类项目启动清单。</p>
           </div>
         </div>
         <div className="feature-panel">
           <PanelTitle icon={ShieldAlert} title="复盘风险" />
           <div className="compact-list">
-            <div><strong>最大支出</strong><span>{topCost[0]} · {money(topCost[1])}</span></div>
+            <div><strong>最大支出</strong><span>{topCost.name} · {money(topCost.value)}</span></div>
             <div><strong>成本占合同</strong><span>{project.contract ? `${Math.round((Number(project.costUsed || 0) / Number(project.contract || 1)) * 100)}%` : "待确认合同"}</span></div>
             <div><strong>回款状态</strong><span>{project.receivable > 0 ? `待回款 ${money(project.receivable)}` : "已无待回款"}</span></div>
           </div>
@@ -2354,7 +2420,7 @@ function CloseoutReview({ project, isManagement, subView }) {
         <div className="feature-panel wide-feature">
           <PanelTitle icon={BarChart3} title="支出排行" />
           <div className="compact-list">
-            {costRows.length ? costRows.slice(0, 8).map(([name, value]) => (
+            {costRows.length ? costRows.slice(0, 8).map(({ name, value }) => (
               <div key={name}>
                 <strong>{name}</strong>
                 <span>{money(value)} · 占总成本 {totalCost ? Math.round((Number(value || 0) / totalCost) * 100) : 0}%</span>
@@ -2365,7 +2431,7 @@ function CloseoutReview({ project, isManagement, subView }) {
         <div className="feature-panel">
           <PanelTitle icon={Bot} title="支出优化建议" />
           <div className="logic-list">
-            <LogicItem title="优先复盘" text={`先看最大支出「${topCost[0]}」，确认是否有临时追加、供应商报价偏高或审批滞后。`} />
+            <LogicItem title="优先复盘" text={`先看最大支出「${topCost.name}」，确认是否有临时追加、供应商报价偏高或审批滞后。`} />
             <LogicItem title="下次控制" text="把高占比支出前置到立项预算里，并设置超过预算阈值时必须重新审批。" />
           </div>
         </div>
@@ -2583,6 +2649,7 @@ function ClientLibrary({ clients = [], session, onDone, onNotice }) {
 }
 
 function CollectionAssistant({ projects = [], scripts = [], session, onDone, onNotice }) {
+  const canUseCollection = canUseCollectionRole(session);
   const receivableProjects = projects.filter((project) => Number(project.receivable || 0) > 0)
     .sort((a, b) => Number(b.receivable || 0) - Number(a.receivable || 0));
   const [selectedId, setSelectedId] = useState(receivableProjects[0]?.id || projects[0]?.id || "");
@@ -2601,6 +2668,10 @@ function CollectionAssistant({ projects = [], scripts = [], session, onDone, onN
   }, [selectedId, receivableProjects[0]?.id]);
 
   async function generateScript() {
+    if (!canUseCollection) {
+      onNotice("催收话术由销售、PM、财务或管理层处理。");
+      return;
+    }
     if (!selected) {
       onNotice("当前没有可催收的项目");
       return;
@@ -2626,6 +2697,10 @@ function CollectionAssistant({ projects = [], scripts = [], session, onDone, onN
   }
 
   async function saveOutcome(record, success) {
+    if (!canUseCollection) {
+      onNotice("催收结果由销售、PM、财务或管理层记录。");
+      return;
+    }
     try {
       await apiRequest("/api/collections/outcome", session, {
         method: "POST",
@@ -2678,7 +2753,7 @@ function CollectionAssistant({ projects = [], scripts = [], session, onDone, onN
           <div><strong>{selected.name}</strong><span>{selected.client || "客户待补"} · 回款节点 {selected.paymentDue || "待确认"}</span></div>
           <div><strong>待回款</strong><span>{money(selected.receivable)}</span></div>
         </div>}
-        <button type="button" className="primary" onClick={generateScript} disabled={loading || !selected || !Number(selected.receivable || 0)}>
+        <button type="button" className="primary" onClick={generateScript} disabled={!canUseCollection || loading || !selected || !Number(selected.receivable || 0)}>
           {loading ? "生成中" : "生成催收话术"}
         </button>
       </div>
@@ -2709,10 +2784,10 @@ function CollectionAssistant({ projects = [], scripts = [], session, onDone, onN
             <div className="collection-history-row" key={item.id}>
               <strong>{item.projectName} · {item.salesName || "销售"} · {money(item.amount)}</strong>
               <span>{item.outcome || item.reason || "结果待记录"}</span>
-              <div className="button-row">
+              {canUseCollection && <div className="button-row">
                 <button type="button" className="primary" onClick={() => saveOutcome(item, true)}>有效</button>
                 <button type="button" className="ghost" onClick={() => saveOutcome(item, false)}>待优化</button>
-              </div>
+              </div>}
             </div>
           )) : <p className="muted">暂无话术记录。生成后会保存在这里。</p>}
         </div>
@@ -2721,7 +2796,7 @@ function CollectionAssistant({ projects = [], scripts = [], session, onDone, onN
   );
 }
 
-function ManagementCockpit({ projects, approvals = [], settings = {}, session, stats, subView, onDone, onNotice }) {
+function ManagementCockpit({ projects, approvals = [], settings = {}, session, stats, subView, setSubView, onDone, onNotice }) {
   const metrics = operatingMetrics(projects, approvals, stats, settings);
   const [financeForm, setFinanceForm] = useState(() => ({
     currentCash: metrics.runway.currentCash || "",
@@ -2772,6 +2847,11 @@ function ManagementCockpit({ projects, approvals = [], settings = {}, session, s
   const showCash = subView === "现金流压力";
   const showAdvisor = subView === "AI 商业顾问";
   const showDashboard = !showCash && !showAdvisor;
+  const managementTabs = [
+    { label: "公司大盘", icon: BarChart3, text: "看总额、回款、利润、项目结构" },
+    { label: "现金流压力", icon: CircleDollarSign, text: "按6个月安全线判断现金能撑多久" },
+    { label: "AI 商业顾问", icon: Bot, text: "把经营数据翻译成下一步动作" }
+  ];
   const cashHealthClass = metrics.runway.runwayLabel.includes("危险") || metrics.pressureLevel === "高" ? "danger" : metrics.pressureLevel === "中" ? "ok" : "good";
   const cashHealth = (
     <div className={`health-card ${cashHealthClass}`}>
@@ -2801,6 +2881,26 @@ function ManagementCockpit({ projects, approvals = [], settings = {}, session, s
   );
   return (
     <section className="feature-grid">
+      <div className="feature-panel wide-feature management-switcher">
+        <div>
+          <PanelTitle icon={showCash ? CircleDollarSign : showAdvisor ? Bot : BarChart3} title={showCash ? "现金流压力" : showAdvisor ? "AI 商业顾问" : "公司经营大盘"} />
+          <p>{showCash ? "现金安全线 = 当前公司现金 ÷（人力 + 租金 + 贷款 + 利息 + 每月其他固定支出），目标至少撑过 6 个月。" : showAdvisor ? "AI 顾问只给管理层看，会根据回款、毛利、现金压力和项目风险给经营动作。" : "这里汇总所有项目的合同、回款、支出、利润和项目风险，帮助创始人快速看公司状态。"}</p>
+        </div>
+        <div className="management-tab-row">
+          {managementTabs.map(({ label, icon: Icon, text }) => (
+            <button
+              type="button"
+              className={(subView || "公司大盘") === label || (!subView && label === "公司大盘") ? "active" : ""}
+              key={label}
+              onClick={() => setSubView(label)}
+            >
+              <Icon size={16} />
+              <strong>{label}</strong>
+              <span>{text}</span>
+            </button>
+          ))}
+        </div>
+      </div>
       {showDashboard && <>
         <div className="feature-panel founder-card wide-feature">
           <PanelTitle icon={BarChart3} title="公司经营大盘" />
@@ -2912,6 +3012,12 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
   const targetProject = projects.find((project) => project.id === projectId) || selected || projects[0];
   const needsProject = type !== "create-project";
   const hasProjects = projects.length > 0;
+  const typeLabels = {
+    "create-project": "新项目：合同 / 报价表",
+    "cost-sheet": "已有项目：执行成本表",
+    "quote-sheet": "已有项目：合同报价表",
+    "verification-sheet": "已有项目：月度核销表"
+  };
 
   async function pickFiles(event) {
     const picked = Array.from(event.target.files || []);
@@ -2935,6 +3041,10 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
       setMessage("请先创建项目，再上传成本表、报价表或核销表。");
       return;
     }
+    if (type === "create-project" && !files.length && !values["项目名称"]?.trim()) {
+      setMessage("请先选择合同/报价表，或至少填写项目名称，避免创建空项目。");
+      return;
+    }
     setLoading(true);
     setMessage("AI 正在预览识别结果，预览阶段不会写入项目。");
     try {
@@ -2955,6 +3065,10 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
   async function confirmUpload() {
     if (needsProject && !targetProject?.id) {
       setMessage("请先创建项目，再上传项目资料。");
+      return;
+    }
+    if (type === "create-project" && !files.length && !values["项目名称"]?.trim()) {
+      setMessage("请先选择合同/报价表，或至少填写项目名称，避免创建空项目。");
       return;
     }
     setLoading(true);
@@ -3017,8 +3131,8 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
       <form className="upload-modal" onSubmit={submit}>
         <div className="modal-head">
           <div>
-            <h2>上传到项目中台</h2>
-            <p>沿用现有 AI 解析流程，不改动表格统计逻辑。</p>
+            <h2>{needsProject ? `上传到「${targetProject?.name || "当前项目"}」` : "上传合同创建项目"}</h2>
+            <p>{needsProject ? "先 AI 预览识别，确认后才会写入当前项目。" : "合同/报价表会先预览，确认后创建项目。"}</p>
           </div>
           <button type="button" className="ghost" onClick={onClose}>关闭</button>
         </div>
@@ -3031,10 +3145,10 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
             setConfirmed(false);
             setMessage("");
           }}>
-            <option value="create-project">新项目：合同 / 报价表</option>
-            {hasProjects && <option value="cost-sheet">已有项目：执行成本表</option>}
-            {hasProjects && <option value="quote-sheet">已有项目：合同报价表</option>}
-            {hasProjects && <option value="verification-sheet">已有项目：月度核销表</option>}
+            <option value="create-project">{typeLabels["create-project"]}</option>
+            {hasProjects && <option value="cost-sheet">{typeLabels["cost-sheet"]}</option>}
+            {hasProjects && <option value="quote-sheet">{typeLabels["quote-sheet"]}</option>}
+            {hasProjects && <option value="verification-sheet">{typeLabels["verification-sheet"]}</option>}
           </select>
         </label>
 
@@ -3069,8 +3183,8 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
 
         <label className="file-drop">
           <UploadCloud size={18} />
-          <strong>{files.length ? `已选择 ${files.length} 个文件` : "选择合同、报价表、成本表或核销表"}</strong>
-          <span>支持 PDF / Word / Excel / CSV / 图片。大 PDF 请耐心等待 OCR。</span>
+          <strong>{files.length ? `已选择 ${files.length} 个文件` : `选择${needsProject ? typeLabels[type].replace("已有项目：", "") : "合同、报价表"}文件`}</strong>
+          <span>{needsProject && targetProject ? `归属项目：${targetProject.name}。` : ""}支持 PDF / Word / Excel / CSV / 图片。大 PDF 请耐心等待 OCR。</span>
           <input type="file" multiple onChange={pickFiles} />
         </label>
 
@@ -3243,10 +3357,12 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     verificationToken: "",
     tenantAccessToken: "",
     mockSend: "",
+    mockContactsJson: "",
     mockFileBase64: "",
     mockFileName: "",
     mockFileType: "",
   });
+  const [feishuSyncResult, setFeishuSyncResult] = useState(null);
   const [wechatSettings, setWechatSettings] = useState({
     webhookUrl: "",
     corpId: "",
@@ -3447,6 +3563,22 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     }
   }
 
+  async function syncFeishuContacts() {
+    setSettingsMessage("正在同步飞书通讯录...");
+    try {
+      const data = await api("/api/integrations/feishu/contacts/sync", {
+        method: "POST",
+        body: JSON.stringify({})
+      });
+      setFeishuSyncResult(data);
+      setSettingsMessage(`飞书通讯录同步完成：新增 ${data.created} 人，更新 ${data.updated} 人，跳过 ${data.skipped} 人。`);
+      await loadMembers();
+      await loadSettings();
+    } catch (err) {
+      setSettingsMessage(err.message);
+    }
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -3586,13 +3718,16 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
                 ["verificationToken", "Verification Token"],
                 ["tenantAccessToken", "Tenant Access Token（可选）"],
                 ["mockSend", "模拟发送通知（true/false）"],
+                ["mockContactsJson", "测试通讯录 JSON（可选）"],
                 ["mockFileBase64", "测试文件 Base64（可选）"],
                 ["mockFileName", "测试文件名（可选）"],
                 ["mockFileType", "测试文件类型（可选）"]
               ].map(([key, label]) => (
                 <label key={key}>
                   <span>{label}</span>
-                  <input value={feishuSettings[key]} onChange={(event) => setFeishuSettings({ ...feishuSettings, [key]: event.target.value })} />
+                  {key === "mockContactsJson"
+                    ? <textarea rows={4} value={feishuSettings[key]} onChange={(event) => setFeishuSettings({ ...feishuSettings, [key]: event.target.value })} placeholder='[{"name":"张三","email":"zhangsan@company.com","open_id":"ou_xxx","department":"项目部"}]' />
+                    : <input value={feishuSettings[key]} onChange={(event) => setFeishuSettings({ ...feishuSettings, [key]: event.target.value })} />}
                 </label>
               ))}
               <label>
@@ -3600,11 +3735,14 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
                 <input value="/api/integrations/feishu/events" readOnly />
               </label>
               <button type="button" className="ghost" onClick={() => saveTypedSetting("feishu", feishuSettings, "飞书配置")}>保存飞书配置</button>
+              <button type="button" className="ghost" onClick={syncFeishuContacts}>同步飞书通讯录</button>
+              {feishuSyncResult && <p className="form-message">最近同步：新增 {feishuSyncResult.created} 人，更新 {feishuSyncResult.updated} 人，跳过 {feishuSyncResult.skipped} 人。</p>}
             </div>
             <FeishuBotPanel
               api={api}
               settings={feishuSettings}
               projects={assignments}
+              members={members}
               bindings={feishuBindings}
               events={feishuEvents}
               pendingFiles={feishuPendingFiles}
@@ -3818,44 +3956,70 @@ function ProjectAssignmentPanel({ api, members, assignments, onReload }) {
   );
 }
 
-function FeishuBotPanel({ api, settings = {}, projects = [], bindings = [], events = [], pendingFiles = [], notifications = [], onReload }) {
+function FeishuBotPanel({ api, settings = {}, projects = [], members = [], bindings = [], events = [], pendingFiles = [], notifications = [], onReload }) {
   const [form, setForm] = useState({
     projectId: projects[0]?.id || "",
     chatId: "",
     chatName: ""
   });
   const [message, setMessage] = useState("");
+  const [operationLogs, setOperationLogs] = useState([]);
   const [saving, setSaving] = useState(false);
   const [handlingId, setHandlingId] = useState("");
   const [testing, setTesting] = useState(false);
   const [sampleText, setSampleText] = useState("这是项目群测试消息，帮我记录到项目动态里");
   const latestDownload = events.find((item) => /download|下载|解析|引用/.test(`${item.action || ""} ${item.status || ""} ${item.reply || ""}`));
   const feishuNotices = notifications.filter((item) => item.type === "feishu-pending-file" && item.status === "待处理");
+  const feishuNoticeReady = notifications.filter((item) => item.status === "待处理" && item.recipients?.length);
+  const activeMembers = members.filter((item) => item.status !== "disabled");
+  const boundMembers = activeMembers.filter((item) => item.feishuOpenId || item.feishuUserId);
+  const missingFeishuMembers = activeMembers.filter((item) => !item.feishuOpenId && !item.feishuUserId);
+  const pendingCount = pendingFiles.filter((item) => item.status === "待确认").length;
+  const handledFileCount = pendingFiles.filter((item) => item.status && item.status !== "待确认").length;
+  const latestEvent = events[0];
+  const latestSyncAt = settings.lastContactSyncAt || "";
+  const latestSync = settings.lastContactSyncResult || null;
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const callbackPath = "/api/integrations/feishu/events";
   const callbackUrl = settings.eventUrl || (origin ? `${origin}${callbackPath}` : callbackPath);
   const setupChecks = [
-    { label: "App ID", ok: Boolean(settings.appId), text: settings.appId ? "已填写" : "待填写" },
-    { label: "App Secret", ok: Boolean(settings.appSecret), text: settings.appSecret ? "已填写" : "待填写" },
-    { label: "Verification Token", ok: Boolean(settings.verificationToken), text: settings.verificationToken ? "已填写" : "建议填写" },
-    { label: "事件订阅 URL", ok: Boolean(settings.eventUrl || origin), text: callbackUrl },
-    { label: "项目群绑定", ok: bindings.length > 0, text: `${bindings.length} 个群` },
-    { label: "待确认队列", ok: pendingFiles.filter((item) => item.status === "待确认").length === 0, text: `${pendingFiles.filter((item) => item.status === "待确认").length} 个待处理` }
+    { label: "App ID", ok: Boolean(settings.appId), text: settings.appId ? "已填写" : "待填写", action: "后台上方填写并保存" },
+    { label: "App Secret", ok: Boolean(settings.appSecret), text: settings.appSecret ? "已填写" : "待填写", action: "后台上方填写并保存" },
+    { label: "Verification Token", ok: Boolean(settings.verificationToken), text: settings.verificationToken ? "已填写" : "建议填写", action: "飞书事件订阅页复制过来" },
+    { label: "事件订阅 URL", ok: Boolean(settings.eventUrl || origin), text: callbackUrl, action: "复制到飞书开放平台" },
+    { label: "项目群绑定", ok: bindings.length > 0, text: `${bindings.length} 个群`, action: "把 Chat ID 绑定到 OA 项目" },
+    { label: "成员飞书身份", ok: boundMembers.length > 0 && missingFeishuMembers.length === 0, text: `${boundMembers.length}/${activeMembers.length || 0} 已绑定`, action: "同步通讯录或手动填写 Open ID" },
+    { label: "机器人事件", ok: events.length > 0, text: latestEvent ? `${latestEvent.status || latestEvent.action || "已接收"} · ${latestEvent.chatName || latestEvent.projectName || latestEvent.chatId || "最近事件"}` : "暂无事件", action: "自测消息入库或在群里 @机器人" },
+    { label: "待确认队列", ok: pendingCount === 0, text: pendingCount ? `${pendingCount} 个待处理` : `${handledFileCount} 个已处理记录`, action: "确认或驳回飞书文件" },
+    { label: "飞书私聊通知", ok: Boolean(settings.mockSend === true || settings.mockSend === "true" || settings.appId && settings.appSecret && boundMembers.length > 0), text: settings.mockSend === true || settings.mockSend === "true" ? "模拟发送开启" : `${feishuNoticeReady.length} 条可提醒`, action: "给待办负责人发送飞书" },
+    { label: "通讯录同步", ok: Boolean(latestSyncAt), text: latestSyncAt ? `${new Date(latestSyncAt).toLocaleString("zh-CN", { hour12: false })}` : "未同步", action: "点击同步飞书通讯录" }
   ];
   const readyCount = setupChecks.filter((item) => item.ok).length;
+  const nextSetupAction = setupChecks.find((item) => !item.ok);
 
   useEffect(() => {
     if (!form.projectId && projects[0]?.id) setForm((current) => ({ ...current, projectId: projects[0].id }));
   }, [projects[0]?.id, form.projectId]);
 
+  function pushOperation(text, tone = "ok") {
+    const item = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      text,
+      tone,
+      at: new Date().toLocaleTimeString("zh-CN", { hour12: false })
+    };
+    setOperationLogs((current) => [item, ...current].slice(0, 5));
+    setMessage(text);
+  }
+
   async function save(event) {
     event.preventDefault();
     if (!form.chatId.trim()) {
-      setMessage("请填写飞书群 Chat ID");
+      pushOperation("请填写飞书群 Chat ID", "warn");
       return;
     }
     if (!form.projectId) {
-      setMessage("请先选择要绑定的项目");
+      pushOperation("请先选择要绑定的项目", "warn");
       return;
     }
     setSaving(true);
@@ -3865,11 +4029,11 @@ function FeishuBotPanel({ api, settings = {}, projects = [], bindings = [], even
         method: "POST",
         body: JSON.stringify(form)
       });
-      setMessage("飞书群已绑定项目。群里 @机器人发文件或项目消息后，会进入 OA 事件记录。");
+      pushOperation("飞书群已绑定项目。群里 @机器人发文件或项目消息后，会进入 OA 事件记录。");
       setForm((current) => ({ ...current, chatId: "", chatName: "" }));
       await onReload();
     } catch (error) {
-      setMessage(error.message);
+      pushOperation(error.message, "danger");
     } finally {
       setSaving(false);
     }
@@ -3883,10 +4047,10 @@ function FeishuBotPanel({ api, settings = {}, projects = [], bindings = [], even
         method: "POST",
         body: JSON.stringify({ id: item.id, action })
       });
-      setMessage(action === "reject" ? "飞书文件已驳回。" : "飞书文件已确认入库。");
+      pushOperation(action === "reject" ? "飞书文件已驳回。" : "飞书文件已确认入库。");
       await onReload();
     } catch (error) {
-      setMessage(error.message);
+      pushOperation(error.message, "danger");
     } finally {
       setHandlingId("");
     }
@@ -3895,9 +4059,9 @@ function FeishuBotPanel({ api, settings = {}, projects = [], bindings = [], even
   async function copyCallbackUrl() {
     try {
       await navigator.clipboard.writeText(callbackUrl);
-      setMessage("事件订阅 URL 已复制，可以粘贴到飞书开放平台。");
+      pushOperation("事件订阅 URL 已复制，可以粘贴到飞书开放平台。");
     } catch {
-      setMessage(`请复制这个地址：${callbackUrl}`);
+      pushOperation(`请复制这个地址：${callbackUrl}`, "warn");
     }
   }
 
@@ -3912,9 +4076,9 @@ function FeishuBotPanel({ api, settings = {}, projects = [], bindings = [], even
       });
       const payload = await res.json();
       if (payload.challenge !== "ad-project-hub-feishu-check") throw new Error(payload.error || "事件地址没有返回飞书需要的 challenge");
-      setMessage("OA 事件地址自测通过。下一步去飞书开放平台保存事件订阅。");
+      pushOperation("OA 事件地址自测通过。下一步去飞书开放平台保存事件订阅。");
     } catch (error) {
-      setMessage(error.message || "事件地址自测失败");
+      pushOperation(error.message || "事件地址自测失败", "danger");
     } finally {
       setTesting(false);
     }
@@ -3923,7 +4087,7 @@ function FeishuBotPanel({ api, settings = {}, projects = [], bindings = [], even
   async function testMessageIntake() {
     const chatId = form.chatId.trim() || bindings[0]?.chatId || "";
     if (!chatId) {
-      setMessage("请先填写或保存一个飞书群 Chat ID，再测试消息入库。");
+      pushOperation("请先填写或保存一个飞书群 Chat ID，再测试消息入库。", "warn");
       return;
     }
     setTesting(true);
@@ -3950,10 +4114,10 @@ function FeishuBotPanel({ api, settings = {}, projects = [], bindings = [], even
       });
       const payload = await res.json();
       if (!payload.ok) throw new Error(payload.error || "模拟消息没有成功进入 OA");
-      setMessage(payload.data?.reply || "模拟飞书消息已进入 OA。");
+      pushOperation(payload.data?.reply || "模拟飞书消息已进入 OA。");
       await onReload();
     } catch (error) {
-      setMessage(error.message || "模拟飞书消息失败");
+      pushOperation(error.message || "模拟飞书消息失败", "danger");
     } finally {
       setTesting(false);
     }
@@ -3975,9 +4139,43 @@ function FeishuBotPanel({ api, settings = {}, projects = [], bindings = [], even
             {item.ok ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
             <strong>{item.label}</strong>
             <span>{item.text}</span>
+            {!item.ok && <em>{item.action}</em>}
           </div>
         ))}
       </div>
+      <div className={`feishu-health-card ${nextSetupAction ? "warn" : "ok"}`}>
+        <div>
+          {nextSetupAction ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
+          <strong>{nextSetupAction ? `下一步：${nextSetupAction.action}` : "飞书接入清单已完成"}</strong>
+        </div>
+        <span>
+          {nextSetupAction
+            ? `当前卡在「${nextSetupAction.label}」。补完后再点自测事件地址 / 测试消息入库，就能判断链路是否通。`
+            : "现在可以从飞书群收消息和文件，文件会先进入待确认队列，确认后才写入 OA 项目。"}
+        </span>
+      </div>
+      <div className="feishu-ops-strip">
+        <div><strong>{activeMembers.length}</strong><span>启用成员</span></div>
+        <div><strong>{missingFeishuMembers.length}</strong><span>缺飞书 ID</span></div>
+        <div><strong>{bindings.length}</strong><span>项目群</span></div>
+        <div><strong>{events.length}</strong><span>机器人事件</span></div>
+        <div><strong>{pendingCount}</strong><span>待确认文件</span></div>
+        <div><strong>{notifications.length}</strong><span>系统待办</span></div>
+      </div>
+      {latestSync && <div className="feishu-download-state">
+        <strong>最近通讯录同步</strong>
+        <span>新增 {latestSync.created || 0} 人，更新 {latestSync.updated || 0} 人，跳过 {latestSync.skipped || 0} 人。同步后成员的飞书 Open ID 会用于机器人私聊通知。</span>
+      </div>}
+      {missingFeishuMembers.length > 0 && <div className="feishu-mini-list feishu-missing-list">
+        <strong>还缺飞书身份的成员</strong>
+        {missingFeishuMembers.slice(0, 6).map((member) => (
+          <div key={member.id}>
+            <span>{member.name}</span>
+            <em>{member.email} · {member.department || "未分组"} · 缺 Open ID / User ID</em>
+          </div>
+        ))}
+        {missingFeishuMembers.length > 6 && <p>还有 {missingFeishuMembers.length - 6} 人未展示，建议先同步飞书通讯录。</p>}
+      </div>}
       <div className="feishu-guide">
         <div>
           <strong>1. 飞书开放平台创建企业自建应用</strong>
@@ -4027,6 +4225,15 @@ function FeishuBotPanel({ api, settings = {}, projects = [], bindings = [], even
         <button type="button" className="ghost" onClick={testMessageIntake} disabled={testing}>{testing ? "测试中" : "测试消息入库"}</button>
       </div>
       {message && <p className="form-message">{message}</p>}
+      {operationLogs.length > 0 && <div className="feishu-operation-log">
+        <strong>最近操作</strong>
+        {operationLogs.map((item) => (
+          <div className={item.tone} key={item.id}>
+            <span>{item.text}</span>
+            <em>{item.at}</em>
+          </div>
+        ))}
+      </div>}
       <div className="feishu-download-state">
         <strong>文件下载与解析</strong>
         <span>{latestDownload ? `${latestDownload.status || latestDownload.action}：${latestDownload.reply || "已接收飞书文件事件"}` : "配置 App ID / App Secret 后，机器人会尝试用 message_id + file_key 下载文件；下载成功后先进入待确认队列，人工确认后才写入项目。"}</span>

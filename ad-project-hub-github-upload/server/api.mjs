@@ -11,6 +11,7 @@ import {
   deleteProject,
   feishuProjectBindings,
   feishuPendingFiles,
+  getFeishuTenantAccessToken,
   handleFeishuPendingFile,
   handleFeishuEvent,
   previewProjectUpload,
@@ -43,6 +44,7 @@ const ADMIN_ROLES = ["shareholder", "admin"];
 const DIRECTOR_ROLES = ["shareholder", "admin", "director"];
 const MANAGEMENT_ROLES = ["shareholder", "admin", "director", "finance"];
 const PROJECT_WRITE_ROLES = ["shareholder", "admin", "director", "pm", "sales"];
+const PROJECT_UPLOAD_ROLES = ["shareholder", "admin", "director", "pm", "sales", "member"];
 const ROLE_LABELS = {
   shareholder: "股东",
   admin: "管理员",
@@ -138,6 +140,114 @@ function setMemberStatus(db, body, actor) {
     at: new Date().toISOString()
   });
   return publicUser(member);
+}
+
+function normalizeFeishuContactUser(raw = {}, departmentName = "") {
+  const email = normalizeEmail(raw.email || raw.enterprise_email || raw.user_email || "");
+  const name = raw.name || raw.en_name || raw.nickname || raw.feishuName || raw.user_id || raw.open_id || "";
+  return {
+    name: String(name || "").trim(),
+    email,
+    department: raw.department || raw.departmentName || departmentName || "",
+    feishuOpenId: String(raw.open_id || raw.openId || raw.feishuOpenId || "").trim(),
+    feishuUserId: String(raw.user_id || raw.userId || raw.feishuUserId || "").trim(),
+    feishuName: String(raw.name || raw.feishuName || name || "").trim(),
+    status: raw.status?.is_activated === false || raw.status?.is_resigned ? "disabled" : "active"
+  };
+}
+
+async function fetchFeishuJson(path, token) {
+  const res = await fetch(`https://open.feishu.cn${path}`, {
+    headers: { authorization: `Bearer ${token}` }
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload.code !== 0) throw new Error(`飞书通讯录接口失败：${payload.msg || res.status}`);
+  return payload.data || {};
+}
+
+async function loadFeishuContacts(settings = {}) {
+  if (settings.mockContactsJson) {
+    const parsed = typeof settings.mockContactsJson === "string" ? JSON.parse(settings.mockContactsJson) : settings.mockContactsJson;
+    return Array.isArray(parsed) ? parsed.map((item) => normalizeFeishuContactUser(item)) : (parsed.users || []).map((item) => normalizeFeishuContactUser(item, parsed.department || ""));
+  }
+  const token = await getFeishuTenantAccessToken(settings);
+  const departments = [];
+  const users = [];
+  async function walkDepartment(departmentId = "0", departmentName = "飞书组织") {
+    const deptData = await fetchFeishuJson(`/open-apis/contact/v3/departments/${encodeURIComponent(departmentId)}/children?fetch_child=true&page_size=50`, token);
+    const children = deptData.items || deptData.departments || [];
+    for (const dept of children) {
+      const id = dept.open_department_id || dept.department_id || dept.id;
+      const name = dept.name || dept.i18n_name?.zh_cn || departmentName;
+      if (!id) continue;
+      departments.push({ id, name, parentId: departmentId });
+      const userData = await fetchFeishuJson(`/open-apis/contact/v3/users/find_by_department?department_id=${encodeURIComponent(id)}&department_id_type=open_department_id&page_size=50`, token);
+      for (const rawUser of userData.items || []) users.push(normalizeFeishuContactUser(rawUser, name));
+      await walkDepartment(id, name);
+    }
+  }
+  await walkDepartment("0", "飞书组织");
+  if (!users.length) {
+    const rootUsers = await fetchFeishuJson("/open-apis/contact/v3/users/find_by_department?department_id=0&page_size=50", token).catch(() => ({ items: [] }));
+    for (const rawUser of rootUsers.items || []) users.push(normalizeFeishuContactUser(rawUser, "飞书组织"));
+  }
+  return users;
+}
+
+async function syncFeishuContacts(db, body, actor) {
+  const contacts = await loadFeishuContacts({ ...(db.settings?.feishu || {}), ...(body?.settings || {}) });
+  if (!contacts.length) throw new Error("飞书通讯录没有返回成员，请检查通讯录权限或 mockContactsJson。");
+  const at = new Date().toISOString();
+  const result = { created: 0, updated: 0, skipped: 0, members: [] };
+  db.users = db.users || [];
+  for (const contact of contacts) {
+    if (!contact.name && !contact.email && !contact.feishuOpenId && !contact.feishuUserId) {
+      result.skipped += 1;
+      continue;
+    }
+    const existing = db.users.find((user) =>
+      (contact.email && normalizeEmail(user.email) === contact.email)
+      || (contact.feishuOpenId && user.feishuOpenId === contact.feishuOpenId)
+      || (contact.feishuUserId && user.feishuUserId === contact.feishuUserId)
+    );
+    const member = {
+      id: existing?.id || nextUserId(db),
+      name: contact.name || existing?.name || contact.email || contact.feishuOpenId,
+      email: contact.email || existing?.email || `${contact.feishuUserId || contact.feishuOpenId || Date.now()}@feishu.local`,
+      role: existing?.role || "member",
+      department: contact.department || existing?.department || "",
+      feishuOpenId: contact.feishuOpenId || existing?.feishuOpenId || "",
+      feishuUserId: contact.feishuUserId || existing?.feishuUserId || "",
+      feishuName: contact.feishuName || contact.name || existing?.feishuName || "",
+      status: contact.status || existing?.status || "active",
+      pin: existing?.pin || "123456",
+      createdAt: existing?.createdAt || at,
+      syncedFromFeishuAt: at
+    };
+    if (existing) {
+      Object.assign(existing, member);
+      result.updated += 1;
+    } else {
+      db.users.push(member);
+      result.created += 1;
+    }
+    result.members.push(publicUser(member));
+  }
+  db.settings = db.settings || {};
+  db.settings.feishu = {
+    ...(db.settings.feishu || {}),
+    lastContactSyncAt: at,
+    lastContactSyncResult: { created: result.created, updated: result.updated, skipped: result.skipped }
+  };
+  db.auditLogs.unshift({
+    type: "feishu",
+    target: "contacts",
+    action: "sync-contacts",
+    user: actor.name,
+    meta: { created: result.created, updated: result.updated, skipped: result.skipped },
+    at
+  });
+  return result;
 }
 
 function settingMembers(db) {
@@ -471,6 +581,14 @@ export async function handleApi(req, res) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/integrations/feishu/contacts/sync") {
+    if (!requireRole(user, ADMIN_ROLES, res)) return;
+    const body = await readBody(req);
+    const data = await mutateDb((db) => syncFeishuContacts(db, body, ensureMemberFields(user)));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/project-assignments") {
     if (!requireRole(user, DIRECTOR_ROLES, res)) return;
     sendJson(res, 200, { ok: true, data: projectAssignments(snapshot) });
@@ -556,8 +674,12 @@ export async function handleApi(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/projects/upload-preview") {
-    if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
     const body = await readBody(req);
+    if (body.type === "create-project") {
+      if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
+    } else if (!requireRole(user, PROJECT_UPLOAD_ROLES, res)) {
+      return;
+    }
     if (body.type !== "create-project" && !canAccessProject(snapshot, user, body.id)) {
       sendJson(res, 403, { ok: false, error: "无权限向该项目上传文件" });
       return;
@@ -592,6 +714,7 @@ export async function handleApi(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/projects/cost-sheet") {
+    if (!requireRole(user, PROJECT_UPLOAD_ROLES, res)) return;
     const body = await readBody(req);
     if (!canAccessProject(snapshot, user, body.id)) {
       sendJson(res, 403, { ok: false, error: "无权限向该项目上传执行成本表" });
@@ -603,7 +726,7 @@ export async function handleApi(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/projects/quote-sheet") {
-    if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
+    if (!requireRole(user, PROJECT_UPLOAD_ROLES, res)) return;
     const body = await readBody(req);
     if (!canAccessProject(snapshot, user, body.id)) {
       sendJson(res, 403, { ok: false, error: "无权限向该项目上传报价表" });
@@ -615,6 +738,7 @@ export async function handleApi(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/projects/verification-sheet") {
+    if (!requireRole(user, PROJECT_UPLOAD_ROLES, res)) return;
     const body = await readBody(req);
     if (!canAccessProject(snapshot, user, body.id)) {
       sendJson(res, 403, { ok: false, error: "无权限向该项目上传核销表" });

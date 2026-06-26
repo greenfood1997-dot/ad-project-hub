@@ -2879,6 +2879,18 @@ main.dashboard-main {
   outline: 0;
 }
 
+.settings-block textarea {
+  min-height: 88px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  padding: 9px 10px;
+  outline: 0;
+  resize: vertical;
+  line-height: 1.5;
+}
+
 .settings-block select {
   min-height: 36px;
   border: 1px solid var(--line-strong);
@@ -2959,6 +2971,86 @@ main.dashboard-main {
   color: var(--muted);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.feishu-status-grid em {
+  grid-column: 2;
+  color: #b45309;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.feishu-health-card {
+  display: grid;
+  gap: 6px;
+  border-radius: 14px;
+  padding: 12px;
+  border: 1px solid #d8e7ff;
+  background: #ffffff;
+}
+
+.feishu-health-card > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.feishu-health-card.ok {
+  border-color: #bdebd0;
+  background: #f4fff8;
+}
+
+.feishu-health-card.ok svg {
+  color: #18a058;
+}
+
+.feishu-health-card.warn {
+  border-color: #fde3b5;
+  background: #fffaf1;
+}
+
+.feishu-health-card.warn svg {
+  color: #f59e0b;
+}
+
+.feishu-health-card strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.feishu-health-card span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.feishu-ops-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.feishu-ops-strip > div {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px;
+  min-width: 0;
+}
+
+.feishu-ops-strip strong {
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.feishu-ops-strip span {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .feishu-guide {
@@ -3043,6 +3135,56 @@ main.dashboard-main {
   padding-top: 12px;
 }
 
+.feishu-operation-log {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.feishu-operation-log > strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.feishu-operation-log div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #f7fbf9;
+  color: #0f766e;
+}
+
+.feishu-operation-log div.warn {
+  background: #fff8eb;
+  color: #b45309;
+}
+
+.feishu-operation-log div.danger {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.feishu-operation-log span {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.feishu-operation-log em {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
 .feishu-download-state {
   display: grid;
   gap: 5px;
@@ -3082,6 +3224,11 @@ main.dashboard-main {
   gap: 7px;
 }
 
+.feishu-missing-list div {
+  border-color: #fde3b5;
+  background: #fffaf1;
+}
+
 .feishu-pending-actions {
   display: flex !important;
   grid-template-columns: none !important;
@@ -3115,6 +3262,10 @@ main.dashboard-main {
 @media (max-width: 760px) {
   .feishu-status-grid {
     grid-template-columns: 1fr;
+  }
+
+  .feishu-ops-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .feishu-guide > div {
@@ -3426,6 +3577,8 @@ body {
   border-right: 1px solid var(--line);
   padding: 22px 16px;
   gap: 24px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .logo-mark {
@@ -3440,6 +3593,9 @@ body {
 
 nav {
   gap: 6px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 nav a,
@@ -3463,6 +3619,7 @@ nav a.active {
 
 .integration {
   border-top: 1px solid var(--line);
+  flex: 0 0 auto;
 }
 
 .integration button {
@@ -4366,6 +4523,69 @@ select {
 
 .founder-card {
   background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+}
+
+.management-switcher {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.75fr) minmax(0, 1.25fr);
+  align-items: stretch;
+  gap: 14px;
+}
+
+.management-switcher > div:first-child {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+}
+
+.management-switcher p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.management-tab-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.management-tab-row button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--text);
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.management-tab-row button svg {
+  color: #5b6ee1;
+}
+
+.management-tab-row button strong {
+  min-width: 0;
+  font-size: 13px;
+}
+
+.management-tab-row button span {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.management-tab-row button.active {
+  border-color: #b9c7ff;
+  background: #f5f7ff;
+  box-shadow: 0 10px 26px rgba(78, 106, 230, 0.11);
 }
 
 .assignment-layout {
