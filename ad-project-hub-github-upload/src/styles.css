@@ -3291,6 +3291,7 @@ main.dashboard-main {
   width: min(760px, 100%);
   max-height: min(760px, 92vh);
   overflow: auto;
+  overflow-x: hidden;
   display: grid;
   gap: 15px;
   background: var(--surface);
@@ -3306,6 +3307,13 @@ main.dashboard-main {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+}
+
+.modal-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
 }
 
 .modal-head h2 {
@@ -3395,21 +3403,153 @@ main.dashboard-main {
 
 .upload-preview {
   display: grid;
+  min-width: 0;
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-soft);
   padding: 14px;
+  overflow-x: hidden;
 }
 
-.preview-head,
-.preview-target,
-.preview-section-head,
-.preview-table > div {
+.upload-progress-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #cfe0ff;
+  border-radius: 8px;
+  background: #f7faff;
+  padding: 12px;
+}
+
+.upload-progress-panel > div:first-child {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.upload-progress-panel strong {
+  font-size: 13px;
+}
+
+.upload-progress-panel span {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.upload-progress-track,
+.upload-mini-progress {
+  overflow: hidden;
+  height: 6px;
+  border-radius: 999px;
+  background: #e7eefb;
+}
+
+.upload-progress-track i,
+.upload-mini-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #3370ff;
+  transition: width 0.25s ease;
+}
+
+.upload-progress-panel ol {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.upload-progress-panel li {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  padding: 7px 8px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.upload-progress-panel li.done {
+  border-color: #bcd3ff;
+  background: #eef5ff;
+  color: #1d4ed8;
+}
+
+.upload-mini-panel {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  z-index: 60;
+  width: min(360px, calc(100vw - 32px));
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 9px 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  padding: 12px;
+}
+
+.upload-mini-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.upload-mini-main span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.upload-mini-main strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-mini-main em {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-mini-progress {
+  grid-column: 1 / -1;
+}
+
+.preview-head,
+.preview-target,
+.preview-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.preview-head > div,
+.preview-target strong,
+.preview-section-head strong {
+  min-width: 0;
 }
 
 .preview-head strong,
@@ -3428,6 +3568,11 @@ main.dashboard-main {
 .preview-table span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.preview-head span {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .preview-head b {
@@ -3454,13 +3599,19 @@ main.dashboard-main {
   padding: 10px 11px;
 }
 
+.preview-target strong {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 .preview-fields {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .preview-fields div {
+  min-width: 0;
   min-height: 64px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -3470,13 +3621,12 @@ main.dashboard-main {
 
 .preview-fields strong {
   display: block;
-  overflow: hidden;
   margin-top: 6px;
   color: var(--text);
   font-size: 13px;
   line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .preview-warnings {
@@ -3497,6 +3647,7 @@ main.dashboard-main {
 
 .preview-section {
   display: grid;
+  min-width: 0;
   gap: 8px;
 }
 
@@ -3507,9 +3658,15 @@ main.dashboard-main {
 .preview-table {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .preview-table > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
   min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -3519,15 +3676,23 @@ main.dashboard-main {
 
 .preview-table strong {
   min-width: 0;
-  overflow: hidden;
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.preview-table span {
+  max-width: 84px;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .preview-table b {
-  flex: 0 0 auto;
+  min-width: 74px;
   font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .modal-actions {
@@ -3543,6 +3708,7 @@ main.dashboard-main {
 
   .form-grid,
   .preview-fields,
+  .upload-progress-panel ol,
   .modal-head,
   .modal-actions {
     grid-template-columns: 1fr;
@@ -3552,6 +3718,11 @@ main.dashboard-main {
   .modal-head,
   .modal-actions {
     display: grid;
+  }
+
+  .modal-head-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 }
 

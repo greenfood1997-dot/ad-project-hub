@@ -17,6 +17,7 @@ import {
   LockKeyhole,
   LogOut,
   Mail,
+  Minimize2,
   MessageSquareText,
   MessagesSquare,
   Plus,
@@ -574,6 +575,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [selectedId, setSelectedId] = useState("");
   const [role, setRole] = useState("全部角色");
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadMinimized, setUploadMinimized] = useState(false);
   const [uploadInitialType, setUploadInitialType] = useState("create-project");
   const [filterOpen, setFilterOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -618,6 +620,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   function openUpload(type = "create-project") {
     setUploadInitialType(type);
     setUploadOpen(true);
+    setUploadMinimized(false);
   }
 
   async function handleNotification(item, action = "resolve") {
@@ -1089,7 +1092,13 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           projects={projects}
           selected={selected}
           initialType={uploadInitialType}
-          onClose={() => setUploadOpen(false)}
+          minimized={uploadMinimized}
+          onMinimize={() => setUploadMinimized(true)}
+          onExpand={() => setUploadMinimized(false)}
+          onClose={() => {
+            setUploadOpen(false);
+            setUploadMinimized(false);
+          }}
           onDone={() => loadState()}
         />}
       </main>
@@ -2999,7 +3008,7 @@ function LogicItem({ title, text }) {
   return <div className="logic-item"><strong>{title}</strong><p>{text}</p></div>;
 }
 
-function UploadDialog({ session, projects, selected, initialType = "create-project", onClose, onDone }) {
+function UploadDialog({ session, projects, selected, initialType = "create-project", minimized = false, onMinimize, onExpand, onClose, onDone }) {
   const [type, setType] = useState(initialType);
   const [projectId, setProjectId] = useState(selected?.id || projects[0]?.id || "");
   const [values, setValues] = useState({
@@ -3013,6 +3022,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [progress, setProgress] = useState({ step: "idle", percent: 0, text: "等待选择文件" });
   const targetProject = projects.find((project) => project.id === projectId) || selected || projects[0];
   const needsProject = type !== "create-project";
   const hasProjects = projects.length > 0;
@@ -3043,6 +3053,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
     if (oversized) setMessage("已选择超过 40MB 的 PDF，完整 OCR 可能需要几分钟，请不要重复提交。");
     setPreview(null);
     setConfirmed(false);
+    setProgress({ step: "ready", percent: 12, text: `已读取 ${payloads.length} 个文件，等待 AI 预览识别` });
     event.target.value = "";
   }
 
@@ -3051,6 +3062,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
     setPreview(null);
     setConfirmed(false);
     setMessage("");
+    setProgress({ step: "ready", percent: 8, text: "文件已调整，等待重新预览" });
   }
 
   function uploadBody() {
@@ -3069,16 +3081,22 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
       return;
     }
     setLoading(true);
+    setProgress({ step: "preview", percent: 34, text: "正在上传文件并解析基础信息" });
     setMessage("AI 正在预览识别结果，预览阶段不会写入项目。");
     try {
+      window.setTimeout(() => {
+        setProgress((current) => current.step === "preview" ? { step: "preview", percent: 62, text: "正在 OCR / 表格识别，请耐心等待" } : current);
+      }, 900);
       const data = await apiRequest("/api/projects/upload-preview", session, {
         method: "POST",
         body: JSON.stringify(uploadBody()),
       });
       setPreview(data);
       setConfirmed(false);
+      setProgress({ step: "review", percent: data.canConfirm ? 82 : 70, text: data.canConfirm ? "识别完成，等待你确认入库" : "识别完成，但需要先处理提示" });
       setMessage(data.canConfirm ? "请检查识别结果，确认无误后再入库。" : "识别结果需要处理后才能入库。");
     } catch (error) {
+      setProgress({ step: "error", percent: 100, text: "识别失败，请查看提示后重试" });
       setMessage(error.message);
     } finally {
       setLoading(false);
@@ -3095,6 +3113,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
       return;
     }
     setLoading(true);
+    setProgress({ step: "confirm", percent: 88, text: "正在写入项目数据并刷新大盘" });
     setMessage("正在确认入库，请稍候...");
     try {
       if (type === "create-project") {
@@ -3123,9 +3142,11 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
       }
       setMessage("上传成功，项目数据已刷新。");
       setConfirmed(true);
+      setProgress({ step: "done", percent: 100, text: "已完成入库，项目数据已刷新" });
       await onDone();
       setTimeout(onClose, 700);
     } catch (error) {
+      setProgress({ step: "error", percent: 100, text: "入库失败，请查看提示后重试" });
       setMessage(error.message);
     } finally {
       setLoading(false);
@@ -3149,6 +3170,26 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
     await confirmUpload();
   }
 
+  const hasProgress = progress.step !== "idle" || loading || preview;
+  const progressPercent = Math.max(0, Math.min(100, progress.percent || 0));
+  const progressLabel = loading ? progress.text : confirmed ? "已完成入库" : progress.text;
+
+  if (minimized) {
+    return (
+      <div className="upload-mini-panel">
+        <button type="button" className="upload-mini-main" onClick={onExpand}>
+          <UploadCloud size={17} />
+          <span>
+            <strong>{loading ? "AI 正在识别文件" : preview ? "识别结果待确认" : "上传任务已收起"}</strong>
+            <em>{progressLabel}</em>
+          </span>
+        </button>
+        <div className="upload-mini-progress"><i style={{ width: `${progressPercent}%` }} /></div>
+        <button type="button" className="ghost tiny" onClick={onExpand}>打开</button>
+      </div>
+    );
+  }
+
   return (
     <div className="modal-backdrop">
       <form className="upload-modal" onSubmit={submit}>
@@ -3157,7 +3198,10 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
             <h2>{needsProject ? `上传到「${targetProject?.name || "当前项目"}」` : "上传合同创建项目"}</h2>
             <p>{needsProject ? "先 AI 预览识别，确认后才会写入当前项目。" : "合同/报价表会先预览，确认后创建项目。"}</p>
           </div>
-          <button type="button" className="ghost" onClick={onClose}>关闭</button>
+          <div className="modal-head-actions">
+            {hasProgress && <button type="button" className="ghost" onClick={onMinimize}><Minimize2 size={15} />缩到后台</button>}
+            <button type="button" className="ghost" onClick={onClose}>关闭</button>
+          </div>
         </div>
 
         <label>
@@ -3225,9 +3269,25 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
 
         {preview && <UploadPreview preview={preview} />}
 
+        {hasProgress && (
+          <div className="upload-progress-panel">
+            <div>
+              <strong>{loading ? "AI 正在处理" : confirmed ? "处理完成" : preview ? "等待确认" : "准备识别"}</strong>
+              <span>{progressLabel}</span>
+            </div>
+            <div className="upload-progress-track"><i style={{ width: `${progressPercent}%` }} /></div>
+            <ol>
+              {["读取文件", "AI/OCR识别", "预览确认", "写入项目"].map((step, index) => (
+                <li className={progressPercent >= [12, 62, 82, 100][index] ? "done" : ""} key={step}>{step}</li>
+              ))}
+            </ol>
+          </div>
+        )}
+
         {message && <p className="form-message">{message}</p>}
         <div className="modal-actions">
           <button type="button" className="ghost" onClick={onClose}>取消</button>
+          {hasProgress && <button type="button" className="ghost" onClick={onMinimize}>缩到后台</button>}
           {preview && !confirmed && <button type="button" className="ghost" onClick={requestPreview} disabled={loading}>重新预览</button>}
           <button type="submit" className="primary" disabled={loading || (preview && !preview.canConfirm)}>{loading ? "处理中" : preview ? "确认入库" : "AI 预览识别"}</button>
         </div>
@@ -3283,7 +3343,7 @@ function UploadPreview({ preview }) {
               <div key={`${section.title}-${index}`}>
                 <strong>{row.name || row.matched || "未命名项"}</strong>
                 <span>{row.quantity ? `${row.quantity}${row.unit || ""}` : row.status || "待确认"}</span>
-                <b>{row.amount || row.unitPrice ? money(row.amount || row.unitPrice) : row.matched || ""}</b>
+                <b>{row.amount || row.unitPrice ? money(row.amount || row.unitPrice) : ""}</b>
               </div>
             ))}
           </div>
