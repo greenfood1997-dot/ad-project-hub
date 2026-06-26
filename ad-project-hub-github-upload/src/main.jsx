@@ -142,6 +142,10 @@ function fileToPayload(file) {
   });
 }
 
+function uploadedFileKey(file = {}) {
+  return `${file.name || ""}:${file.size || 0}:${file.type || ""}`;
+}
+
 async function apiRequest(path, session, options = {}) {
   const res = await fetch(path, {
     ...options,
@@ -3024,10 +3028,29 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
     setMessage("");
     const payloads = await Promise.all(picked.map(fileToPayload));
     const oversized = picked.find((file) => file.size > 40 * 1024 * 1024 && /pdf/i.test(file.type || file.name));
-    setFiles(payloads);
+    setFiles((current) => {
+      const merged = [...current];
+      const keys = new Set(current.map(uploadedFileKey));
+      payloads.forEach((file) => {
+        const key = uploadedFileKey(file);
+        if (!keys.has(key)) {
+          merged.push(file);
+          keys.add(key);
+        }
+      });
+      return merged;
+    });
     if (oversized) setMessage("已选择超过 40MB 的 PDF，完整 OCR 可能需要几分钟，请不要重复提交。");
     setPreview(null);
     setConfirmed(false);
+    event.target.value = "";
+  }
+
+  function removeFile(fileKey) {
+    setFiles((current) => current.filter((file) => uploadedFileKey(file) !== fileKey));
+    setPreview(null);
+    setConfirmed(false);
+    setMessage("");
   }
 
   function uploadBody() {
@@ -3194,6 +3217,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
               <div key={`${file.name}-${file.size}`}>
                 <strong>{file.name}</strong>
                 <span>{fileSize(file.size)}</span>
+                <button type="button" className="ghost tiny" onClick={() => removeFile(uploadedFileKey(file))}>移除</button>
               </div>
             ))}
           </div>
