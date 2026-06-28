@@ -5,6 +5,7 @@ import {
   actOnApproval,
   createApproval,
   advanceParseJob,
+  answerAiAssistant,
   createProject,
   clientLibrary,
   collectionLibrary,
@@ -45,6 +46,7 @@ const DIRECTOR_ROLES = ["shareholder", "admin", "director"];
 const MANAGEMENT_ROLES = ["shareholder", "admin", "director", "finance"];
 const PROJECT_WRITE_ROLES = ["shareholder", "admin", "director", "pm", "sales"];
 const PROJECT_UPLOAD_ROLES = ["shareholder", "admin", "director", "pm", "sales", "member"];
+const BUILD_VERSION = "2026-06-27-upload-progress-prestart-health";
 const ROLE_LABELS = {
   shareholder: "股东",
   admin: "管理员",
@@ -69,6 +71,21 @@ function publicUser(user) {
   if (!user) return null;
   const { pin, ...safeUser } = user;
   return safeUser;
+}
+
+function assignmentUser(user) {
+  const safe = publicUser(ensureMemberFields(user));
+  return {
+    id: safe.id,
+    name: safe.name,
+    email: safe.email,
+    role: safe.role,
+    department: safe.department || "",
+    status: safe.status || "active",
+    feishuOpenId: safe.feishuOpenId || "",
+    feishuUserId: safe.feishuUserId || "",
+    feishuName: safe.feishuName || ""
+  };
 }
 
 function normalizeEmail(email = "") {
@@ -278,6 +295,71 @@ function projectAssignments(db) {
   }));
 }
 
+function projectAssignmentSuggestions(db, projectId) {
+  const project = (db.projects || []).find((item) => item.id === projectId);
+  if (!project) throw new Error("项目不存在");
+  const users = (db.users || []).map(ensureMemberFields).filter((user) => user.status !== "disabled");
+  const assignments = projectAssignments(db);
+  const loadByUserId = new Map(users.map((user) => [user.id, 0]));
+  const lowerUserKeys = new Map();
+  users.forEach((user) => {
+    [user.name, user.email, user.feishuName].filter(Boolean).forEach((key) => lowerUserKeys.set(String(key).toLowerCase(), user.id));
+  });
+  for (const row of assignments) {
+    [row.pm, row.sales, ...(row.members || [])].filter(Boolean).forEach((key) => {
+      const id = lowerUserKeys.get(String(key).toLowerCase());
+      if (id) loadByUserId.set(id, Number(loadByUserId.get(id) || 0) + 1);
+    });
+  }
+  const projectDept = projectDepartment(project);
+  const clientText = [project.client, project.name, project.extractedFields?.brand].filter(Boolean).join(" ");
+  const scoreUser = (user, targetRoles = []) => {
+    const load = Number(loadByUserId.get(user.id) || 0);
+    let score = 100 - load * 32;
+    const roleMatched = targetRoles.includes(user.role);
+    if (roleMatched) score += 30;
+    if (user.role === targetRoles[0]) score += 20;
+    if (projectDept && user.department === projectDept) score += 16;
+    if (clientText && user.department && clientText.includes(user.department)) score += 8;
+    if (user.role === "director") score += 6;
+    if (user.role === "admin" || user.role === "shareholder") score -= 8;
+    return Math.max(0, score);
+  };
+  const serialize = (user, roles) => {
+    const load = Number(loadByUserId.get(user.id) || 0);
+    return {
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      roleLabel: ROLE_LABELS[user.role] || user.role,
+      department: user.department || "",
+      load,
+      score: scoreUser(user, roles),
+      reason: `${load ? `当前 ${load} 个项目，建议谨慎加派` : "当前较空闲，适合承接"}${projectDept && user.department === projectDept ? "，部门匹配" : ""}${roles.includes(user.role) ? "，角色匹配" : ""}`
+    };
+  };
+  const pmRoles = ["pm", "director", "admin"];
+  const salesRoles = ["sales", "director", "admin"];
+  const memberRoles = ["member", "pm", "sales", "finance"];
+  const sortByScore = (rows) => rows.sort((a, b) => b.score - a.score || a.load - b.load || a.name.localeCompare(b.name, "zh-CN"));
+  const pmCandidates = sortByScore(users.filter((user) => pmRoles.includes(user.role)).map((user) => serialize(user, pmRoles))).slice(0, 3);
+  const salesCandidates = sortByScore(users.filter((user) => salesRoles.includes(user.role)).map((user) => serialize(user, salesRoles))).slice(0, 3);
+  const memberCandidates = sortByScore(users.filter((user) => memberRoles.includes(user.role)).map((user) => serialize(user, memberRoles))).slice(0, 6);
+  return {
+    projectId: project.id,
+    projectName: project.name,
+    pmCandidates,
+    salesCandidates,
+    memberCandidates,
+    recommended: {
+      pmId: pmCandidates[0]?.id || "",
+      salesId: salesCandidates[0]?.id || "",
+      memberIds: memberCandidates.slice(0, 3).map((item) => item.id)
+    },
+    generatedAt: new Date().toISOString()
+  };
+}
+
 function saveProjectAssignment(db, body, actor) {
   const project = (db.projects || []).find((item) => item.id === body.projectId);
   if (!project) throw new Error("项目不存在");
@@ -400,32 +482,45 @@ function scopedSnapshot(db, user) {
   const projects = visibleProjectsForUser(db, user);
   const projectIds = new Set(projects.map((project) => project.id));
   const projectNames = new Set(projects.map((project) => project.name));
+  const suppliers = (db.suppliers || []).filter((item) => projectNames.has(item.project));
+  const supplierNames = new Set(suppliers.map((item) => item.supplier));
+  const visibleAuditLogs = (db.auditLogs || [])
+    .filter((item) => projectNames.has(item.target) || projectIds.has(item.projectId) || projectNames.has(item.projectName))
+    .slice(0, 80);
   return {
     ...db,
     projects,
     clientProfiles: clientLibrary({ ...db, projects }),
-    suppliers: (db.suppliers || []).filter((item) => projectNames.has(item.project)),
+    suppliers,
     supplierProfiles: supplierLibrary({
       ...db,
-      suppliers: (db.suppliers || []).filter((item) => projectNames.has(item.project))
+      suppliers,
+      supplierProfiles: (db.supplierProfiles || []).filter((item) => supplierNames.has(item.supplier))
     }),
     approvals: (db.approvals || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)),
     payments: (db.payments || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)),
     collectionScripts: (db.collectionScripts || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)),
     feishuProjectBindings: (db.feishuProjectBindings || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName)),
     feishuEvents: (db.feishuEvents || []).filter((item) => !item.projectId || projectIds.has(item.projectId) || projectNames.has(item.projectName)).slice(0, 50),
-    feishuPendingFiles: (db.feishuPendingFiles || []).filter((item) => !item.projectId || projectIds.has(item.projectId) || projectNames.has(item.projectName)).slice(0, 50),
+    feishuPendingFiles: (db.feishuPendingFiles || []).filter((item) => item.projectId && (projectIds.has(item.projectId) || projectNames.has(item.projectName))).slice(0, 50),
     systemNotifications: visibleSystemNotificationsFor(db, user),
     files: (db.files || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName)),
     parseJobs: (db.parseJobs || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName)),
     comments: (db.comments || []).filter((item) => projectNames.has(item.project)),
     alertUpdates: (db.alertUpdates || []).filter((item) => projectNames.has(item.project)),
-    auditLogs: []
+    auditLogs: visibleAuditLogs
   };
 }
 
 function canAccessProject(db, user, projectId) {
   return visibleProjectsForUser(db, ensureMemberFields(user)).some((project) => project.id === projectId);
+}
+
+function visibleProjectForBody(db, user, body = {}) {
+  const projectId = String(body.projectId || body.id || "").trim();
+  const projectName = String(body.projectName || body.project || "").trim();
+  return visibleProjectsForUser(db, ensureMemberFields(user))
+    .find((project) => (projectId && project.id === projectId) || (projectName && project.name === projectName));
 }
 
 function visibleSystemNotificationsFor(db, user) {
@@ -441,6 +536,7 @@ function visibleSystemNotificationsFor(db, user) {
       if (adminLike) return true;
       const hasProjectAccess = item.projectId ? projectIds.has(item.projectId) : projectNames.has(item.projectName);
       if (hasProjectAccess) return true;
+      if (item.projectId || item.projectName) return false;
       if (managementLike && Array.isArray(item.recipients) && item.recipients.includes(actor.role)) return true;
       return false;
     })
@@ -480,6 +576,11 @@ function scopedSettings(settings = {}, user) {
 function publicState(db, user) {
   return {
     ...db,
+    projects: (db.projects || []).map((project) => ({
+      ...project,
+      pettyCashBudget: Number(project.pettyCashBudget ?? project.extractedFields?.pettyCashBudget ?? project.extractedFields?.projectPettyCashBudget ?? 0),
+      pettyCashUsed: Number(project.pettyCashUsed ?? project.extractedFields?.pettyCashUsed ?? project.extractedFields?.projectPettyCashUsed ?? 0)
+    })),
     clientProfiles: clientLibrary(db),
     supplierProfiles: supplierLibrary(db),
     collectionScripts: collectionLibrary(db),
@@ -496,6 +597,22 @@ function publicState(db, user) {
 
 export async function handleApi(req, res) {
   const url = new URL(req.url, "http://localhost");
+
+  if (req.method === "GET" && url.pathname === "/api/health") {
+    sendJson(res, 200, {
+      ok: true,
+      data: {
+        app: "ad-project-hub",
+        version: BUILD_VERSION,
+        uploadProgress: true,
+        prestartBuild: true,
+        checkedAt: new Date().toISOString(),
+        nodeEnv: process.env.NODE_ENV || "development"
+      }
+    });
+    return;
+  }
+
   const snapshot = await readDb();
   const user = getCurrentUser(req, snapshot);
 
@@ -559,6 +676,21 @@ export async function handleApi(req, res) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/system/scan") {
+    if (!requireRole(user, ["shareholder", "admin", "director", "finance"], res)) return;
+    await mutateDb((db) => scanSystemNotifications(db, ensureMemberFields(user)));
+    const fresh = await readDb();
+    const data = fresh.systemNotifications || [];
+    sendJson(res, 200, {
+      ok: true,
+      data: {
+        notifications: visibleSystemNotificationsFor(fresh, ensureMemberFields(user)),
+        total: data.filter((item) => item.status === "待处理").length
+      }
+    });
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/members") {
     if (!requireRole(user, ADMIN_ROLES, res)) return;
     sendJson(res, 200, { ok: true, data: snapshot.users.map((item) => publicUser(ensureMemberFields(item))) });
@@ -591,13 +723,40 @@ export async function handleApi(req, res) {
 
   if (req.method === "GET" && url.pathname === "/api/project-assignments") {
     if (!requireRole(user, DIRECTOR_ROLES, res)) return;
-    sendJson(res, 200, { ok: true, data: projectAssignments(snapshot) });
+    const scoped = scopedSnapshot(snapshot, ensureMemberFields(user));
+    sendJson(res, 200, { ok: true, data: projectAssignments(scoped) });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/project-assignments/members") {
+    if (!requireRole(user, DIRECTOR_ROLES, res)) return;
+    const data = (snapshot.users || [])
+      .map((item) => assignmentUser(item))
+      .filter((item) => item.status !== "disabled");
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/project-assignments/suggestions") {
+    if (!requireRole(user, DIRECTOR_ROLES, res)) return;
+    const projectId = url.searchParams.get("projectId") || "";
+    if (!canAccessProject(snapshot, user, projectId)) {
+      sendJson(res, 403, { ok: false, error: "无权限读取该项目分派建议" });
+      return;
+    }
+    const scoped = scopedSnapshot(snapshot, ensureMemberFields(user));
+    const data = projectAssignmentSuggestions(scoped, projectId);
+    sendJson(res, 200, { ok: true, data });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/project-assignments") {
     if (!requireRole(user, DIRECTOR_ROLES, res)) return;
     const body = await readBody(req);
+    if (!canAccessProject(snapshot, user, body.projectId)) {
+      sendJson(res, 403, { ok: false, error: "无权限分派该项目" });
+      return;
+    }
     const data = await mutateDb((db) => saveProjectAssignment(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
@@ -615,6 +774,13 @@ export async function handleApi(req, res) {
     if (!requireRole(user, ADMIN_ROLES, res)) return;
     const body = await readBody(req);
     const data = await testAiSettings(body.values);
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/ai/assistant") {
+    const body = await readBody(req);
+    const data = await mutateDb((db) => answerAiAssistant(db, body, ensureMemberFields(user), scopedSnapshot(db, ensureMemberFields(user))));
     sendJson(res, 200, { ok: true, data });
     return;
   }
@@ -656,6 +822,10 @@ export async function handleApi(req, res) {
       sendJson(res, 404, { ok: false, error: "飞书待确认文件不存在" });
       return;
     }
+    if (!pending.projectId && !ADMIN_ROLES.includes(user.role)) {
+      sendJson(res, 403, { ok: false, error: "无权限处理未匹配项目的飞书文件" });
+      return;
+    }
     if (pending.projectId && !canAccessProject(snapshot, user, pending.projectId) && !ADMIN_ROLES.includes(user.role)) {
       sendJson(res, 403, { ok: false, error: "无权限处理该飞书文件" });
       return;
@@ -692,6 +862,10 @@ export async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/projects/update") {
     if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
     const body = await readBody(req);
+    if (!canAccessProject(snapshot, user, body.id)) {
+      sendJson(res, 403, { ok: false, error: "无权限更新该项目" });
+      return;
+    }
     const data = await mutateDb((db) => updateProject(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
@@ -700,6 +874,10 @@ export async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/projects/delete") {
     if (!requireRole(user, DIRECTOR_ROLES, res)) return;
     const body = await readBody(req);
+    if (!canAccessProject(snapshot, user, body.id)) {
+      sendJson(res, 403, { ok: false, error: "无权限删除该项目" });
+      return;
+    }
     const data = await mutateDb((db) => deleteProject(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
@@ -708,6 +886,10 @@ export async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/projects/reparse") {
     if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
     const body = await readBody(req);
+    if (!canAccessProject(snapshot, user, body.id)) {
+      sendJson(res, 403, { ok: false, error: "无权限重新解析该项目" });
+      return;
+    }
     const data = await mutateDb((db) => reparseProject(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
@@ -776,14 +958,32 @@ export async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/files/record") {
     if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
     const body = await readBody(req);
+    const visibleProject = visibleProjectForBody(snapshot, user, body);
+    if (!visibleProject) {
+      sendJson(res, 403, { ok: false, error: "无权限记录该项目文件" });
+      return;
+    }
+    body.projectId = visibleProject.id;
+    body.projectName = visibleProject.name;
     const data = await mutateDb((db) => recordFiles(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/parse-jobs/progress") {
+    if (!requireRole(user, PROJECT_UPLOAD_ROLES, res)) return;
     const body = await readBody(req);
-    const data = await mutateDb((db) => advanceParseJob(db, body.id || body.projectId));
+    const idOrProjectId = body.id || body.projectId;
+    const job = (snapshot.parseJobs || []).find((item) => item.id === idOrProjectId || item.projectId === idOrProjectId);
+    if (!job) {
+      sendJson(res, 404, { ok: false, error: "解析任务不存在" });
+      return;
+    }
+    if (!canAccessProject(snapshot, user, job.projectId)) {
+      sendJson(res, 403, { ok: false, error: "无权限推进该解析任务" });
+      return;
+    }
+    const data = await mutateDb((db) => advanceParseJob(db, idOrProjectId));
     sendJson(res, 200, { ok: true, data });
     return;
   }
@@ -791,6 +991,19 @@ export async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/alerts/update") {
     if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance"], res)) return;
     const body = await readBody(req);
+    const projectName = String(body.project || body.projectName || "").trim();
+    if (projectName) {
+      const visibleProject = visibleProjectsForUser(snapshot, ensureMemberFields(user))
+        .find((project) => project.name === projectName || project.id === body.projectId);
+      if (!visibleProject) {
+        sendJson(res, 403, { ok: false, error: "无权限处理该项目预警" });
+        return;
+      }
+      body.project = visibleProject.name;
+    } else if (!MANAGEMENT_ROLES.includes(user.role)) {
+      sendJson(res, 403, { ok: false, error: "无权限处理公司级预警" });
+      return;
+    }
     const data = await mutateDb((db) => updateAlert(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
@@ -799,6 +1012,14 @@ export async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/comments") {
     if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance", "member"], res)) return;
     const body = await readBody(req);
+    const projectName = String(body.project || body.projectName || "").trim();
+    const visibleProject = visibleProjectsForUser(snapshot, ensureMemberFields(user))
+      .find((project) => project.name === projectName || project.id === body.projectId);
+    if (!visibleProject) {
+      sendJson(res, 403, { ok: false, error: "无权限记录该项目动态" });
+      return;
+    }
+    body.project = visibleProject.name;
     const data = await mutateDb((db) => addComment(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
@@ -824,17 +1045,22 @@ export async function handleApi(req, res) {
       sendJson(res, 404, { ok: false, error: "审批不存在" });
       return;
     }
+    if (!MANAGEMENT_ROLES.includes(user.role) && !canAccessProject(snapshot, user, target.projectId)) {
+      sendJson(res, 403, { ok: false, error: "无权限处理该项目审批" });
+      return;
+    }
     const data = await mutateDb((db) => actOnApproval(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }
 
   if (req.method === "GET" && url.pathname === "/api/suppliers/export") {
+    const scoped = scopedSnapshot(snapshot, ensureMemberFields(user));
     res.writeHead(200, {
       "content-type": "text/csv; charset=utf-8",
       "content-disposition": "attachment; filename=supplier-settlements.csv"
     });
-    res.end(supplierCsv(snapshot));
+    res.end(supplierCsv(scoped));
     return;
   }
 
@@ -904,7 +1130,12 @@ export async function handleApi(req, res) {
       sendJson(res, 404, { ok: false, error: "催收记录不存在" });
       return;
     }
-    if (!canAccessProject(snapshot, user, record.projectId) && !["shareholder", "admin", "finance"].includes(user.role)) {
+    const project = (snapshot.projects || []).find((item) => item.id === record.projectId || item.name === record.projectName);
+    const canUpdateOutcome = ["shareholder", "admin", "director", "finance"].includes(user.role)
+      || record.salesId === user.id
+      || record.salesName === user.name
+      || (project && projectHasUserRole(project, ensureMemberFields(user)));
+    if (!canUpdateOutcome || (!canAccessProject(snapshot, user, record.projectId) && !["shareholder", "admin", "finance"].includes(user.role))) {
       sendJson(res, 403, { ok: false, error: "无权限更新该催收记录" });
       return;
     }

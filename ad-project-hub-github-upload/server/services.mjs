@@ -504,12 +504,24 @@ export function upsertProjectTask(db, body, user) {
 export function deleteProject(db, body, user) {
   const project = (db.projects || []).find((item) => item.id === body?.id);
   if (!project) throw new Error("项目不存在");
+  const isProjectRecord = (item = {}) => {
+    const names = [item.projectName, item.project, item.targetProject, item.relatedProject, item.chatName].filter(Boolean).map(String);
+    return item.projectId === project.id || names.includes(project.name);
+  };
 
   db.projects = (db.projects || []).filter((item) => item.id !== project.id);
-  db.parseJobs = (db.parseJobs || []).filter((item) => item.projectId !== project.id);
-  db.files = (db.files || []).filter((item) => item.projectId !== project.id && item.projectName !== project.name);
-  db.suppliers = (db.suppliers || []).filter((item) => item.projectId !== project.id && item.project !== project.name);
-  db.payments = (db.payments || []).filter((item) => item.projectId !== project.id && item.projectName !== project.name);
+  db.parseJobs = (db.parseJobs || []).filter((item) => !isProjectRecord(item));
+  db.files = (db.files || []).filter((item) => !isProjectRecord(item));
+  db.suppliers = (db.suppliers || []).filter((item) => !isProjectRecord(item));
+  db.payments = (db.payments || []).filter((item) => !isProjectRecord(item));
+  db.approvals = (db.approvals || []).filter((item) => !isProjectRecord(item));
+  db.collectionScripts = (db.collectionScripts || []).filter((item) => !isProjectRecord(item));
+  db.comments = (db.comments || []).filter((item) => !isProjectRecord(item));
+  db.alertUpdates = (db.alertUpdates || []).filter((item) => !isProjectRecord(item));
+  db.systemNotifications = (db.systemNotifications || []).filter((item) => !isProjectRecord(item));
+  db.feishuProjectBindings = (db.feishuProjectBindings || []).filter((item) => !isProjectRecord(item));
+  db.feishuPendingFiles = (db.feishuPendingFiles || []).filter((item) => !isProjectRecord(item));
+  db.feishuEvents = (db.feishuEvents || []).filter((item) => !isProjectRecord(item));
   const at = new Date().toISOString();
   db.auditLogs.unshift({ type: "project", target: project.name, action: "delete", user: user.name, at });
   return { id: project.id, name: project.name };
@@ -1159,7 +1171,7 @@ export function recordFiles(db, body, user) {
     uploadedAt: file.uploadedAt || now,
     uploadedBy: file.uploadedBy || user.id
   }));
-  const upload = { files, projectName: body.projectName || "", user: user.name, at: now };
+  const upload = { files, projectId: body.projectId || "", projectName: body.projectName || "", user: user.name, at: now };
   db.files.unshift(upload);
   db.auditLogs.unshift({ type: "upload", target: upload.projectName || "未命名项目", count: files.length, user: user.name, at: now });
   return upload;
@@ -1203,6 +1215,34 @@ function notificationRecipientsForRole(role) {
     sales: ["shareholder", "admin", "director", "sales"]
   };
   return map[role] || ["shareholder", "admin"];
+}
+
+function projectTimeHealth(project = {}, now = new Date()) {
+  const start = new Date(project.startDate || project.serviceStart || project.createdAt || now);
+  const end = new Date(project.endDate || project.serviceEnd || project.deadline || project.deliveryDate || now.getTime() + 30 * 86400000);
+  const total = Math.max(1, end - start);
+  const elapsed = Math.max(0, now - start);
+  const timeProgress = Math.max(0, Math.min(100, Math.round((elapsed / total) * 100)));
+  const completion = Math.max(0, Math.min(100, Math.round(Number(project.progress || 0))));
+  const diff = completion - timeProgress;
+  return { completion, timeProgress, diff };
+}
+
+function cashRunwayForNotifications(settings = {}) {
+  const finance = settings.companyFinance || {};
+  const currentCash = Number(finance.currentCash || 0);
+  const monthlyFixedCost = [
+    finance.monthlyLaborCost,
+    finance.monthlyRent,
+    finance.monthlyLoan,
+    finance.monthlyInterest,
+    finance.monthlyOtherCost
+  ].reduce((sum, value) => sum + Number(value || 0), 0);
+  if (!monthlyFixedCost) return null;
+  const runwayMonths = currentCash / monthlyFixedCost;
+  const safetyReserve = monthlyFixedCost * 6;
+  const gap = Math.max(safetyReserve - currentCash, 0);
+  return { currentCash, monthlyFixedCost, runwayMonths, safetyReserve, gap };
 }
 
 function upsertSystemNotification(db, draft) {
@@ -1267,6 +1307,62 @@ export function scanSystemNotifications(db, user = { id: "system", name: "系统
         actionView: "admin:assignments"
       }));
     }
+
+    const status = String(project.status || "");
+    const activeProject = !/已完成|完成|结案|已结案|取消/.test(status);
+    const health = projectTimeHealth(project, now);
+    if (activeProject && health.timeProgress >= 20 && health.diff <= -15) {
+      notifications.push(upsertSystemNotification(db, {
+        type: "project-progress-lag",
+        title: "项目进度滞后",
+        text: `「${project.name}」完成度 ${health.completion}%，时间进度 ${health.timeProgress}%，已落后 ${Math.abs(health.diff)} 个百分点。建议 PM 拆出本周必须完成的交付节点。`,
+        severity: health.diff <= -30 ? "高" : "中",
+        role: "pm",
+        recipients: notificationRecipientsForRole("pm"),
+        projectId: project.id,
+        projectName: project.name,
+        source: "project-scanner",
+        sourceId: project.id,
+        actionLabel: "看项目",
+        actionView: "project-detail"
+      }));
+    }
+
+    const contract = Number(project.contract || 0);
+    const receivable = Number(project.receivable || Math.max(contract - Number(project.paid || 0), 0));
+    const receivableRate = contract ? Math.round((receivable / contract) * 100) : 0;
+    if (activeProject && receivable > 0 && (receivableRate >= 50 || /逾期|本月底|月底|付款|回款/.test(String(project.paymentDue || "")))) {
+      notifications.push(upsertSystemNotification(db, {
+        type: "project-receivable-risk",
+        title: "项目回款需要跟进",
+        text: `「${project.name}」待回款 ${receivable.toLocaleString("zh-CN")} 元，占合同 ${receivableRate}%。建议销售/PM确认「${project.paymentDue || "下一笔回款节点"}」。`,
+        severity: receivableRate >= 80 ? "高" : "中",
+        role: "sales",
+        recipients: notificationRecipientsForRole("sales"),
+        projectId: project.id,
+        projectName: project.name,
+        source: "project-scanner",
+        sourceId: project.id,
+        actionLabel: "看回款",
+        actionView: "project-detail"
+      }));
+    }
+  }
+
+  const runway = cashRunwayForNotifications(db.settings || {});
+  if (runway && runway.runwayMonths < 6) {
+    notifications.push(upsertSystemNotification(db, {
+      type: "company-cash-runway",
+      title: runway.runwayMonths < 3 ? "危险！你快倒闭啦！需要收缩现金流" : "公司现金流低于 6 个月安全线",
+      text: `当前现金可撑 ${runway.runwayMonths.toFixed(1)} 个月，月固定支出 ${runway.monthlyFixedCost.toLocaleString("zh-CN")} 元，6个月安全线缺口 ${runway.gap.toLocaleString("zh-CN")} 元。`,
+      severity: runway.runwayMonths < 3 ? "高" : "中",
+      role: "finance",
+      recipients: notificationRecipientsForRole("finance"),
+      source: "finance-scanner",
+      sourceId: "company-cash-runway",
+      actionLabel: "看现金流",
+      actionView: "management:cash"
+    }));
   }
 
   for (const item of db.feishuPendingFiles || []) {
@@ -1547,6 +1643,205 @@ function applyApprovedFinanceImpact(db, approval) {
     : 0;
   project.updatedAt = new Date().toISOString();
   approval.appliedAt = project.updatedAt;
+}
+
+function money(value) {
+  return `¥${Number(value || 0).toLocaleString("zh-CN")}`;
+}
+
+function textIncludes(text, target) {
+  return Boolean(target) && String(text || "").includes(String(target || ""));
+}
+
+function findAssistantProject(query, projects = [], selectedProjectId = "") {
+  const text = String(query || "");
+  return projects.find((project) => project.id === selectedProjectId)
+    || projects.find((project) => textIncludes(text, project.name) || textIncludes(text, project.client))
+    || projects[0]
+    || null;
+}
+
+function amountFromAssistantText(text) {
+  const match = String(text || "").match(/(\d+(?:\.\d+)?)\s*(万|元)?/);
+  if (!match) return 0;
+  const amount = Number(match[1]);
+  return match[2] === "万" ? amount * 10000 : amount;
+}
+
+function simpleProjectHealth(project = {}) {
+  const completion = Math.max(0, Math.min(100, Math.round(Number(project.progress || 0))));
+  const start = new Date(project.startDate || project.createdAt || Date.now());
+  const end = new Date(project.endDate || project.serviceEnd || project.deadline || Date.now() + 30 * 86400000);
+  const now = new Date();
+  const total = Math.max(1, end - start);
+  const elapsed = Math.max(0, now - start);
+  const timeProgress = Math.max(0, Math.min(100, Math.round((elapsed / total) * 100)));
+  const diff = completion - timeProgress;
+  return {
+    completion,
+    timeProgress,
+    label: diff >= 8 ? "超前" : diff <= -8 ? "滞后" : "正常",
+    text: diff >= 8 ? "进度比时间更快，可以保持节奏并准备复盘材料。" : diff <= -8 ? "进度落后于时间，建议先拆出本周必须完成的交付节点。" : "进度和时间基本匹配，继续按当前节奏推进。"
+  };
+}
+
+function assistantRunway(settings = {}) {
+  const finance = settings.companyFinance || {};
+  const currentCash = Number(finance.currentCash || 0);
+  const monthlyFixedCost = [
+    finance.monthlyLaborCost,
+    finance.monthlyRent,
+    finance.monthlyLoan,
+    finance.monthlyInterest,
+    finance.monthlyOtherCost
+  ].reduce((sum, value) => sum + Number(value || 0), 0);
+  const runwayMonths = monthlyFixedCost ? currentCash / monthlyFixedCost : 0;
+  const safetyReserve = monthlyFixedCost * 6;
+  const gap = Math.max(safetyReserve - currentCash, 0);
+  let label = "待设置现金流参数";
+  if (monthlyFixedCost) {
+    if (runwayMonths < 3) label = "危险！你快倒闭啦！需要收缩现金流";
+    else if (runwayMonths < 6) label = "现金偏紧，需要控制支出并加快回款";
+    else label = "现金安全线达标，可以稳健推进";
+  }
+  return { currentCash, monthlyFixedCost, runwayMonths, safetyReserve, gap, label };
+}
+
+function assistantMetrics(scopedDb = {}) {
+  const projects = scopedDb.projects || [];
+  const approvals = scopedDb.approvals || [];
+  const contract = projects.reduce((sum, project) => sum + Number(project.contract || 0), 0);
+  const paid = projects.reduce((sum, project) => sum + Number(project.paid || 0), 0);
+  const receivable = projects.reduce((sum, project) => sum + Number(project.receivable || Math.max(Number(project.contract || 0) - Number(project.paid || 0), 0)), 0);
+  const spending = projects.reduce((sum, project) => sum + Number(project.costUsed || project.executionCost || 0), 0);
+  const profit = contract - spending;
+  const pendingApprovals = approvals.filter((item) => String(item.status || "").includes("待"));
+  return {
+    contract,
+    paid,
+    receivable,
+    spending,
+    profit,
+    margin: contract ? Math.round((profit / contract) * 100) : 0,
+    pendingApprovals
+  };
+}
+
+export function answerAiAssistant(db, body, user, scopedDb) {
+  const query = String(body?.query || "").trim();
+  if (!query) throw new Error("先输入一个问题");
+  const projects = scopedDb.projects || [];
+  const target = findAssistantProject(query, projects, body?.selectedProjectId);
+  if (!target) {
+    return {
+      reply: "你当前还没有可见项目。请让管理员或总监先把你加入项目，分派后我就能回答进度、备用金、报销和文件归档。",
+      action: "empty-projects"
+    };
+  }
+
+  const amount = amountFromAssistantText(query);
+  if (amount && /(提交|申请|登记|报销|备用金)/.test(query)) {
+    const type = /备用金|预算/.test(query) ? "petty_cash" : /报销|票据/.test(query) ? "reimbursement" : "";
+    if (type) {
+      const pendingAction = {
+        kind: "create-approval",
+        projectId: target.id,
+        projectName: target.name,
+        type,
+        typeLabel: type === "petty_cash" ? "项目备用金" : "报销",
+        amount,
+        payee: user.name,
+        reason: query
+      };
+      if (!body?.confirmAction || body.confirmAction.kind !== pendingAction.kind) {
+        return {
+          reply: `我理解你要给「${target.name}」提交${pendingAction.typeLabel}申请，金额 ${money(amount)}。这会进入审批流程，还不会直接影响成本；请确认后我再提交。`,
+          action: "approval-confirmation-required",
+          pendingAction
+        };
+      }
+      const approval = createApproval(db, pendingAction, user);
+      return {
+        reply: `已帮你提交「${target.name}」的${pendingAction.typeLabel}申请，金额 ${money(amount)}。当前状态：${approval.status}。`,
+        action: "approval-created",
+        approval
+      };
+    }
+  }
+
+  const pettyBudget = Number(target.pettyCashBudget || target.extractedFields?.pettyCashBudget || target.extractedFields?.projectPettyCashBudget || 0);
+  const pettyUsed = Number(target.pettyCashUsed || target.extractedFields?.pettyCashUsed || target.extractedFields?.projectPettyCashUsed || 0);
+  if (/备用金|预算/.test(query)) {
+    return {
+      reply: `「${target.name}」备用金预算 ${money(pettyBudget)}，已使用 ${money(pettyUsed)}，当前剩余 ${money(Math.max(pettyBudget - pettyUsed, 0))}。`,
+      action: "petty-cash"
+    };
+  }
+  if (/报销|票据|审批/.test(query)) {
+    const rows = (scopedDb.approvals || []).filter((item) => item.projectId === target.id || item.projectName === target.name);
+    return {
+      reply: rows.length
+        ? `「${target.name}」共有 ${rows.length} 条审批：${rows.slice(0, 3).map((item) => `${item.typeLabel || item.type} ${money(item.amount)} ${item.status}`).join("；")}。`
+        : `「${target.name}」当前没有审批记录。你可以说“帮我提交 500 元报销到${target.name}”，我会直接生成审批单。`,
+      action: "approval-summary"
+    };
+  }
+  if (/回款|收款|催收|待收|尾款|首款/.test(query)) {
+    const contract = Number(target.contract || 0);
+    const paid = Number(target.paid || 0);
+    const receivable = Number(target.receivable || Math.max(contract - paid, 0));
+    const rate = contract ? Math.round((paid / contract) * 100) : 0;
+    return {
+      reply: `「${target.name}」合同 ${money(contract)}，已回款 ${money(paid)}，待回款 ${money(receivable)}，回款率 ${rate}%。建议围绕「${target.paymentDue || "待确认回款节点"}」温和确认付款安排。`,
+      action: "collection-context"
+    };
+  }
+  if (/登记|上传|归档|成本/.test(query)) {
+    const explicitMatches = projects.filter((project) => textIncludes(query, project.name) || textIncludes(query, project.client));
+    return {
+      reply: !explicitMatches.length && projects.length > 1
+        ? `我识别到你有 ${projects.length} 个可见项目。为了避免成本记错账，请在上传入口选择项目；如果你直接说项目名，比如“这个统计到${target.name}成本里”，我会按项目匹配。`
+        : `当前匹配项目是「${target.name}」。财务类写入我会优先走审批单，文件归档请用上传入口，避免误改成本数据。`,
+      action: "filing-guidance"
+    };
+  }
+  if (/创意|内容|过稿|脚本/.test(query)) {
+    return {
+      reply: `针对「${target.client || target.name}」，建议先给真实使用场景，再给客户能确认的执行路径，减少空概念。可以把历史反馈继续上传，我会沉淀客户偏好和雷区。`,
+      action: "content-idea"
+    };
+  }
+  if (/进度|节点|滞后|超前|完成度/.test(query)) {
+    const health = simpleProjectHealth(target);
+    return {
+      reply: `「${target.name}」当前完成度 ${health.completion}%，时间进度 ${health.timeProgress}%，AI 判断为${health.label}。${health.text}`,
+      action: "progress"
+    };
+  }
+  if (/现金流|经营|倒闭|安全线|老板|公司/.test(query)) {
+    if (!["shareholder", "admin", "director", "finance"].includes(user.role)) {
+      return {
+        reply: "公司经营和现金流属于管理层可见内容。你可以继续问自己项目的进度、备用金、报销和材料状态。",
+        action: "management-denied"
+      };
+    }
+    const metrics = assistantMetrics(scopedDb);
+    const runway = assistantRunway(scopedDb.settings || db.settings || {});
+    return {
+      reply: `公司经营判断：${runway.label}。待回款 ${money(metrics.receivable)}，待审批 ${metrics.pendingApprovals.length} 条，现金可撑 ${runway.monthlyFixedCost ? `${runway.runwayMonths.toFixed(1)}个月` : "待设置"}，6个月安全线缺口 ${money(runway.gap)}。`,
+      action: "management-advice"
+    };
+  }
+  if (/我的项目|有哪些项目/.test(query)) {
+    return {
+      reply: `你当前可见 ${projects.length} 个项目：${projects.slice(0, 5).map((project) => `${project.name}(${simpleProjectHealth(project).label})`).join("、")}。`,
+      action: "project-list"
+    };
+  }
+  return {
+    reply: `我先按当前项目「${target.name}」理解：进度 ${Number(target.progress || 0)}%，下一节点是「${target.nextMilestone || "待确认"}」。你可以问“我的项目备用金还有多少”，也可以说“帮我提交 500 元报销到${target.name}”。`,
+    action: "fallback"
+  };
 }
 
 export function createApproval(db, body, user) {
@@ -1857,7 +2152,7 @@ export function collectionLibrary(db) {
     successRateNote: item.salesName
       ? (() => {
           const stats = collectionStats(db, item.salesName);
-          return stats.ownTotal ? `${stats.salesName || item.salesName} 已记录 ${stats.ownTotal} 次，成功 ${stats.ownSuccess} 次` : "暂无结果沉淀";
+          return stats.ownTotal ? `${item.salesName} 已记录 ${stats.ownTotal} 次，成功 ${stats.ownSuccess} 次` : "暂无结果沉淀";
         })()
       : "暂无销售归属"
   }));
@@ -2091,6 +2386,28 @@ async function applyFeishuDownloadedFile(db, project, file, uploadType, sender, 
   }
   if (uploadType === "create-project") {
     return await createProject(db, { "项目名称": project?.name || file.name.replace(/\.[^.]+$/, "") }, [payloadFile], actor);
+  }
+  if (project?.id) {
+    project.files = [...(project.files || []), payloadFile];
+    project.updatedAt = new Date().toISOString();
+    db.files = db.files || [];
+    db.files.unshift({
+      files: [payloadFile],
+      projectId: project.id,
+      projectName: project.name,
+      user: actor.name,
+      at: payloadFile.uploadedAt,
+      source: "feishu"
+    });
+    db.auditLogs.unshift({
+      type: "upload",
+      target: project.name,
+      action: "feishu-file-reference",
+      user: actor.name,
+      meta: { fileName: payloadFile.name, source: "feishu", uploadType },
+      at: payloadFile.uploadedAt
+    });
+    return { project, file: payloadFile };
   }
   return null;
 }
@@ -2651,8 +2968,22 @@ async function extractFileContent(file) {
 
     return fallback;
   } catch (error) {
-    return { ...fallback, extractionStatus: `文件内容提取失败：${error.message}` };
+    return { ...fallback, extractionStatus: `文件内容提取失败：${humanizeExtractionError(error, name)}` };
   }
+}
+
+function humanizeExtractionError(error, fileName = "文件") {
+  const message = String(error?.message || error || "");
+  if (/invalid pdf|bad xref|xref|pdf structure|invalid root|no pdf/i.test(message)) {
+    return `${fileName} 不是标准 PDF 或文件已损坏，请重新导出 PDF 后上传；如果是扫描件，建议先转成清晰图片或接入 OCR 后再识别`;
+  }
+  if (/password|encrypted|decrypt/i.test(message)) {
+    return `${fileName} 可能被加密或设置了密码，请解除密码后重新上传`;
+  }
+  if (/end of file|unexpected/i.test(message)) {
+    return `${fileName} 内容不完整，可能上传中断或文件损坏，请重新上传完整文件`;
+  }
+  return message || "文件暂时无法读取，请换一个清晰版本重新上传";
 }
 
 function shouldUseOcrForPdf(text) {

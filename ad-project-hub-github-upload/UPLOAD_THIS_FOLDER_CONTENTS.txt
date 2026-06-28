@@ -1,3 +1,10 @@
-请上传本文件夹里面的内容，不要上传外层文件夹本身。
-GitHub 页面应看到 src、server、data、db、package.json 等在当前目录下。
-上传后检查 GitHub 里的 src/main.jsx，必须能搜索到：移除、setFiles((current)、removeFile。
+如果可以替换整个 GitHub 文件夹，优先使用：
+/Users/greenfood/Documents/中台产品/ad-project-hub-github-upload-latest-replace.zip
+
+如果只能进入 GitHub 的 ad-project-hub-github-upload 目录手动上传，请上传本文件夹里面的内容，不要上传外层文件夹本身。
+GitHub 页面应看到 src、server、data、db、tests、package.json 等在当前目录下。
+上传后必须检查：
+1. tests/frontend-upload-progress-entry.mjs 存在。
+2. package.json 能搜到 "prestart": "npm run build"。
+3. src/main.jsx 能搜到 UploadProgressPanel、缩到后台、appendPickedFiles、dropFiles。
+4. ad-project-hub-github-upload 里不能有 dist。

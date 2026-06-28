@@ -924,6 +924,17 @@ label span {
   font-size: 13px;
 }
 
+.notification-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.notification-head-actions button {
+  white-space: nowrap;
+}
+
 .notification-list {
   display: grid;
   gap: 10px;
@@ -2348,6 +2359,19 @@ main.dashboard-main {
   background: #8b85b6;
 }
 
+.ai-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ai-confirm-actions button {
+  min-height: 30px;
+  padding: 0 11px;
+  font-size: 12px;
+}
+
 .ai-project-context {
   margin: 18px 0 12px;
   border-top: 1px solid #eef1f7;
@@ -2646,6 +2670,13 @@ main.dashboard-main {
 
 .approval-main {
   min-height: 290px;
+}
+
+.approval-summary-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 14px;
 }
 
 .approval-form {
@@ -3814,6 +3845,25 @@ nav a.active {
   background: var(--surface);
 }
 
+.integration button.deploy-health {
+  justify-content: flex-start;
+  min-height: 34px;
+  border-style: dashed;
+  font-size: 12px;
+}
+
+.integration button.deploy-health.ok {
+  border-color: #b7e4d8;
+  background: #f0fdfa;
+  color: #0f766e;
+}
+
+.integration button.deploy-health.warn {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
 main {
   height: 100vh;
   min-width: 0;
@@ -4775,6 +4825,49 @@ select {
   box-shadow: 0 10px 26px rgba(78, 106, 230, 0.11);
 }
 
+.cash-formula-card {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcff;
+  padding: 14px;
+}
+
+.cash-formula-card strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.cash-formula-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.cash-formula-card div {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cash-formula-card span {
+  min-width: 0;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--muted);
+  padding: 8px 10px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.cash-formula-card b {
+  color: #172033;
+  font-size: 15px;
+}
+
 .assignment-layout {
   display: grid;
   grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
@@ -4794,6 +4887,67 @@ select {
 .assignment-form .section-head span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.assignment-suggestion {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dbe6ff;
+  border-radius: 10px;
+  background: #f7f9ff;
+  padding: 12px;
+}
+
+.assignment-suggestion h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.suggestion-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.suggestion-column {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.suggestion-column > strong {
+  color: #3370ff;
+  font-size: 12px;
+}
+
+.suggestion-column div {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+
+.suggestion-column span,
+.suggestion-column em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-column span {
+  color: var(--text);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.suggestion-column em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
 }
 
 .assignment-members {
@@ -5003,6 +5157,10 @@ select {
 
   .material-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .suggestion-grid {
+    grid-template-columns: 1fr;
   }
 
   .metrics {

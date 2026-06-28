@@ -19,12 +19,16 @@ export async function handleStatic(req, res) {
   const filePath = join(rootDir, pathname.replace(/^\/+/, ""));
   try {
     const content = await readFile(filePath);
-    res.writeHead(200, { "content-type": mime[extname(filePath)] || "application/octet-stream" });
+    const isEntry = url.pathname === "/" || url.pathname.endsWith(".html");
+    res.writeHead(200, {
+      "content-type": mime[extname(filePath)] || "application/octet-stream",
+      "cache-control": isEntry ? "no-store" : "public, max-age=31536000, immutable"
+    });
     res.end(content);
   } catch {
     if (url.pathname === "/") {
       const fallback = await readFile(join(rootDir, "standalone.html"));
-      res.writeHead(200, { "content-type": mime[".html"] });
+      res.writeHead(200, { "content-type": mime[".html"], "cache-control": "no-store" });
       res.end(fallback);
       return;
     }
