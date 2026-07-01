@@ -11,7 +11,8 @@ assert(source.includes("const [paymentForm") && source.includes("recordingPaymen
 assert(source.includes('apiRequest("/api/payments"') || source.includes("apiRequest('/api/payments'"), "project detail should submit payments to backend");
 assert(source.includes("projectPayments = payments.filter"), "project detail should read real payment ledger from state");
 assert(source.includes("setPaymentForm({ amount: \"\", payer: \"\", method: \"\", note: \"\" })"), "payment form should reset after successful save");
-assert(source.includes("回款已记录，项目已回款和待回款已更新"), "payment save should tell user that project receivable data updates");
+assert(source.includes("回款已记录，项目已回款和待回款已更新，已回到回款流水区。"), "payment save should tell user that project receivable data updates and return them to the ledger");
+assert(source.includes('setLocalFocusTarget("payments")'), "payment save should focus the payment ledger after refresh");
 assert(source.includes("已回款 {money(project.paid)} · 待回款 {money(project.receivable)}"), "payment section should show live paid and receivable values");
 assert(source.includes("placeholder=\"回款金额\"") && source.includes("placeholder=\"付款方 / 客户\"") && source.includes("placeholder=\"方式：银行 / 票据等\""), "payment form should collect amount, payer, and method");
 assert(source.includes("记录回款"), "project detail should expose a payment record action");

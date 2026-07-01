@@ -609,6 +609,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [handlingNotificationId, setHandlingNotificationId] = useState("");
+  const [sendingNotificationId, setSendingNotificationId] = useState("");
   const [notice, setNotice] = useState("");
   const [searchText, setSearchText] = useState("");
   const [health, setHealth] = useState(null);
@@ -680,16 +681,20 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   }
 
   async function sendNotificationToFeishu(item) {
+    setSendingNotificationId(item.id);
     try {
       const data = await apiRequest("/api/notifications/feishu/send", session, {
         method: "POST",
         body: JSON.stringify({ id: item.id })
       });
       const okCount = (data.results || []).filter((row) => row.ok).length;
-      setNotice(`飞书通知已发送：${okCount}/${(data.results || []).length} 人。`);
+      const totalCount = (data.results || []).length;
+      setNotice(totalCount ? `飞书通知已发送：${okCount}/${totalCount} 人。` : "飞书通知未找到可发送对象，请检查成员飞书绑定。");
       await loadState();
     } catch (error) {
       setNotice(error.message);
+    } finally {
+      setSendingNotificationId("");
     }
   }
 
@@ -1023,6 +1028,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           onAction={handleNotification}
           onSendFeishu={sendNotificationToFeishu}
           handlingId={handlingNotificationId}
+          sendingFeishuId={sendingNotificationId}
           onScan={runSystemScan}
           canScan={isManagement}
           scanning={scanning}
@@ -1212,7 +1218,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   );
 }
 
-function NotificationDrawer({ items = [], onClose, onOpenTarget, onAction, onSendFeishu, handlingId = "", onScan, canScan, scanning }) {
+function NotificationDrawer({ items = [], onClose, onOpenTarget, onAction, onSendFeishu, handlingId = "", sendingFeishuId = "", onScan, canScan, scanning }) {
   const highCount = items.filter((item) => item.severity === "高").length;
   return (
     <div className="notification-backdrop" onClick={onClose}>
@@ -1239,7 +1245,7 @@ function NotificationDrawer({ items = [], onClose, onOpenTarget, onAction, onSen
               <em>{item.projectName || "系统"} · {item.source || "scanner"}</em>
               <div className="notification-actions">
                 <button type="button" className="primary" onClick={() => onOpenTarget(item)}>{item.actionLabel || "查看"}</button>
-                <button type="button" className="ghost" onClick={() => onSendFeishu(item)}>发送飞书</button>
+                <button type="button" className="ghost" disabled={sendingFeishuId === item.id} onClick={() => onSendFeishu(item)}>{sendingFeishuId === item.id ? "发送中" : "发送飞书"}</button>
                 <button type="button" className="ghost" disabled={handlingId === item.id} onClick={() => onAction(item, "resolve")}>{handlingId === item.id ? "处理中" : "标记处理"}</button>
                 <button type="button" className="ghost" disabled={handlingId === item.id} onClick={() => onAction(item, "ignore")}>{handlingId === item.id ? "处理中" : "忽略"}</button>
               </div>
@@ -1739,8 +1745,9 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
         body: JSON.stringify({ projectId: project.id, ...paymentForm })
       });
       setPaymentForm({ amount: "", payer: "", method: "", note: "" });
-      onNotice("回款已记录，项目已回款和待回款已更新");
-      onDone();
+      await onDone();
+      setLocalFocusTarget("payments");
+      onNotice("回款已记录，项目已回款和待回款已更新，已回到回款流水区。");
     } catch (error) {
       onNotice(error.message);
     } finally {
@@ -3917,10 +3924,18 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
         method: "POST",
         body: JSON.stringify({ type: "product", values: productSettings }),
       });
-      setSettingsMessage("产品设置已保存");
+      setSettingsMessage("产品设置已保存。回到员工端后，侧边栏和上传提醒会按新名称/提示展示。");
     } catch (err) {
       setSettingsMessage(err.message);
     }
+  }
+
+  function settingNextStep(type) {
+    if (type === "feishu") return "下一步：在下方飞书机器人面板自测事件地址，或同步飞书通讯录。";
+    if (type === "wechat") return "下一步：回到待办或项目提醒里测试企业微信通知。";
+    if (type === "storage") return "下一步：上传一个项目文件，确认文件记录能正常保存访问地址。";
+    if (type === "approvalRules") return "下一步：新提交的备用金、报销和供应商付款会按新阈值流转。";
+    return "配置已写入后台。";
   }
 
   async function saveTypedSetting(type, values, label) {
@@ -3930,7 +3945,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
         method: "POST",
         body: JSON.stringify({ type, values }),
       });
-      setSettingsMessage(`${label}已保存`);
+      setSettingsMessage(`${label}已保存。${settingNextStep(type)}`);
       await loadSettings();
     } catch (err) {
       setSettingsMessage(err.message);
@@ -4491,7 +4506,8 @@ function FeishuBotPanel({ api, settings = {}, projects = [], members = [], bindi
         method: "POST",
         body: JSON.stringify({ id: item.id, action })
       });
-      pushOperation(action === "reject" ? "飞书文件已驳回。" : "飞书文件已确认入库。");
+      const leftCount = Math.max(pendingFiles.filter((file) => file.status === "待确认").length - 1, 0);
+      pushOperation(`${action === "reject" ? "飞书文件已驳回" : "飞书文件已确认入库"}，当前还剩 ${leftCount} 个待确认文件。`);
       await onReload();
     } catch (error) {
       pushOperation(error.message, "danger");
@@ -4696,7 +4712,7 @@ function FeishuBotPanel({ api, settings = {}, projects = [], members = [], bindi
               <button type="button" className="primary" disabled={handlingId === item.id} onClick={() => handlePendingFile(item, "confirm")}>
                 {handlingId === item.id ? "处理中" : "确认入库"}
               </button>
-              <button type="button" className="ghost" disabled={handlingId === item.id} onClick={() => handlePendingFile(item, "reject")}>驳回</button>
+              <button type="button" className="ghost" disabled={handlingId === item.id} onClick={() => handlePendingFile(item, "reject")}>{handlingId === item.id ? "处理中" : "驳回"}</button>
             </div>}
           </div>
         )) : <p>暂无待确认文件。飞书群发来的成本/报价/核销文件下载成功后会先出现在这里。</p>}
