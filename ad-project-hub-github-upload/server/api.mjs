@@ -605,7 +605,8 @@ export async function handleApi(req, res) {
         app: "ad-project-hub",
         version: BUILD_VERSION,
         uploadProgress: true,
-        prestartBuild: true,
+        renderBuildCommand: true,
+        startOpensPortOnly: true,
         checkedAt: new Date().toISOString(),
         nodeEnv: process.env.NODE_ENV || "development"
       }

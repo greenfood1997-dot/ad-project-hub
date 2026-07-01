@@ -64,7 +64,13 @@ if download_text "$REPO_RAW/src/main.jsx" "$tmp_dir/main.jsx" "GitHub src/main.j
   check_contains "$tmp_dir/main.jsx" "缩到后台" "GitHub 的 src/main.jsx 有缩到后台" "GitHub 的 src/main.jsx 缺少缩到后台，请重新上传完整文件"
 fi
 if download_text "$REPO_RAW/package.json" "$tmp_dir/package.json" "GitHub package.json"; then
-  check_contains "$tmp_dir/package.json" '"prestart": "npm run build"' "GitHub 的 package.json 有 prestart 构建保险" "GitHub 的 package.json 还是旧版，没有 prestart"
+  if grep -q '"prestart": "npm run build"' "$tmp_dir/package.json" 2>/dev/null; then
+    echo "需要处理：GitHub 的 package.json 还有 prestart，Render 启动时会二次构建并可能一直检测不到端口"
+    bad=1
+    github_bad=1
+  else
+    echo "通过：GitHub 的 package.json 启动阶段只开服务端口"
+  fi
 fi
 if download_text "$REPO_RAW/render.yaml" "$tmp_dir/render.yaml" "GitHub render.yaml"; then
   check_contains "$tmp_dir/render.yaml" "npm run build" "GitHub 的 render.yaml 会执行 npm run build" "GitHub 的 render.yaml 还是旧版，没有 npm run build"
@@ -151,7 +157,7 @@ else
     echo "2. 在 GitHub 删除旧的 ad-project-hub-github-upload 文件夹，或至少删除里面的 dist。"
     echo "3. 上传解压后的新 ad-project-hub-github-upload 文件夹。"
     echo "4. 上传后确认 GitHub 能看到：ad-project-hub-github-upload/tests/frontend-upload-progress-entry.mjs"
-    echo "5. 再确认 package.json 里有：\"prestart\": \"npm run build\""
+    echo "5. 再确认 package.json 里没有 prestart，启动阶段只执行 node server.mjs"
     echo ""
     echo "如果 GitHub 网页不方便替换整个文件夹，也可以解压这个内容包，只上传里面的内容：$LATEST_CONTENTS_ZIP"
   fi

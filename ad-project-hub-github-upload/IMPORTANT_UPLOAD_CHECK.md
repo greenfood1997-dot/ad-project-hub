@@ -13,12 +13,12 @@
 为什么：
 
 - `dist/` 是旧的页面构建结果。如果 GitHub 里残留旧 `dist`，Render 可能继续显示旧页面，导致看不到“上传识别进度”“缩到后台”“多文件追加”等新功能。
-- 当前最新版已经在 `package.json` 里加入 `"prestart": "npm run build"`，Render 启动前会自动重新构建页面。
+- 当前最新版已经移除 `package.json` 里的 `prestart`。Render 的 Build Command 会打包页面，Start Command 只负责开端口，避免启动时二次构建导致部署失败。
 - 当前最新版后端有 `/api/health`，前端左下角有版本状态，用来判断线上是否已经更新到最新版。
 
 上传后请检查 GitHub：
 
-- `ad-project-hub-github-upload/package.json` 里必须有 `"prestart": "npm run build"`。
+- `ad-project-hub-github-upload/package.json` 里不能有 `prestart`。
 - `ad-project-hub-github-upload/server/api.mjs` 里必须有 `/api/health`。
 - `ad-project-hub-github-upload/server/static.mjs` 里必须有 `cache-control` 和 `no-store`。
 - `ad-project-hub-github-upload/src/main.jsx` 里必须能搜到：
@@ -32,4 +32,3 @@ Render 部署：
 2. 点 `Manual Deploy`。
 3. 选择 `Clear build cache & deploy`。
 4. 部署完成后打开 `/api/health`，能看到版本号才代表线上后端也更新了。
-

@@ -47,13 +47,13 @@ assert(postDeploy.includes("GitHub 的$label不是最新版或内容不完整"),
 assert(chineseDeploy.includes("GitHub 的$label不是最新版或内容不完整"), "Chinese deploy check should report incomplete remote tests");
 assert(postDeploy.includes("LATEST_WRAPPER_ZIP"), "post deploy check should point to latest wrapper zip");
 assert(chineseDeploy.includes("LATEST_WRAPPER_ZIP"), "Chinese deploy check should point to latest wrapper zip");
-assert(postDeploy.includes("frontend-upload-progress-entry.mjs") && postDeploy.includes("prestart") && postDeploy.includes("dist"), "post deploy failure guidance should mention missing tests, prestart, and dist");
-assert(chineseDeploy.includes("frontend-upload-progress-entry.mjs") && chineseDeploy.includes("prestart") && chineseDeploy.includes("dist"), "Chinese deploy failure guidance should mention missing tests, prestart, and dist");
+assert(postDeploy.includes("frontend-upload-progress-entry.mjs") && postDeploy.includes("二次构建") && postDeploy.includes("dist"), "post deploy failure guidance should mention missing tests, duplicate build, and dist");
+assert(chineseDeploy.includes("frontend-upload-progress-entry.mjs") && chineseDeploy.includes("二次构建") && chineseDeploy.includes("dist"), "Chinese deploy failure guidance should mention missing tests, duplicate build, and dist");
 
 for (const guide of [uploadGuide, uploadContentsGuide]) {
   assert(guide.includes("ad-project-hub-github-upload-latest-replace.zip"), "upload guide should recommend the latest full replacement zip");
   assert(guide.includes("tests/frontend-upload-progress-entry.mjs"), "upload guide should require the upload progress test file");
-  assert(guide.includes('"prestart": "npm run build"'), "upload guide should require the prestart marker");
+  assert(guide.includes("不能有") && guide.includes("prestart"), "upload guide should warn that prestart must not be used on Render");
   assert(guide.includes("UploadProgressPanel") && guide.includes("缩到后台") && guide.includes("appendPickedFiles") && guide.includes("dropFiles"), "upload guide should require current upload UI markers");
   assert(guide.includes("不能有 dist") || guide.includes("不要选择 dist"), "upload guide should warn that dist must not be uploaded");
 }

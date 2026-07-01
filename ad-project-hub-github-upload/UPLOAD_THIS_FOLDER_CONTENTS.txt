@@ -5,6 +5,6 @@
 GitHub 页面应看到 src、server、data、db、tests、package.json 等在当前目录下。
 上传后必须检查：
 1. tests/frontend-upload-progress-entry.mjs 存在。
-2. package.json 能搜到 "prestart": "npm run build"。
+2. package.json 不能有 "prestart": "npm run build"。
 3. src/main.jsx 能搜到 UploadProgressPanel、缩到后台、appendPickedFiles、dropFiles。
 4. ad-project-hub-github-upload 里不能有 dist。
