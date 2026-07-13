@@ -489,7 +489,7 @@ function UploadPreview({ preview }) {
                   <strong title={row.name || row.matched || "未命名项"}>{row.name || row.matched || "未命名项"}</strong>
                   <p>
                     <span>{row.quantity ? `${row.quantity}${row.unit || ""}` : row.status || "待确认"}</span>
-                    <b>{row.amount || row.unitPrice ? money(row.amount || row.unitPrice) : "金额待确认"}</b>
+                    <b>{row.amount || row.unitPrice ? money(row.amount || row.unitPrice) : row.detail || "已归类"}</b>
                   </p>
                 </div>
               ))}

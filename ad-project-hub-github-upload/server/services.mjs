@@ -238,6 +238,12 @@ export async function previewProjectUpload(db, body, user) {
 
   const contract = parseMoney(parsed.contract) || parseMoney(values["合同金额"]);
   const paid = parseMoney(parsed.paid);
+  if (contract) warnings.push(`已识别合同金额 ${contract.toLocaleString("zh-CN")} 元，请确认是否为最终含税成交价/最终优惠总价。`);
+  const fileClassifications = files.map((file) => ({
+    name: file.name || "未命名文件",
+    status: classifyProjectFile(file),
+    extractionStatus: file.extractionStatus || "已读取"
+  }));
   preview.fields = {
     "项目名称": parsed.projectName || parsed.name || values["项目名称"] || "",
     "客户 / 品牌": parsed.client || values["客户 / 品牌"] || "",
@@ -248,6 +254,14 @@ export async function previewProjectUpload(db, body, user) {
     "服务周期": parsed.servicePeriod || "",
     "下一节点": parsed.nextMilestone || parsed.deliveryDate || ""
   };
+  preview.sections.push({
+    title: "AI 文件归类",
+    rows: fileClassifications.map((file) => ({
+      name: file.name,
+      status: file.status,
+      detail: file.extractionStatus
+    }))
+  });
   const quoteFiles = files.filter(isPotentialQuoteSheetFile).filter(looksLikeQuoteSheetFile);
   const quoteRules = extractQuoteRules(quoteFiles);
   if (quoteRules.length) {
@@ -6065,6 +6079,11 @@ function extractAmounts(text) {
 }
 
 function extractContractAmount(text) {
+  const finalPriceMatch = String(text || "").match(/(?:项目最终优惠总价|最终优惠总价)(?:[（(][^）)\n]{0,12}[）)])?\s*[:：]?\s*(?:人民币|RMB|￥|¥)?\s*([0-9][0-9,]*(?:\.[0-9]+)?|[壹贰叁肆伍陆柒捌玖拾佰仟万亿零一二三四五六七八九十百千万两]+)\s*(亿元|亿|万元|万|元|圆)?/);
+  if (finalPriceMatch) {
+    const finalPrice = parseMoney(`${finalPriceMatch[1]}${finalPriceMatch[2] || ""}`);
+    if (finalPrice) return finalPrice;
+  }
   const labels = [
     "项目最终优惠总价",
     "最终优惠总价",
@@ -6150,9 +6169,20 @@ function extractAmountCandidates(text) {
 }
 
 function labelScore(label) {
-  if (/合同总金额|合同金额|合同价款|合同总价|含税总价|项目最终优惠总价|最终优惠总价/.test(label)) return 120;
+  if (/项目最终优惠总价|最终优惠总价/.test(label)) return 260;
+  if (/合同总金额|合同金额|合同价款|合同总价|含税总价/.test(label)) return 120;
   if (/项目金额|项目总价|服务费总额|总金额|总价|合计/.test(label)) return 80;
   return 60;
+}
+
+function classifyProjectFile(file = {}) {
+  const source = `${file.name || ""}\n${String(file.text || "").slice(0, 6000)}`;
+  if (/核销|确认收入|verification/i.test(source)) return "月度核销表";
+  if (/报销|发票|票据|差旅|费用报销|reimbursement|invoice/i.test(source)) return "报销/票据";
+  if (/成本表|成本明细|供应商结算|执行成本|cost/i.test(source)) return "执行成本表";
+  if (/报价表|报价单|最终优惠总价|服务项.*单价|quote/i.test(source)) return "合同报价表";
+  if (/合同|协议|甲方|乙方|contract/i.test(source)) return "项目合同";
+  return "项目附件";
 }
 
 function looksLikeDateOrIdentifier(text, index, raw) {

@@ -475,8 +475,8 @@ export function DashboardAiPanel({ session, projects, approvals = [], settings =
       </div>
 
       <div className="ai-project-context">
-        <strong>{selected.name}</strong>
-        <span>{projects.length} 个可见项目 · 当前 {projectHealth(selected).label}</span>
+        <strong>{selected?.name || "等待第一个项目"}</strong>
+        <span>{projects.length ? `${projects.length} 个可见项目 · 当前 ${projectHealth(selected).label}` : "可先拖入合同创建项目；票据将在项目建立后归档"}</span>
       </div>
 
       <div className="ai-compose">

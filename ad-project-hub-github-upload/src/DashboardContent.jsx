@@ -132,7 +132,7 @@ export default function DashboardContent({
 
   return (
     <>
-      {!projects.length && activeView !== "management" && (
+      {!projects.length && activeView !== "management" && !(activeView === "dashboard" && activeSubView === "项目大盘") && (
         <Suspense fallback={<ModuleFallback title="项目入口加载中" />}>
           <EmptyProjectState
             isManagement={isManagement}
@@ -316,10 +316,23 @@ export default function DashboardContent({
         />
       </Suspense>}
 
-      {!!visibleProjects.length && activeView === "dashboard" && activeSubView === "项目大盘" && (
+      {activeView === "dashboard" && activeSubView === "项目大盘" && (
         <section className={`overview-layout ${dashboardAiCollapsed ? "ai-collapsed" : ""}`}>
           <div className="overview-center">
-            {isManagement ? (
+            {!projects.length ? (
+              <Suspense fallback={<ModuleFallback title="项目入口加载中" />}>
+                <EmptyProjectState
+                  isManagement={isManagement}
+                  canManageAssignments={canManageAssignments}
+                  canCreateProject={canCreateProject}
+                  onUpload={() => onOpenUpload("create-project")}
+                  onAdmin={() => onSetView("admin")}
+                  onAssignments={() => onSetView("admin:assignments")}
+                  isAdmin={isAdmin}
+                  PanelTitle={PanelTitle}
+                />
+              </Suspense>
+            ) : isManagement ? (
               <Suspense fallback={<ModuleFallback title="项目大盘加载中" />}>
                 <ManagementDashboardOverview
                   stats={stats}

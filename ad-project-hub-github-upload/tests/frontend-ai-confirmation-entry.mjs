@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
 const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const dashboardSource = await readFile(new URL("../src/DashboardContent.jsx", import.meta.url), "utf8");
+const aiWorkspaceSource = await readFile(new URL("../src/AiWorkspace.jsx", import.meta.url), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -24,6 +26,8 @@ assert(source.includes("setSelectedApprovalKey(target.id)") && source.includes("
 assert(source.includes("function DashboardAiPanel({ session, projects, approvals = [], settings = {}, stats = {}, selected, onUpload, onDone, onNotice, onApprovalCreated, onSelectProject, onNavigate, collapsed = false, onToggleCollapsed })"), "dashboard AI panel should receive real upload, navigation, and collapse callbacks");
 assert(source.includes("const [dashboardAiCollapsed, setDashboardAiCollapsed]") && source.includes("overview-layout ${dashboardAiCollapsed ? \"ai-collapsed\" : \"\"}") && source.includes("onToggleCollapsed={() => setDashboardAiCollapsed((value) => !value)}"), "dashboard should keep an AI panel collapsed state and let the layout expand");
 assert(source.includes("ai-activity-panel collapsed") && source.includes("ai-collapsed-button") && source.includes("展开 AI 助手") && source.includes("收起 AI 助手"), "dashboard AI panel should render collapsed and expanded controls");
+assert(dashboardSource.includes('activeView === "dashboard" && activeSubView === "项目大盘"') && !dashboardSource.includes('!!visibleProjects.length && activeView === "dashboard" && activeSubView === "项目大盘"'), "dashboard AI panel should remain visible before the first project is created");
+assert(aiWorkspaceSource.includes('selected?.name || "等待第一个项目"') && aiWorkspaceSource.includes("可先拖入合同创建项目"), "dashboard AI panel should safely explain the empty-project file-drop state");
 assert(source.includes("async function handleAiFileDrop(event)") && source.includes("event.dataTransfer?.files") && source.includes("Promise.all(picked.map(fileToPayload))"), "AI panels should accept dropped files and convert them for upload");
 assert(source.includes("AI 读取文件失败：${error.message}"), "AI drag upload should explain local file read failures");
 assert(source.includes("function inferAiDropUploadType(files = [])") && source.includes("verification-sheet") && source.includes("quote-sheet") && source.includes("cost-sheet"), "AI dropped files should infer upload type from filenames");
