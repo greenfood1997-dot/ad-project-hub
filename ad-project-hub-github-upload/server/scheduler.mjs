@@ -1,5 +1,5 @@
 import { mutateDb, readDb } from "./db.mjs";
-import { dispatchNewHighSeverityNotifications, scanSystemNotifications } from "./services.mjs";
+import { scanSystemNotifications } from "./services.mjs";
 
 const DEFAULT_INTERVAL_MS = 15 * 60 * 1000;
 const MIN_INTERVAL_MS = 60 * 1000;
@@ -32,15 +32,8 @@ async function runScheduledScan() {
   status.running = true;
   status.lastRunAt = new Date().toISOString();
   try {
-    const scanResult = await mutateDb(async (db) => {
-      const knownIds = new Set((db.systemNotifications || []).map((item) => item.id));
-      const notifications = scanSystemNotifications(db, { id: "system-scheduler", name: "后台定时巡检" });
-      const newNotices = notifications.filter((item) => !knownIds.has(item.id));
-      const delivery = await dispatchNewHighSeverityNotifications(db, newNotices, { id: "system-scheduler", name: "后台定时巡检" });
-      return { notifications, delivery };
-    });
-    status.activeNotifications = (scanResult.notifications || []).filter((item) => item.status === "待处理").length;
-    status.lastAutomaticDelivery = scanResult.delivery;
+    const notifications = await mutateDb((db) => scanSystemNotifications(db, { id: "system-scheduler", name: "后台定时巡检" }));
+    status.activeNotifications = (notifications || []).filter((item) => item.status === "待处理").length;
     status.runCount += 1;
     status.lastError = "";
   } catch (error) {

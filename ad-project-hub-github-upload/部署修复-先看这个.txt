@@ -1,0 +1,44 @@
+这次线上看不到识别进度，不是代码没写进去，而是 Render 正在读取旧 dist。
+
+已经修复的文件：
+- render.yaml
+- package.json
+- src/main.jsx
+- src/styles.css
+
+GitHub 远端现在的问题：
+- ad-project-hub-github-upload/dist 还存在。
+- dist 里面是旧的打包页面。
+- server/static.mjs 会优先读取 dist/index.html。
+- 之前 render.yaml 只有 npm install，没有 npm run build。
+- 所以 Render 没有重新生成新页面，线上就一直是旧弹窗。
+
+这次必须做：
+1. 上传本文件夹里的所有内容到 GitHub 的 ad-project-hub-github-upload 目录。
+2. 确认 GitHub 的 render.yaml 里面是：
+   buildCommand: npm install && npm run build
+3. 确认 GitHub 的 package.json 里面有：
+   不能有 "prestart": "npm run build"
+4. 去 Render 后台点 Manual Deploy。
+5. 最好选择 Clear build cache & deploy。
+
+如果这样还不变：
+1. 打开 GitHub 的 ad-project-hub-github-upload/dist。
+2. 删除整个 dist 文件夹。
+3. 再去 Render 点 Clear build cache & deploy。
+
+验证是否上传成功：
+- GitHub 的 src/main.jsx 搜 UploadProgressPanel。
+- GitHub 的 src/main.jsx 搜 缩到后台。
+- GitHub 的 render.yaml 搜 npm run build。
+- GitHub 的 package.json 搜 prestart，应该搜不到。
+
+线上是否更新成功：
+- 上传文件后，上传框下面会立刻出现识别进度。
+- 弹窗右上或底部会出现“缩到后台”。
+
+更准确的检查方式：
+- 上传 GitHub 并等 Render 部署完成后，双击“部署后检查.command”。
+- 如果中文文件名不好点，也可以双击英文版“post-deploy-check.command”。
+- 如果提示 Render 线上还不是最新版，去 Render 点 Clear build cache & deploy。
+- 如果提示 GitHub 还有 dist，删除 GitHub 的 ad-project-hub-github-upload/dist 后重新部署。

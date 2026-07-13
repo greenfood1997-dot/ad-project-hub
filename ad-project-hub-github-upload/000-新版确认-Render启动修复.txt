@@ -1,0 +1,19 @@
+这是 2026-07-02 的新版包。
+
+本包已修复 Render 部署失败问题：
+
+1. package.json 里已经移除 prestart。
+2. Render Build Command 继续使用 npm install && npm run build。
+3. Render Start Command 继续使用 npm start。
+4. npm start 现在只会执行 node server.mjs，不会再二次构建。
+5. 压缩包里不包含 dist、node_modules、.git。
+
+上传 GitHub 后，请检查：
+
+1. ad-project-hub-github-upload/package.json 里不能有 prestart。
+2. ad-project-hub-github-upload/src/main.jsx 能搜到 UploadProgressPanel 和 缩到后台。
+3. ad-project-hub-github-upload 里不能有 dist 文件夹。
+
+Render 重新部署：
+
+Manual Deploy -> Clear build cache & deploy

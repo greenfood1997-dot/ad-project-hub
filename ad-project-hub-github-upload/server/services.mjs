@@ -1,23 +1,8 @@
-import { arrayCount, money, nextFileId, parseMoney, splitLines, textIncludes } from "./service-utils.mjs";
-import { currentApprovalStep, inferExpenseCategory } from "./approval-flow.mjs";
-import { answerAiAssistant as answerAiAssistantCore } from "./assistant-service.mjs";
-import { supplierLibrary } from "./supplier-service.mjs";
-import { clientLibrary } from "./client-service.mjs";
-import { persistLocalUploadFile } from "./upload-storage-service.mjs";
-import { extractFileContent } from "./file-extraction-service.mjs";
-import { recordProjectPayment as recordProjectPaymentCore, voidProjectPayment as voidProjectPaymentCore } from "./payment-service.mjs";
-import { archiveProjectTask as archiveProjectTaskCore, normalizeProjectTask, taskDueInfo, upsertProjectTask as upsertProjectTaskCore } from "./project-task-service.mjs";
-import { recordFiles as recordFilesCore, refreshInterestRate as refreshInterestRateCore, saveCompanyFinance as saveCompanyFinanceCore, saveSetting as saveSettingCore, testAiSettings as testAiSettingsCore, testObjectStorage as testObjectStorageCore, validateAiSettings as validateAiSettingsCore } from "./settings-service.mjs";
-import { dispatchNewHighSeverityNotifications as dispatchNewHighSeverityNotificationsCore, notificationRecipientsForRole, projectCostPressure, projectTimeHealth, scanSystemNotifications as scanSystemNotificationsCore, sendSystemNotificationToFeishu as sendSystemNotificationToFeishuCore, sendSystemNotificationToWechat as sendSystemNotificationToWechatCore, updateSystemNotification as updateSystemNotificationCore, upsertSystemNotification } from "./notification-service.mjs";
-import { feishuPendingFiles, feishuProjectBindings, getFeishuTenantAccessToken, handleFeishuEvent as handleFeishuEventCore, handleFeishuPendingFile as handleFeishuPendingFileCore, saveFeishuProjectBinding } from "./feishu-service.mjs";
-import { actOnApproval as actOnApprovalCore, createApproval as createApprovalCore, findProjectForSupplierSettlement, updateSupplierSettlement as updateSupplierSettlementCore, withdrawApproval as withdrawApprovalCore } from "./approval-service.mjs";
-import { analyzeAndApplyProjectFiles as analyzeAndApplyProjectFilesCore, applyParsedFields as applyParsedFieldsCore, createParseJob, fileReference, markParseJobFailed, normalizeUploadedFiles as normalizeUploadedFilesCore, uploadedFileKey } from "./project-parse-service.mjs";
-import { assertUniqueProject, deleteProject as deleteProjectCore, findMatchingProjectForCostSheet, hasContractLikeFile, normalizeProjectText, projectToValues, removeCreatedProject, similarity, syncProjectProfit as syncProjectProfitCore } from "./project-lifecycle-service.mjs";
-export { exportBackupSnapshot, restoreBackupSnapshot, validateBackupSnapshot } from "./backup-service.mjs";
-export { clientLibrary, saveClientProfile } from "./client-service.mjs";
-export { collectionLibrary, saveCollectionOutcome, suggestCollectionScript } from "./collection-service.mjs";
-export { addComment, archiveComment, archiveFileRecord, updateAlert } from "./project-activity-service.mjs";
-export { rateSupplier, supplierCsv, supplierLibrary } from "./supplier-service.mjs";
+import { createHash, createHmac } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { extname, join } from "node:path";
+import { recognizeFileWithTencentOcr, recognizeFileWithTencentOcrDetailed, tencentOcrConfigured } from "./tencent-ocr.mjs";
+import { rootDir } from "./config.mjs";
 
 export async function createProject(db, values, files, user) {
   if (!values?.["项目名称"] && !files.length) throw new Error("请填写项目名称或先上传合同/执行表");
@@ -226,28 +211,12 @@ export async function previewProjectUpload(db, body, user) {
       total: profitBreakdown.totalDeduction
     });
     if (reimbursementItems.length) {
-      const reimbursementCategorySummary = Array.from(reimbursementItems.reduce((map, item) => {
-        const category = item.category || "其他";
-        map.set(category, Number(map.get(category) || 0) + Number(item.amount || 0));
-        return map;
-      }, new Map()).entries())
-        .map(([category, amount]) => ({ category, amount }))
-        .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0));
       preview.sections.push({
         title: "员工报销/项目报销明细",
         rows: reimbursementItems.slice(0, 12).map((item) => ({
           name: `${item.person ? `${item.person} · ` : ""}${item.item}`,
           amount: item.amount,
           status: item.category
-        })),
-        total: reimbursementTotal
-      });
-      preview.sections.push({
-        title: "报销类目汇总",
-        rows: reimbursementCategorySummary.map((item) => ({
-          name: item.category,
-          amount: item.amount,
-          status: "类目合计"
         })),
         total: reimbursementTotal
       });
@@ -297,7 +266,6 @@ export async function previewProjectUpload(db, body, user) {
   }
   if (!preview.fields["项目名称"]) warnings.push("项目名称未明确识别，确认前建议手动填写或检查合同。");
   if (!contract) warnings.push("合同金额未明确识别，确认后可能需要在项目详情中补充。");
-  else warnings.push(`已识别合同金额 ${money(contract)}，请和合同总价/最终优惠总价核对后再确认入库。`);
   preview.summary = parsed.summary || "合同/报价文件已完成预解析，确认后会创建项目并写入项目台账。";
   return preview;
 }
@@ -385,6 +353,136 @@ export function updateProject(db, body, user) {
   });
   syncProjectHealthNotificationsAfterUpdate(db, project, user);
   return project;
+}
+
+function nextPaymentId() {
+  return `pay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function syncRevenuePaymentStatus(project) {
+  const revenue = project.extractedFields?.revenueRecognition;
+  if (!revenue) return;
+  const records = Array.isArray(revenue.verificationRecords) ? revenue.verificationRecords : [];
+  let remainingPaid = Number(project.paid || 0);
+  const syncedRecords = records.map((record) => {
+    const amount = Number(record.amount || 0);
+    const paidAmount = Math.min(amount, Math.max(remainingPaid, 0));
+    remainingPaid -= paidAmount;
+    return {
+      ...record,
+      paidAmount,
+      unpaidAmount: Math.max(amount - paidAmount, 0),
+      paymentStatus: amount && paidAmount >= amount ? "已回款" : paidAmount > 0 ? "部分回款" : "未回款"
+    };
+  });
+  const recognizedRevenue = Number(revenue.recognizedRevenue || records.reduce((sum, item) => sum + Number(item.amount || 0), 0));
+  project.extractedFields.revenueRecognition = {
+    ...revenue,
+    recognizedUnpaid: Math.max(recognizedRevenue - Number(project.paid || 0), 0),
+    verificationRecords: syncedRecords,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function syncReceivableNotificationAfterPayment(db, project = {}, user = {}, action = "record") {
+  db.systemNotifications = db.systemNotifications || [];
+  const at = new Date().toISOString();
+  const receivable = Number(project.receivable || 0);
+  const notices = db.systemNotifications.filter((item) => {
+    const sameProject = item.projectId === project.id || item.projectName === project.name;
+    return sameProject && item.type === "project-receivable-risk";
+  });
+  if (receivable <= 0) {
+    for (const notice of notices) {
+      if (notice.status !== "待处理") continue;
+      notice.status = "已处理";
+      notice.handledAt = at;
+      notice.handledBy = user.id || "";
+      notice.handledByName = user.name || "";
+      notice.note = "项目已无待回款，系统在记录回款后自动处理。";
+      notice.updatedAt = at;
+    }
+    return;
+  }
+
+  if (action !== "void") return;
+  const existing = notices.find((item) => item.status === "待处理");
+  if (existing) {
+    existing.updatedAt = at;
+    existing.text = `「${project.name}」回款作废后仍待回款 ${receivable.toLocaleString("zh-CN")} 元，请销售/PM重新跟进客户付款。`;
+    return;
+  }
+  const reopen = notices.find((item) => ["已处理", "已忽略"].includes(item.status));
+  if (reopen) {
+    reopen.status = "待处理";
+    reopen.reopenedAt = at;
+    reopen.reopenedBy = user.id || "";
+    reopen.reopenedByName = user.name || "";
+    reopen.reopenReason = "回款作废后项目重新出现待回款。";
+    reopen.text = `「${project.name}」回款作废后仍待回款 ${receivable.toLocaleString("zh-CN")} 元，请销售/PM重新跟进客户付款。`;
+    reopen.updatedAt = at;
+    return;
+  }
+  db.systemNotifications.unshift({
+    id: nextNotificationId(`receivable-${project.id}`),
+    key: `project-receivable-risk::${project.id}::payment-void`,
+    type: "project-receivable-risk",
+    title: "项目回款需要跟进",
+    text: `「${project.name}」回款作废后仍待回款 ${receivable.toLocaleString("zh-CN")} 元，请销售/PM重新跟进客户付款。`,
+    severity: "中",
+    role: "sales",
+    recipients: notificationRecipientsForRole("sales"),
+    projectId: project.id,
+    projectName: project.name,
+    source: "payment",
+    sourceId: project.id,
+    actionLabel: "看回款",
+    actionView: "project-detail",
+    status: "待处理",
+    createdAt: at,
+    updatedAt: at
+  });
+}
+
+function syncCollectionScriptsAfterPayment(db, project = {}, user = {}, action = "record") {
+  const rows = db.collectionScripts || [];
+  if (!project?.id || !rows.length) return;
+  const at = new Date().toISOString();
+  const receivable = Number(project.receivable || 0);
+  for (const row of rows) {
+    if (!sameProject(row, project)) continue;
+    if (action === "record" && receivable <= 0) {
+      closeCollectionFollowUpNotification(db, row, user, "项目已无待回款，系统在记录回款后自动关闭催收跟进。");
+      if (row.followUpStatus === "待跟进" || row.nextFollowUpAt || row.nextAction) {
+        row.followUpStatus = "已关闭";
+        row.followUpClosedAt = at;
+        row.updatedAt = at;
+        row.updatedBy = user.id || "";
+        row.updatedByName = user.name || "";
+      }
+    }
+    if (action === "record" && receivable <= 0 && !row.outcome && typeof row.success !== "boolean") {
+      row.outcome = "项目已完成回款，系统自动标记为待复核成功样本";
+      row.success = true;
+      row.score = Number(row.score || 4);
+      row.autoResolvedByPayment = true;
+      row.paymentSyncedAt = at;
+      row.updatedAt = at;
+      row.updatedBy = user.id || "";
+      row.updatedByName = user.name || "";
+      continue;
+    }
+    if (action === "void" && row.autoResolvedByPayment) {
+      row.outcome = "回款已作废，需重新跟进客户付款";
+      row.success = false;
+      row.score = 2;
+      row.autoResolvedByPayment = false;
+      row.paymentVoidedAt = at;
+      row.updatedAt = at;
+      row.updatedBy = user.id || "";
+      row.updatedByName = user.name || "";
+    }
+  }
 }
 
 function syncApprovalNotificationAfterAction(db, approval = {}, user = {}, action = "update") {
@@ -639,27 +737,322 @@ function syncCompanyCashRunwayNotificationAfterSave(db, finance = {}, user = {})
 }
 
 export function recordProjectPayment(db, body, user) {
-  return recordProjectPaymentCore(db, body, user, { inferRisk, projectRiskAlerts });
+  const project = (db.projects || []).find((item) => item.id === body?.projectId || item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  const amount = parseMoney(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("请填写正确的回款金额");
+  const contract = parseMoney(project.contract);
+  const currentPaid = parseMoney(project.paid);
+  if (contract && currentPaid + amount > contract * 1.05) throw new Error("回款金额超过合同金额过多，请核对后再记录");
+
+  const at = new Date().toISOString();
+  const payment = {
+    id: nextPaymentId(),
+    projectId: project.id,
+    projectName: project.name,
+    client: project.client || "",
+    amount,
+    payer: String(body.payer || body.client || project.client || "").trim(),
+    method: String(body.method || "").trim(),
+    note: String(body.note || body.remark || "").trim(),
+    receivedAt: body.receivedAt || at,
+    recordedBy: user.id,
+    recordedByName: user.name,
+    createdAt: at
+  };
+
+  db.payments = db.payments || [];
+  db.payments.unshift(payment);
+  project.paid = currentPaid + amount;
+  project.receivable = Math.max(contract - Number(project.paid || 0), 0);
+  project.risk = inferRisk({
+    contract,
+    costBudget: project.costBudget,
+    costUsed: project.costUsed,
+    receivable: project.receivable
+  });
+  syncRevenuePaymentStatus(project);
+  project.alerts = projectRiskAlerts(project);
+  project.updatedAt = at;
+  syncReceivableNotificationAfterPayment(db, project, user, "record");
+  syncCollectionScriptsAfterPayment(db, project, user, "record");
+  db.auditLogs.unshift({
+    type: "payment",
+    target: project.name,
+    action: "record",
+    user: user.name,
+    meta: { paymentId: payment.id, amount, paid: project.paid, receivable: project.receivable },
+    at
+  });
+  return { payment, project };
 }
 
 export function voidProjectPayment(db, body, user) {
-  return voidProjectPaymentCore(db, body, user, { inferRisk, projectRiskAlerts });
+  const payment = (db.payments || []).find((item) => item.id === body?.id || item.id === body?.paymentId);
+  if (!payment) throw new Error("回款记录不存在");
+  if (payment.status === "已作废" || payment.voidedAt) throw new Error("该回款记录已作废");
+  const project = (db.projects || []).find((item) => item.id === payment.projectId || item.name === payment.projectName);
+  if (!project) throw new Error("项目不存在");
+  const at = new Date().toISOString();
+  const amount = Number(payment.amount || 0);
+  const contract = parseMoney(project.contract);
+  project.paid = Math.max(parseMoney(project.paid) - amount, 0);
+  project.receivable = Math.max(contract - Number(project.paid || 0), 0);
+  project.risk = inferRisk({
+    contract,
+    costBudget: project.costBudget,
+    costUsed: project.costUsed,
+    receivable: project.receivable
+  });
+  syncRevenuePaymentStatus(project);
+  project.alerts = projectRiskAlerts(project);
+  project.updatedAt = at;
+  syncReceivableNotificationAfterPayment(db, project, user, "void");
+  syncCollectionScriptsAfterPayment(db, project, user, "void");
+  payment.status = "已作废";
+  payment.voidedAt = at;
+  payment.voidedBy = user.id;
+  payment.voidedByName = user.name;
+  payment.voidReason = String(body.reason || body.note || "").trim() || "手动作废";
+  db.auditLogs.unshift({
+    type: "payment",
+    target: project.name,
+    action: "void",
+    user: user.name,
+    meta: { paymentId: payment.id, amount, paid: project.paid, receivable: project.receivable, reason: payment.voidReason },
+    at
+  });
+  return { payment, project };
+}
+
+function nextTaskId() {
+  return `task-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function normalizeProjectTask(task, index = 0) {
+  if (Array.isArray(task)) {
+    const progress = Math.max(0, Math.min(100, Number(task[1] || 0)));
+    return {
+      id: task[2] || `legacy-task-${index}`,
+      title: String(task[0] || `任务 ${index + 1}`).trim(),
+      progress,
+      status: progress >= 100 ? "done" : progress > 0 ? "doing" : "todo",
+      owner: "",
+      dueDate: "",
+      note: "",
+      updatedAt: ""
+    };
+  }
+  const progress = Math.max(0, Math.min(100, Number(task?.progress || 0)));
+  return {
+    id: task?.id || `legacy-task-${index}`,
+    title: String(task?.title || task?.name || `任务 ${index + 1}`).trim(),
+    progress,
+    status: task?.status || (progress >= 100 ? "done" : progress > 0 ? "doing" : "todo"),
+    owner: task?.owner || "",
+    dueDate: task?.dueDate || "",
+    note: task?.note || "",
+    archivedAt: task?.archivedAt || "",
+    archivedBy: task?.archivedBy || "",
+    createdAt: task?.createdAt || "",
+    createdBy: task?.createdBy || "",
+    updatedAt: task?.updatedAt || "",
+    updatedBy: task?.updatedBy || ""
+  };
+}
+
+function syncProjectProgressFromTasks(project) {
+  const tasks = (project.tasks || []).map(normalizeProjectTask);
+  project.tasks = tasks;
+  const activeTasks = tasks.filter((task) => !task.archivedAt);
+  const values = activeTasks.map((task) => Number(task.progress || 0)).filter(Number.isFinite);
+  const progress = values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0;
+  project.progress = progress;
+  project.extractedFields = {
+    ...(project.extractedFields || {}),
+    taskProgress: progress,
+    taskSummary: {
+      total: activeTasks.length,
+      archived: tasks.filter((task) => task.archivedAt).length,
+      done: activeTasks.filter((task) => task.status === "done" || Number(task.progress || 0) >= 100).length,
+      doing: activeTasks.filter((task) => task.status === "doing").length,
+      todo: activeTasks.filter((task) => task.status === "todo").length,
+      updatedAt: new Date().toISOString()
+    }
+  };
+  return progress;
+}
+
+function taskDueInfo(task = {}, now = new Date()) {
+  if (!task.dueDate || task.archivedAt || Number(task.progress || 0) >= 100 || task.status === "done") {
+    return { active: false, tone: "done", label: "无需提醒", daysLeft: null };
+  }
+  const due = new Date(task.dueDate);
+  if (Number.isNaN(due.getTime())) return { active: false, tone: "none", label: "未设置有效截止时间", daysLeft: null };
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dueStart = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
+  const daysLeft = Math.ceil((dueStart - todayStart) / 86400000);
+  if (daysLeft < 0) return { active: true, tone: "overdue", label: `已逾期 ${Math.abs(daysLeft)} 天`, daysLeft };
+  if (daysLeft === 0) return { active: true, tone: "today", label: "今天截止", daysLeft };
+  if (daysLeft <= 2) return { active: true, tone: "soon", label: `${daysLeft} 天后截止`, daysLeft };
+  return { active: false, tone: "normal", label: `${daysLeft} 天后截止`, daysLeft };
+}
+
+function syncProjectTaskDueNotificationsAfterUpdate(db, project = {}, user = {}, at = new Date().toISOString()) {
+  db.systemNotifications = db.systemNotifications || [];
+  const tasks = (project.tasks || []).map(normalizeProjectTask);
+  const activeTaskIds = new Set(tasks.filter((task) => taskDueInfo(task, new Date(at)).active).map((task) => task.id));
+  for (const notice of db.systemNotifications) {
+    const sameProject = notice.projectId === project.id || notice.projectName === project.name;
+    if (!sameProject || notice.type !== "project-task-due" || notice.status !== "待处理") continue;
+    if (activeTaskIds.has(notice.sourceId)) continue;
+    notice.status = "已处理";
+    notice.handledAt = at;
+    notice.handledBy = user.id || "";
+    notice.handledByName = user.name || "";
+    notice.note = "任务已完成、归档或截止风险解除，系统自动处理任务提醒。";
+    notice.updatedAt = at;
+  }
 }
 
 export function upsertProjectTask(db, body, user) {
-  return upsertProjectTaskCore(db, body, user, { projectRiskAlerts, syncProjectHealthNotificationsAfterUpdate });
+  const project = (db.projects || []).find((item) => item.id === body?.projectId || item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  const at = new Date().toISOString();
+  const tasks = (project.tasks || []).map(normalizeProjectTask);
+  const taskId = body.taskId || body.task?.id || "";
+  const existingIndex = tasks.findIndex((task) => task.id === taskId);
+  const rawProgress = body.progress ?? body.task?.progress;
+  const action = body.action || "";
+  const nextProgress = action === "complete"
+    ? 100
+    : rawProgress !== undefined && rawProgress !== ""
+      ? Math.max(0, Math.min(100, Number(rawProgress)))
+      : existingIndex >= 0 ? tasks[existingIndex].progress : 0;
+  const nextStatus = action === "complete"
+    ? "done"
+    : body.status || body.task?.status || (nextProgress >= 100 ? "done" : nextProgress > 0 ? "doing" : "todo");
+  const candidate = {
+    ...(existingIndex >= 0 ? tasks[existingIndex] : {}),
+    id: existingIndex >= 0 ? tasks[existingIndex].id : nextTaskId(),
+    title: String(body.title || body.task?.title || body.task?.name || (existingIndex >= 0 ? tasks[existingIndex].title : "")).trim(),
+    owner: String(body.owner || body.task?.owner || (existingIndex >= 0 ? tasks[existingIndex].owner : "")).trim(),
+    dueDate: String(body.dueDate || body.task?.dueDate || (existingIndex >= 0 ? tasks[existingIndex].dueDate : "")).trim(),
+    note: String(body.note || body.task?.note || (existingIndex >= 0 ? tasks[existingIndex].note : "")).trim(),
+    progress: nextProgress,
+    status: nextStatus,
+    createdAt: existingIndex >= 0 ? tasks[existingIndex].createdAt : at,
+    createdBy: existingIndex >= 0 ? tasks[existingIndex].createdBy : user.id,
+    updatedAt: at,
+    updatedBy: user.id
+  };
+  if (!candidate.title) throw new Error("请填写任务名称");
+  if (existingIndex >= 0) tasks[existingIndex] = candidate;
+  else tasks.unshift(candidate);
+  project.tasks = tasks;
+  syncProjectProgressFromTasks(project);
+  project.alerts = projectRiskAlerts(project);
+  project.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "task",
+    target: project.name,
+    action: existingIndex >= 0 ? "update" : "create",
+    user: user.name,
+    meta: { taskId: candidate.id, title: candidate.title, progress: candidate.progress, status: candidate.status },
+    at
+  });
+  syncProjectHealthNotificationsAfterUpdate(db, project, user);
+  syncProjectTaskDueNotificationsAfterUpdate(db, project, user, at);
+  return { project, task: candidate };
 }
 
 export function archiveProjectTask(db, body, user) {
-  return archiveProjectTaskCore(db, body, user, { projectRiskAlerts, syncProjectHealthNotificationsAfterUpdate });
+  const project = (db.projects || []).find((item) => item.id === body?.projectId || item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  const taskId = body.taskId || body.id || "";
+  const tasks = (project.tasks || []).map(normalizeProjectTask);
+  const task = tasks.find((item) => item.id === taskId);
+  if (!task) throw new Error("任务不存在");
+  const at = new Date().toISOString();
+  task.archivedAt = at;
+  task.archivedBy = user.id;
+  task.updatedAt = at;
+  task.updatedBy = user.id;
+  project.tasks = tasks;
+  syncProjectProgressFromTasks(project);
+  project.alerts = projectRiskAlerts(project);
+  project.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "task",
+    target: project.name,
+    action: "archive",
+    user: user.name,
+    meta: { taskId: task.id, title: task.title, reason: String(body.reason || "").trim() },
+    at
+  });
+  syncProjectHealthNotificationsAfterUpdate(db, project, user);
+  syncProjectTaskDueNotificationsAfterUpdate(db, project, user, at);
+  return { project, task };
 }
 
 export function deleteProject(db, body, user) {
-  return deleteProjectCore(db, body, user);
+  const project = (db.projects || []).find((item) => item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  const isProjectRecord = (item = {}) => {
+    const names = [item.projectName, item.project, item.targetProject, item.relatedProject, item.chatName].filter(Boolean).map(String);
+    return item.projectId === project.id || names.includes(project.name);
+  };
+
+  db.projects = (db.projects || []).filter((item) => item.id !== project.id);
+  db.parseJobs = (db.parseJobs || []).filter((item) => !isProjectRecord(item));
+  db.files = (db.files || []).filter((item) => !isProjectRecord(item));
+  db.suppliers = (db.suppliers || []).filter((item) => !isProjectRecord(item));
+  db.payments = (db.payments || []).filter((item) => !isProjectRecord(item));
+  db.approvals = (db.approvals || []).filter((item) => !isProjectRecord(item));
+  db.collectionScripts = (db.collectionScripts || []).filter((item) => !isProjectRecord(item));
+  db.comments = (db.comments || []).filter((item) => !isProjectRecord(item));
+  db.alertUpdates = (db.alertUpdates || []).filter((item) => !isProjectRecord(item));
+  db.systemNotifications = (db.systemNotifications || []).filter((item) => !isProjectRecord(item));
+  db.feishuProjectBindings = (db.feishuProjectBindings || []).filter((item) => !isProjectRecord(item));
+  db.feishuPendingFiles = (db.feishuPendingFiles || []).filter((item) => !isProjectRecord(item));
+  db.feishuEvents = (db.feishuEvents || []).filter((item) => !isProjectRecord(item));
+  const at = new Date().toISOString();
+  db.auditLogs.unshift({ type: "project", target: project.name, action: "delete", user: user.name, at });
+  return { id: project.id, name: project.name };
 }
 
 function syncProjectProfit(project, executionBudget = 0) {
-  return syncProjectProfitCore(project, executionBudget, { calculateProfitBreakdown, profitMargin });
+  const current = project.extractedFields?.profitBreakdown || {};
+  const parsed = {
+    ...project.extractedFields,
+    ...current,
+    executionBudget: executionBudget || current.executionBudget || project.extractedFields?.executionBudget || 0
+  };
+  const breakdown = calculateProfitBreakdown(project.contract, parsed);
+  const hasExistingCost = breakdown.totalDeduction || parseMoney(project.costUsed) || (project.costs || []).length;
+  if (!hasExistingCost) {
+    const emptyBreakdown = {
+      ...breakdown,
+      totalDeduction: 0,
+      profit: Number(project.contract || 0),
+      margin: profitMargin(project.contract, Number(project.contract || 0))
+    };
+    project.costs = [];
+    project.extractedFields = { ...(project.extractedFields || {}), profitBreakdown: emptyBreakdown, profit: emptyBreakdown.profit };
+    return emptyBreakdown;
+  }
+  project.costs = breakdown.costs;
+  project.extractedFields = { ...(project.extractedFields || {}), profitBreakdown: breakdown, profit: breakdown.profit };
+  return breakdown;
+}
+
+function hasContractLikeFile(files = [], parsed = {}) {
+  if (parseMoney(parsed.contract) || parsed.partyA || parsed.partyB) return true;
+  return files.some((file) => {
+    const source = `${file.name || ""}\n${file.text || ""}`;
+    return /(合同|协议|甲方|乙方|委托方|受托方|合同金额|服务费用|付款方式)/.test(source)
+      && !/(成本表|利润测算|执行支出|人力|公摊|月度成本|供应商结算)/.test(file.name || "");
+  });
 }
 
 function isPotentialQuoteSheetFile(file = {}) {
@@ -684,6 +1077,116 @@ function looksLikeQuoteSheetFile(file = {}) {
     const hasMonthlyVerification = /(本月|当月|月度|核销|确认收入|验收金额)/.test(normalized);
     return hasService && hasPrice && hasQuantity && !hasMonthlyVerification;
   });
+}
+
+export function createParseJob(project, files, parsed = {}, sourceValues = {}) {
+  const now = new Date().toISOString();
+  const finished = files.length && (parsed.summary || parsed.contract || parsed.client);
+  return {
+    id: `J-${Date.now()}`,
+    projectId: project.id,
+    projectName: project.name,
+    status: finished ? "已完成" : files.length ? "解析中" : "等待文件",
+    progress: finished ? 100 : files.length ? 25 : 0,
+    steps: [
+      { name: "文件接收", status: files.length ? "完成" : "等待" },
+      { name: "字段识别", status: finished ? "完成" : files.length ? "进行中" : "等待" },
+      { name: "人工确认", status: finished ? "完成" : "等待" },
+      { name: "写入项目", status: finished ? "完成" : "等待" }
+    ],
+    files,
+    sourceValues,
+    extractedFields: parsed,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function assertUniqueProject(db, values = {}, files = [], contract = 0, ignoreProjectId = "") {
+  const incomingName = normalizeProjectText(values["项目名称"] || files.map((file) => file.name).join(" "));
+  const incomingClient = normalizeProjectText(values["客户 / 品牌"] || "");
+  const incomingFiles = normalizeProjectText(files.map((file) => file.name).join(" "));
+  const incomingAmount = Math.round(Number(contract || 0));
+
+  for (const project of db.projects || []) {
+    if (ignoreProjectId && project.id === ignoreProjectId) continue;
+    const existingName = normalizeProjectText(project.name || "");
+    const existingClient = normalizeProjectText(project.client || "");
+    const existingFiles = normalizeProjectText((project.files || []).map((file) => file.name).join(" "));
+    const existingAmount = Math.round(Number(project.contract || 0));
+    const sameAmount = incomingAmount && existingAmount && Math.abs(incomingAmount - existingAmount) <= Math.max(100, incomingAmount * 0.01);
+    const sameClient = incomingClient && existingClient && (incomingClient.includes(existingClient) || existingClient.includes(incomingClient));
+    const similarName = incomingName && existingName && similarity(incomingName, existingName) >= 0.82;
+    const sameFile = incomingFiles && existingFiles && (incomingFiles.includes(existingFiles) || existingFiles.includes(incomingFiles));
+
+    if ((sameClient && sameAmount) || (similarName && (sameClient || sameAmount)) || (sameFile && (sameClient || sameAmount))) {
+      throw new Error(`疑似重复项目：${project.name}。请在项目台账中确认后再上传，避免重复归档。`);
+    }
+  }
+}
+
+function projectToValues(project) {
+  return {
+    "项目名称": project.name || "",
+    "客户 / 品牌": project.client || "",
+    "合同金额": project.contract || 0
+  };
+}
+
+function removeCreatedProject(db, projectId, parseJobId) {
+  db.projects = (db.projects || []).filter((item) => item.id !== projectId);
+  db.parseJobs = (db.parseJobs || []).filter((item) => item.id !== parseJobId && item.projectId !== projectId);
+  db.files = (db.files || []).filter((item) => item.projectId !== projectId);
+  db.suppliers = (db.suppliers || []).filter((item) => item.projectId !== projectId);
+  db.auditLogs = (db.auditLogs || []).filter((item) => !(item.type === "project" && item.action === "create"));
+}
+
+function findMatchingProjectForCostSheet(db, parsed = {}, files = []) {
+  const incomingName = normalizeProjectText(parsed.projectName || parsed.name || files.map((file) => file.name).join(" "));
+  const incomingClient = normalizeProjectText(parsed.client || parsed.partyA || "");
+  const incomingText = normalizeProjectText([
+    parsed.projectName,
+    parsed.client,
+    parsed.partyA,
+    files.map((file) => `${file.name || ""} ${file.text || ""}`).join(" ")
+  ].join(" "));
+  const incomingContract = parseMoney(parsed.contract);
+
+  const scored = (db.projects || []).map((project) => {
+    const existingName = normalizeProjectText(project.name || "");
+    const existingClient = normalizeProjectText(project.client || "");
+    const existingContract = parseMoney(project.contract);
+    let score = 0;
+
+    if (incomingName && existingName) score += similarity(incomingName, existingName) * 55;
+    if (incomingClient && existingClient && (incomingClient.includes(existingClient) || existingClient.includes(incomingClient))) score += 35;
+    if (incomingText && existingName && (incomingText.includes(existingName) || existingName.includes(incomingName))) score += 30;
+    if (incomingText && existingClient && incomingText.includes(existingClient)) score += 25;
+    if (incomingContract && existingContract && Math.abs(incomingContract - existingContract) <= Math.max(100, existingContract * 0.05)) score += 25;
+
+    return { project, score };
+  }).sort((a, b) => b.score - a.score);
+
+  return scored[0]?.score >= 45 ? scored[0].project : null;
+}
+
+function normalizeProjectText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/[^\p{Script=Han}a-z0-9]+/gu, "");
+}
+
+function similarity(a, b) {
+  if (!a || !b) return 0;
+  const short = a.length <= b.length ? a : b;
+  const long = a.length > b.length ? a : b;
+  if (long.includes(short)) return short.length / long.length;
+  const setA = new Set(a);
+  const setB = new Set(b);
+  const intersection = [...setA].filter((char) => setB.has(char)).length;
+  const union = new Set([...setA, ...setB]).size || 1;
+  return intersection / union;
 }
 
 export async function advanceParseJob(db, idOrProjectId) {
@@ -868,6 +1371,10 @@ function syncQuoteRulesToProject(project, files, rules, now) {
   project.updatedAt = now;
 }
 
+function uploadedFileKey(file = {}) {
+  return `${file.name || ""}:${file.size || 0}:${file.type || ""}`;
+}
+
 export async function uploadProjectVerificationSheet(db, body, user) {
   const project = (db.projects || []).find((item) => item.id === body?.id);
   if (!project) throw new Error("项目不存在");
@@ -926,144 +1433,3295 @@ export async function uploadProjectVerificationSheet(db, body, user) {
   return { project, record, files };
 }
 
-function parseServiceDeps() {
+function fileReference(file = {}) {
   return {
-    analyzeProjectFiles,
-    calculateProfitBreakdown,
-    extractFileContent,
-    inferRisk,
-    nextFileId,
-    persistLocalUploadFile,
-    profitMargin,
-    projectRiskAlerts,
-    shouldUseOcrForPdf
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    category: file.category,
+    text: file.text,
+    tableRows: file.tableRows,
+    extractionStatus: file.extractionStatus,
+    uploadedAt: file.uploadedAt,
+    uploadedBy: file.uploadedBy,
+    uploadedByName: file.uploadedByName,
+    dataUrl: file.dataUrl,
+    base64: file.base64
   };
 }
 
 async function normalizeUploadedFiles(files, category, user, now, storageSettings = {}) {
-  return normalizeUploadedFilesCore(files, category, user, now, storageSettings, parseServiceDeps());
+  return Promise.all((Array.isArray(files) ? files : []).map(async (file) => {
+    const withId = { ...file, id: file.id || nextFileId() };
+    const stored = await persistLocalUploadFile(withId, category, now, storageSettings);
+    const shouldExtract = stored.base64 && (/\.(xlsx|xls|xlsm)$/i.test(stored.name || "") || String(stored.type || "").includes("spreadsheet"));
+    const extracted = shouldExtract || !stored.text ? await extractFileContent(stored) : stored;
+    const tableRows = extracted.tableRows || file.tableRows || [];
+    const tableText = tableRowsToText(tableRows);
+    const extractedText = extracted.extractionStatus === "仅记录文件信息" ? "" : extracted.text;
+    return {
+      ...stored,
+      text: extractedText || stored.text || tableText || extracted.text || "",
+      tableRows,
+      extractionStatus: extracted.extractionStatus || stored.extractionStatus || "",
+      storageStatus: stored.storageStatus || "仅记录文件信息",
+      category,
+      uploadedAt: stored.uploadedAt || now,
+      uploadedBy: stored.uploadedBy || user.id,
+      uploadedByName: user.name
+    };
+  }));
 }
 
-async function analyzeAndApplyProjectFiles(db, project, job) {
-  return analyzeAndApplyProjectFilesCore(db, project, job, parseServiceDeps());
+function tableRowsToText(tableRows = []) {
+  if (!Array.isArray(tableRows) || !tableRows.length) return "";
+  return tableRows
+    .map((row) => {
+      const cells = Array.isArray(row.cells) ? row.cells : [];
+      return `${row.sheetName ? `工作表：${row.sheetName}\n` : ""}${cells.map((cell) => String(cell ?? "").replace(/\r?\n/g, " ")).join("\t")}`;
+    })
+    .join("\n");
 }
 
-function applyParsedFields(db, project, job, parsed) {
-  return applyParsedFieldsCore(db, project, job, parsed, parseServiceDeps());
+function setStepStatus(steps, name, status) {
+  return steps.map((step) => step.name === name ? { ...step, status } : step);
 }
 
-export function validateAiSettings(values) {
-  return validateAiSettingsCore(values, { normalizeAiSettings });
-}
-
-export async function testAiSettings(values) {
-  return testAiSettingsCore(values, { normalizeAiSettings });
-}
-
-export async function saveSetting(db, type, values, user) {
-  return saveSettingCore(db, type, values, user, { normalizeAiSettings, syncCompanyCashRunwayNotificationAfterSave });
-}
-
-export function saveCompanyFinance(db, values = {}, user = {}) {
-  return saveCompanyFinanceCore(db, values, user, { syncCompanyCashRunwayNotificationAfterSave });
-}
-
-export async function refreshInterestRate(db, user) {
-  return refreshInterestRateCore(db, user);
-}
-
-export async function recordFiles(db, body, user) {
-  return recordFilesCore(db, body, user, { normalizeUploadedFiles });
-}
-
-export async function testObjectStorage(db, values = {}, user = {}) {
-  return testObjectStorageCore(db, values, user, { normalizeUploadedFiles });
-}
-
-export function scanSystemNotifications(db, user = { id: "system", name: "系统扫描" }) {
-  return scanSystemNotificationsCore(db, user, {
-    currentApprovalStep,
-    monthKey,
-    monthlyTargetSummaryFromRules,
-    normalizeProjectTask,
-    pendingSupplierRowsForProject,
-    taskDueInfo
+function markParseJobFailed(job, error) {
+  const message = error?.message || "AI/OCR 解析失败，请检查文件或 AI 配置后重试。";
+  job.status = "解析失败";
+  job.progress = Math.max(75, Number(job.progress || 0));
+  job.error = message;
+  job.failedAt = new Date().toISOString();
+  job.updatedAt = job.failedAt;
+  job.steps = (job.steps || []).map((step) => {
+    if (step.name === "字段识别") return { ...step, status: "失败" };
+    if (["人工确认", "写入项目"].includes(step.name)) return { ...step, status: "等待" };
+    return step;
   });
 }
 
+async function analyzeAndApplyProjectFiles(db, project, job) {
+  job.status = "解析中";
+  job.progress = Math.max(job.progress || 0, 50);
+  job.steps = setStepStatus(job.steps, "字段识别", "进行中");
+  job.updatedAt = new Date().toISOString();
+
+  const parsed = await analyzeProjectFiles(db.settings?.aiService, job.sourceValues || {}, job.files || [], db.settings?.interestRate);
+  applyParsedFields(db, project, job, parsed);
+}
+
+function applyParsedFields(db, project, job, parsed) {
+  const existingExtractedFields = project.extractedFields || {};
+  const existingRevenueRecognition = existingExtractedFields.revenueRecognition || {};
+  const parsedContract = parseMoney(parsed.contract);
+  const existingContract = parseMoney(project.contract);
+  const hasCostSheet = Boolean(parsed.hasCostSheet);
+  const contract = hasCostSheet ? (existingContract || parsedContract) : (parsedContract || existingContract);
+  const profitBreakdown = hasCostSheet ? calculateProfitBreakdown(contract, parsed) : null;
+  const costBudget = hasCostSheet ? (profitBreakdown.executionBudget || parseMoney(project.costBudget)) : parseMoney(project.costBudget);
+  const costUsed = hasCostSheet ? profitBreakdown.totalDeduction : parseMoney(project.costUsed);
+  const parsedPaid = parseMoney(parsed.paid);
+  const existingPaid = parseMoney(project.paid);
+  const paid = hasCostSheet ? Math.max(existingPaid, parsedPaid) : parsedPaid;
+  const receivable = parseMoney(parsed.receivable) || Math.max(contract - paid, 0);
+  const oldName = project.name;
+  const parsedProjectName = parsed.projectName || parsed.name || "";
+  const shouldUseParsedName = (!project.name || project.name.startsWith("待解析合同-")) && parsedProjectName;
+
+  Object.assign(project, {
+    name: shouldUseParsedName ? parsedProjectName : project.name,
+    client: project.client || parsed.client || "",
+    contract,
+    costBudget,
+    costUsed,
+    paid,
+    receivable,
+    status: "解析完成",
+    risk: inferRisk({ contract, costBudget, costUsed, receivable }),
+    aiSummary: parsed.summary || "文件已解析，结构化字段已同步到项目台账。",
+    nextMilestone: parsed.nextMilestone || parsed.servicePeriod || parsed.deliveryDate || "",
+    paymentDue: parsed.paymentDue || "",
+    margin: contract ? profitMargin(contract, contract - costUsed) : 0,
+    tasks: parsed.tasks || [],
+    costs: hasCostSheet ? profitBreakdown.costs : (project.costs || []),
+    extractedFields: mergeProjectExtractedFields(existingExtractedFields, parsed, {
+      hasCostSheet,
+      profitBreakdown,
+      profit: contract - costUsed,
+      revenueRecognition: existingRevenueRecognition
+    })
+  });
+  if (Array.isArray(parsed.extractedFiles) && parsed.extractedFiles.length) {
+    project.files = parsed.extractedFiles;
+    job.files = parsed.extractedFiles;
+  }
+  project.alerts = projectRiskAlerts(project);
+
+  job.projectName = project.name;
+  job.status = "已完成";
+  job.progress = 100;
+  job.extractedFields = parsed;
+  job.updatedAt = new Date().toISOString();
+  job.steps = job.steps.map((step) => ({ ...step, status: "完成" }));
+
+  for (const supplier of hasCostSheet ? (parsed.suppliers || []) : []) {
+    db.suppliers.unshift({
+      supplier: supplier.supplier || supplier.name || "未命名供应商",
+      project: project.name,
+      type: supplier.type || "项目费用",
+      amount: Number(supplier.amount || 0),
+      status: supplier.status || "待结算"
+    });
+  }
+
+  for (const supplier of db.suppliers || []) {
+    if (supplier.project === oldName) supplier.project = project.name;
+  }
+}
+
+function mergeProjectExtractedFields(existing = {}, parsed = {}, options = {}) {
+  const revenueRecognition = {
+    ...(existing.revenueRecognition || {}),
+    ...(parsed.revenueRecognition || {}),
+    ...(options.revenueRecognition || {})
+  };
+  const merged = options.hasCostSheet
+    ? { ...existing, ...parsed, profitBreakdown: options.profitBreakdown, profit: options.profit }
+    : { ...existing, ...parsed };
+  if (Object.keys(revenueRecognition).length) merged.revenueRecognition = revenueRecognition;
+  return merged;
+}
+
+export function validateAiSettings(values) {
+  const normalized = normalizeAiSettings(values);
+  if (!normalized["API Key"]) throw new Error("请先填写 API Key");
+  if (!normalized["Base URL"]) throw new Error("请先填写 Base URL");
+  if (!normalized["模型名称"]) throw new Error("请先选择服务商，系统会自动匹配模型名称");
+  try {
+    new URL(normalized["Base URL"]);
+  } catch {
+    throw new Error("Base URL 格式不正确");
+  }
+  return normalized;
+}
+
+export async function testAiSettings(values) {
+  const normalized = validateAiSettings(values);
+  const baseUrl = normalized["Base URL"].replace(/\/$/, "");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const res = await fetch(`${baseUrl}/models`, {
+      headers: { authorization: `Bearer ${normalized["API Key"]}` },
+      signal: controller.signal
+    });
+    if (!res.ok) {
+      throw new Error(`AI 服务返回 ${res.status}`);
+    }
+    return {
+      provider: normalized["服务商"] || "OpenAI 兼容接口",
+      model: normalized["模型名称"] || "",
+      checkedAt: new Date().toISOString()
+    };
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("AI 服务连接超时，请检查 Base URL 或网络");
+    throw new Error(`AI 配置校验失败：${error.message}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function saveSetting(db, type, values, user) {
+  if (type === "companyFinance") return saveCompanyFinance(db, values, user);
+  const current = db.settings?.[type] || {};
+  const candidate = type === "aiService" ? { ...current, ...values } : values;
+  const checked = type === "aiService" ? await testAiSettings(candidate) : null;
+  const normalized = type === "aiService" ? validateAiSettings(candidate) : values;
+  const saved = { ...current, ...normalized, connection: checked, savedAt: new Date().toISOString(), savedBy: user.id };
+  db.settings[type] = saved;
+  db.auditLogs.unshift({ type: "settings", target: type, user: user.name, at: saved.savedAt });
+  return saved;
+}
+
+export function saveCompanyFinance(db, values = {}, user = {}) {
+  db.settings = db.settings || {};
+  const current = db.settings.companyFinance || {};
+  const number = (key) => Math.max(0, Number(values[key] ?? current[key] ?? 0) || 0);
+  const monthlyFixedCost =
+    number("monthlyLaborCost") +
+    number("monthlyRent") +
+    number("monthlyLoan") +
+    number("monthlyInterest") +
+    number("monthlyOtherCost");
+  const currentCash = number("currentCash");
+  const safetyReserve = monthlyFixedCost * 6;
+  const runwayMonths = monthlyFixedCost ? currentCash / monthlyFixedCost : 0;
+  const gap = Math.max(safetyReserve - currentCash, 0);
+  const runwayLabel = monthlyFixedCost <= 0
+    ? "待设置现金流参数"
+    : runwayMonths < 3
+      ? "危险！你快倒闭啦！需要收缩现金流"
+      : runwayMonths < 6
+        ? "现金偏紧，需要控制支出并加快回款"
+        : "现金安全线达标，可以稳健推进";
+  const saved = {
+    ...current,
+    currentCash,
+    monthlyLaborCost: number("monthlyLaborCost"),
+    monthlyRent: number("monthlyRent"),
+    monthlyLoan: number("monthlyLoan"),
+    monthlyInterest: number("monthlyInterest"),
+    monthlyOtherCost: number("monthlyOtherCost"),
+    monthlyFixedCost,
+    safetyReserve,
+    runwayMonths,
+    gap,
+    runwayLabel,
+    note: String(values.note || current.note || "").trim(),
+    savedAt: new Date().toISOString(),
+    savedBy: user.id || "",
+    savedByName: user.name || ""
+  };
+  db.settings.companyFinance = saved;
+  db.auditLogs.unshift({
+    type: "finance",
+    target: "companyFinance",
+    action: "save-cash-runway",
+    user: user.name,
+    at: saved.savedAt,
+    meta: {
+      monthlyFixedCost,
+      currentCash,
+      runwayMonths: Number(runwayMonths.toFixed(2)),
+      gap
+    }
+  });
+  syncCompanyCashRunwayNotificationAfterSave(db, saved, user);
+  return saved;
+}
+
+export async function refreshInterestRate(db, user) {
+  const current = db.settings?.interestRate || {};
+  const fetched = await fetchLatestLprRate().catch((error) => ({
+    ok: false,
+    error: error.message,
+    annualRate: Number(current.annualRate || current.fallbackRate || 3.45)
+  }));
+  const saved = {
+    source: "latest_lpr",
+    term: "1Y",
+    annualRate: fetched.annualRate,
+    spread: Number(current.spread || 0),
+    fallbackRate: Number(current.fallbackRate || 3.45),
+    updatedAt: new Date().toISOString(),
+    checkedAt: new Date().toISOString(),
+    status: fetched.ok ? "已刷新" : "使用兜底利率",
+    note: fetched.ok
+      ? `已从中国货币网匹配 1 年期 LPR：${fetched.annualRate}%`
+      : `联网刷新失败，继续使用兜底利率：${fetched.error || "未知错误"}`
+  };
+  Object.assign(saved, {
+    "利率来源": saved.source,
+    "年化利率": saved.annualRate,
+    "公司加点": saved.spread,
+    "兜底利率": saved.fallbackRate
+  });
+  db.settings.interestRate = saved;
+  db.auditLogs.unshift({ type: "settings", target: "interestRate", user: user.name, at: saved.updatedAt });
+  return saved;
+}
+
+async function fetchLatestLprRate() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch("https://www.chinamoney.com.cn/chinese/bklpr/", {
+      headers: { "user-agent": "ad-project-hub/1.0" },
+      signal: controller.signal
+    });
+    if (!res.ok) throw new Error(`中国货币网返回 ${res.status}`);
+    const html = await res.text();
+    const annualRate = parseLprRate(html);
+    if (!annualRate) throw new Error("未识别到 1 年期 LPR");
+    return { ok: true, annualRate };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function parseLprRate(text) {
+  const compact = String(text || "").replace(/\s+/g, " ");
+  const oneYearMatch = compact.match(/1\s*年期[^%]{0,80}?(\d+(?:\.\d+)?)\s*%/i)
+    || compact.match(/一年期[^%]{0,80}?(\d+(?:\.\d+)?)\s*%/i);
+  if (oneYearMatch) return Number(oneYearMatch[1]);
+  const rates = [...compact.matchAll(/(\d+(?:\.\d+)?)\s*%/g)]
+    .map((match) => Number(match[1]))
+    .filter((value) => value > 0 && value < 20);
+  return rates[0] || 0;
+}
+
+export async function recordFiles(db, body, user) {
+  const now = new Date().toISOString();
+  const files = await normalizeUploadedFiles(Array.isArray(body.files) ? body.files : [], body.type || body.category || "file", user, now, db.settings?.storage || {});
+  const upload = { id: body.id || nextFileId("upload"), files, projectId: body.projectId || "", projectName: body.projectName || "", user: user.name, at: now };
+  db.files.unshift(upload);
+  db.auditLogs.unshift({ type: "upload", target: upload.projectName || "未命名项目", count: files.length, user: user.name, at: now });
+  return upload;
+}
+
+export async function testObjectStorage(db, values = {}, user = {}) {
+  const now = new Date().toISOString();
+  const settings = { ...(db.settings?.storage || {}), ...(values || {}) };
+  const fileName = `oa-storage-test-${now.slice(0, 10)}.txt`;
+  const content = `ad-project-hub object storage test\n${now}\n`;
+  const [file] = await normalizeUploadedFiles([{
+    name: fileName,
+    type: "text/plain",
+    size: Buffer.byteLength(content),
+    base64: Buffer.from(content, "utf8").toString("base64")
+  }], "storage-test", user, now, settings);
+  const ok = Boolean(file.storageUrl || file.localStorageUrl) && !file.storageRemoteError;
+  db.auditLogs.unshift({
+    type: "settings",
+    target: "storage",
+    action: "test-object-storage",
+    user: user.name,
+    at: now,
+    meta: {
+      ok,
+      provider: file.storageProvider || settings.provider || "local",
+      storageStatus: file.storageStatus || "",
+      storageUrl: file.storageUrl || "",
+      localStorageUrl: file.localStorageUrl || "",
+      error: file.storageRemoteError || ""
+    }
+  });
+  return {
+    ok,
+    provider: file.storageProvider || settings.provider || "local",
+    storageStatus: file.storageStatus || "",
+    storageUrl: file.storageUrl || "",
+    localStorageUrl: file.localStorageUrl || "",
+    storagePath: file.storagePath || "",
+    localStoragePath: file.localStoragePath || "",
+    storageRemoteError: file.storageRemoteError || "",
+    fileName,
+    testedAt: now
+  };
+}
+
+function nextFileId(prefix = "file") {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function fileArchiveMatches(file = {}, body = {}) {
+  if (body.fileId && file.id === body.fileId) return true;
+  const name = String(body.fileName || body.name || "").trim();
+  const uploadedAt = String(body.uploadedAt || "").trim();
+  if (!name || file.name !== name) return false;
+  if (uploadedAt && file.uploadedAt !== uploadedAt) return false;
+  return true;
+}
+
+function safeFileName(name = "file") {
+  const ext = extname(String(name || "")).slice(0, 12);
+  const base = String(name || "file")
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^\w\u4e00-\u9fa5.-]+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 80) || "file";
+  return `${base}${ext || ""}`;
+}
+
+function storageObjectKey(file = {}, category = "file", now = new Date().toISOString(), settings = {}) {
+  const prefix = String(settings.pathPrefix || settings.prefix || "ad-project-hub").replace(/^\/+|\/+$/g, "");
+  const day = now.slice(0, 10);
+  const id = file.id || nextFileId();
+  return [prefix, day, `${id}-${safeFileName(file.name || "upload")}`].filter(Boolean).join("/");
+}
+
+function s3Enabled(settings = {}) {
+  const provider = String(settings.provider || "").toLowerCase();
+  return Boolean(settings.bucket && (settings.endpoint || provider.includes("s3") || provider.includes("r2") || provider.includes("minio")) && settings.accessKeyId && settings.secretAccessKey);
+}
+
+function sha256Hex(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function hmacBuffer(key, value) {
+  return createHmac("sha256", key).update(value).digest();
+}
+
+function hmacHex(key, value) {
+  return createHmac("sha256", key).update(value).digest("hex");
+}
+
+function s3PublicUrl(settings = {}, objectKey = "") {
+  const base = String(settings.publicBaseUrl || "").replace(/\/+$/, "");
+  if (base) return `${base}/${objectKey.split("/").map(encodeURIComponent).join("/")}`;
+  const endpoint = String(settings.endpoint || "").replace(/\/+$/, "");
+  if (!endpoint) return "";
+  return `${endpoint}/${settings.bucket}/${objectKey.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function s3SignedHeaders({ settings = {}, objectKey = "", buffer, contentType = "application/octet-stream", now = new Date() }) {
+  const endpointUrl = new URL(String(settings.endpoint || `https://${settings.bucket}.s3.${settings.region || "us-east-1"}.amazonaws.com`).replace(/\/+$/, ""));
+  const region = String(settings.region || "us-east-1");
+  const service = "s3";
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const date = amzDate.slice(0, 8);
+  const pathStyle = settings.pathStyle === true || settings.pathStyle === "true" || endpointUrl.hostname.includes("r2.cloudflarestorage.com") || endpointUrl.hostname.includes("localhost") || endpointUrl.hostname.includes("127.0.0.1");
+  const canonicalUri = `/${[pathStyle ? settings.bucket : "", objectKey].filter(Boolean).join("/").split("/").map(encodeURIComponent).join("/")}`;
+  const host = pathStyle ? endpointUrl.host : `${settings.bucket}.${endpointUrl.host}`;
+  const payloadHash = sha256Hex(buffer);
+  const canonicalHeaders = `content-type:${contentType}\nhost:${host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
+  const signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
+  const canonicalRequest = ["PUT", canonicalUri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+  const credentialScope = `${date}/${region}/${service}/aws4_request`;
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, sha256Hex(canonicalRequest)].join("\n");
+  const signingKey = hmacBuffer(hmacBuffer(hmacBuffer(hmacBuffer(`AWS4${settings.secretAccessKey}`, date), region), service), "aws4_request");
+  const signature = hmacHex(signingKey, stringToSign);
+  return {
+    url: `${endpointUrl.protocol}//${host}${canonicalUri}`,
+    headers: {
+      Authorization: `AWS4-HMAC-SHA256 Credential=${settings.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
+      "content-type": contentType,
+      host,
+      "x-amz-content-sha256": payloadHash,
+      "x-amz-date": amzDate
+    }
+  };
+}
+
+async function uploadToS3CompatibleStorage(file = {}, buffer, category = "file", now = new Date().toISOString(), settings = {}) {
+  const objectKey = storageObjectKey(file, category, now, settings);
+  const publicUrl = s3PublicUrl(settings, objectKey);
+  const mockUpload = settings.mockUpload === true || settings.mockUpload === "true";
+  if (mockUpload) {
+    return { storageUrl: publicUrl || `s3://${settings.bucket}/${objectKey}`, storagePath: objectKey, storageProvider: settings.provider || "s3-compatible", storageStatus: "已上传对象存储", storageMocked: true };
+  }
+  const { url, headers } = s3SignedHeaders({ settings, objectKey, buffer, contentType: file.type || "application/octet-stream" });
+  const res = await fetch(url, { method: "PUT", headers, body: buffer });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`对象存储上传失败：${res.status} ${text.slice(0, 160)}`);
+  }
+  return { storageUrl: publicUrl || url, storagePath: objectKey, storageProvider: settings.provider || "s3-compatible", storageStatus: "已上传对象存储" };
+}
+
+async function persistLocalUploadFile(file = {}, category = "file", now = new Date().toISOString(), storageSettings = {}) {
+  if (file.storageUrl || file.storagePath) return file;
+  if (!file.base64) return { ...file, storageStatus: file.storageStatus || "仅记录文件信息" };
+  const buffer = Buffer.from(String(file.base64 || ""), "base64");
+  if (!buffer.length) return { ...file, storageStatus: "仅记录文件信息" };
+  const day = now.slice(0, 10);
+  const id = file.id || nextFileId();
+  const folder = join(rootDir, "uploads", day);
+  await mkdir(folder, { recursive: true });
+  const name = `${id}-${safeFileName(file.name || "upload")}`;
+  const diskPath = join(folder, name);
+  await writeFile(diskPath, buffer);
+  const localRecord = {
+    ...file,
+    id,
+    storageUrl: `/uploads/${day}/${encodeURIComponent(name)}`,
+    storagePath: `uploads/${day}/${name}`,
+    storageProvider: "local",
+    storageStatus: "已持久化",
+    category: file.category || category,
+    size: file.size || buffer.length
+  };
+  if (!s3Enabled(storageSettings)) return localRecord;
+  try {
+    const remote = await uploadToS3CompatibleStorage(localRecord, buffer, category, now, storageSettings);
+    return { ...localRecord, ...remote, localStorageUrl: localRecord.storageUrl, localStoragePath: localRecord.storagePath };
+  } catch (error) {
+    return { ...localRecord, storageRemoteError: error.message };
+  }
+}
+
+export function archiveFileRecord(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body.projectId || item.name === body.projectName);
+  if (!project) throw new Error("项目不存在");
+  const at = new Date().toISOString();
+  let archivedFile = null;
+  let archivedUpload = null;
+  db.files = db.files || [];
+  for (const upload of db.files) {
+    const matchesProject = upload.projectId === project.id || upload.projectName === project.name;
+    if (!matchesProject) continue;
+    upload.files = (upload.files || []).map((file) => {
+      if (archivedFile || file.archivedAt || !fileArchiveMatches(file, body)) return file;
+      archivedFile = {
+        ...file,
+        archivedAt: at,
+        archivedBy: user.id,
+        archivedByName: user.name,
+        archiveReason: String(body.reason || "").trim() || "文件归档纠错"
+      };
+      archivedUpload = upload;
+      return archivedFile;
+    });
+  }
+  if (!archivedFile) {
+    for (const file of project.files || []) {
+      if (archivedFile || file.archivedAt || !fileArchiveMatches(file, body)) continue;
+      archivedFile = {
+        ...file,
+        archivedAt: at,
+        archivedBy: user.id,
+        archivedByName: user.name,
+        archiveReason: String(body.reason || "").trim() || "文件归档纠错"
+      };
+    }
+    if (archivedFile) {
+      project.files = (project.files || []).map((file) => fileArchiveMatches(file, body) ? archivedFile : file);
+    }
+  }
+  if (!archivedFile) throw new Error("文件记录不存在");
+  db.auditLogs.unshift({
+    type: "upload",
+    target: project.name,
+    action: "archive-file",
+    user: user.name,
+    meta: {
+      uploadId: archivedUpload?.id || "",
+      fileId: archivedFile.id || "",
+      fileName: archivedFile.name || "",
+      reason: archivedFile.archiveReason
+    },
+    at
+  });
+  return { projectId: project.id, projectName: project.name, uploadId: archivedUpload?.id || "", file: archivedFile };
+}
+
+export function updateAlert(db, body, user) {
+  const at = new Date().toISOString();
+  const update = { ...body, user: user.name, at };
+  db.alertUpdates.unshift(update);
+  db.auditLogs.unshift({ type: "alert", target: body.project, action: body.action, user: user.name, at });
+  return update;
+}
+
+export function addComment(db, body, user) {
+  const at = new Date().toISOString();
+  const comment = { id: body.id || nextCommentId(), ...body, user: user.name, userId: user.id, at };
+  db.comments.unshift(comment);
+  db.auditLogs.unshift({ type: "comment", target: body.project, user: user.name, at });
+  return comment;
+}
+
+function nextCommentId() {
+  return `comment-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function archiveComment(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body.projectId || item.name === body.project || item.name === body.projectName);
+  if (!project) throw new Error("项目不存在");
+  const commentId = String(body.id || body.commentId || "").trim();
+  const at = new Date().toISOString();
+  const comments = db.comments || [];
+  const comment = comments.find((item) => {
+    const sameProject = item.project === project.name || item.projectName === project.name || item.projectId === project.id;
+    if (!sameProject || item.archivedAt) return false;
+    if (commentId && item.id === commentId) return true;
+    return item.body === body.body && item.at === body.at;
+  });
+  if (!comment) throw new Error("项目动态不存在");
+  const isOwner = comment.userId === user.id || comment.user === user.name;
+  if (!isOwner && !["shareholder", "admin", "director", "pm"].includes(user.role)) throw new Error("只有记录人或项目管理角色可以归档动态");
+  comment.archivedAt = at;
+  comment.archivedBy = user.id;
+  comment.archivedByName = user.name;
+  comment.archiveReason = String(body.reason || "").trim() || "项目动态归档纠错";
+  db.auditLogs.unshift({
+    type: "comment",
+    target: project.name,
+    action: "archive",
+    user: user.name,
+    meta: { commentId: comment.id || "", reason: comment.archiveReason },
+    at
+  });
+  return comment;
+}
+
+function nextNotificationId(seed = "") {
+  return `notice-${Date.now().toString(36)}-${String(seed).replace(/[^a-zA-Z0-9]/g, "").slice(0, 10)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function notificationKey(item = {}) {
+  return [item.type, item.projectId || item.projectName || "", item.sourceId || ""].join("::");
+}
+
+function projectHasAssignedPm(project = {}) {
+  const pm = String(project.pm || project.extractedFields?.pm || "").trim();
+  return Boolean(pm && !/待分派|待确认|未分配|暂无/.test(pm));
+}
+
+function notificationRecipientsForRole(role) {
+  const map = {
+    management: ["shareholder", "admin", "director"],
+    finance: ["shareholder", "admin", "finance"],
+    pm: ["shareholder", "admin", "director", "pm"],
+    sales: ["shareholder", "admin", "director", "sales"]
+  };
+  return map[role] || ["shareholder", "admin"];
+}
+
+function projectTimeHealth(project = {}, now = new Date()) {
+  const start = new Date(project.startDate || project.serviceStart || project.createdAt || now);
+  const end = new Date(project.endDate || project.serviceEnd || project.deadline || project.deliveryDate || now.getTime() + 30 * 86400000);
+  const total = Math.max(1, end - start);
+  const elapsed = Math.max(0, now - start);
+  const timeProgress = Math.max(0, Math.min(100, Math.round((elapsed / total) * 100)));
+  const completion = Math.max(0, Math.min(100, Math.round(Number(project.progress || 0))));
+  const diff = completion - timeProgress;
+  return { completion, timeProgress, diff };
+}
+
+function projectCostPressure(project = {}) {
+  const breakdown = project.extractedFields?.profitBreakdown || {};
+  const executionBudget = parseMoney(project.extractedFields?.executionBudget)
+    || parseMoney(breakdown.executionBudget)
+    || (project.extractedFields?.profitBreakdown ? 0 : parseMoney(project.costBudget));
+  const costUsed = parseMoney(project.costUsed)
+    || parseMoney(breakdown.executionCost)
+    || Number((breakdown.costs || []).reduce?.((sum, item) => sum + Number(item?.[1] || item?.amount || 0), 0) || 0);
+  const rate = executionBudget ? costUsed / executionBudget : 0;
+  return {
+    executionBudget,
+    costUsed,
+    rate,
+    percent: Math.round(rate * 100)
+  };
+}
+
+function cashRunwayForNotifications(settings = {}) {
+  const finance = settings.companyFinance || {};
+  const currentCash = Number(finance.currentCash || 0);
+  const monthlyFixedCost = [
+    finance.monthlyLaborCost,
+    finance.monthlyRent,
+    finance.monthlyLoan,
+    finance.monthlyInterest,
+    finance.monthlyOtherCost
+  ].reduce((sum, value) => sum + Number(value || 0), 0);
+  if (!monthlyFixedCost) return null;
+  const runwayMonths = currentCash / monthlyFixedCost;
+  const safetyReserve = monthlyFixedCost * 6;
+  const gap = Math.max(safetyReserve - currentCash, 0);
+  return { currentCash, monthlyFixedCost, runwayMonths, safetyReserve, gap };
+}
+
+function upsertSystemNotification(db, draft) {
+  db.systemNotifications = db.systemNotifications || [];
+  const key = draft.key || notificationKey(draft);
+  const at = new Date().toISOString();
+  const existing = db.systemNotifications.find((item) => item.key === key && !["已处理", "已忽略"].includes(item.status));
+  if (existing) {
+    Object.assign(existing, {
+      ...draft,
+      key,
+      status: existing.status || "待处理",
+      createdAt: existing.createdAt || at,
+      updatedAt: at
+    });
+    return existing;
+  }
+  const record = {
+    id: nextNotificationId(key),
+    key,
+    type: draft.type || "system",
+    title: draft.title || "系统提醒",
+    text: draft.text || "",
+    severity: draft.severity || "中",
+    role: draft.role || "management",
+    recipients: draft.recipients || notificationRecipientsForRole(draft.role || "management"),
+    projectId: draft.projectId || "",
+    projectName: draft.projectName || "",
+    source: draft.source || "scanner",
+    sourceId: draft.sourceId || "",
+    actionLabel: draft.actionLabel || "查看",
+    actionView: draft.actionView || "",
+    status: "待处理",
+    createdAt: at,
+    updatedAt: at
+  };
+  db.systemNotifications.unshift(record);
+  return record;
+}
+
+export function scanSystemNotifications(db, user = { id: "system", name: "系统扫描" }) {
+  db.systemNotifications = db.systemNotifications || [];
+  const now = new Date();
+  const notifications = [];
+
+  for (const project of db.projects || []) {
+    const quoteRules = project.extractedFields?.revenueRecognition?.quoteRules || [];
+    const createdAt = project.createdAt ? new Date(project.createdAt) : now;
+    const hoursSinceCreated = Math.max(0, (now - createdAt) / 36e5);
+    if (!projectHasAssignedPm(project) && (quoteRules.length || /待补|草稿|AI解析中|筹备/.test(String(project.status || "")) || hoursSinceCreated >= 1)) {
+      notifications.push(upsertSystemNotification(db, {
+        type: "project-assignment",
+        title: "项目待分派 PM",
+        text: `「${project.name}」还没有明确 PM。建议总监尽快分派，避免合同/报价已进来但执行没人承接。`,
+        severity: hoursSinceCreated >= 24 ? "高" : "中",
+        role: "management",
+        projectId: project.id,
+        projectName: project.name,
+        source: "project-scanner",
+        sourceId: project.id,
+        actionLabel: "去分派",
+        actionView: "admin:assignments"
+      }));
+    }
+
+    const status = String(project.status || "");
+    const activeProject = !/已完成|完成|结案|已结案|取消/.test(status);
+    const health = projectTimeHealth(project, now);
+    if (activeProject) {
+      for (const task of (project.tasks || []).map(normalizeProjectTask)) {
+        const due = taskDueInfo(task, now);
+        if (!due.active) continue;
+        notifications.push(upsertSystemNotification(db, {
+          type: "project-task-due",
+          title: due.tone === "overdue" ? "项目任务已逾期" : due.tone === "today" ? "项目任务今天截止" : "项目任务即将截止",
+          text: `「${project.name}」任务「${task.title}」${due.label}，负责人 ${task.owner || project.pm || project.owner || "待确认"}，当前进度 ${task.progress || 0}%。请及时更新进度或标记完成。`,
+          severity: due.tone === "overdue" ? "高" : "中",
+          role: "pm",
+          recipients: notificationRecipientsForRole("pm"),
+          projectId: project.id,
+          projectName: project.name,
+          source: "task-scanner",
+          sourceId: task.id,
+          actionLabel: "看任务",
+          actionView: "project-detail"
+        }));
+      }
+    }
+
+    if (activeProject && health.timeProgress >= 20 && health.diff <= -15) {
+      notifications.push(upsertSystemNotification(db, {
+        type: "project-progress-lag",
+        title: "项目进度滞后",
+        text: `「${project.name}」完成度 ${health.completion}%，时间进度 ${health.timeProgress}%，已落后 ${Math.abs(health.diff)} 个百分点。建议 PM 拆出本周必须完成的交付节点。`,
+        severity: health.diff <= -30 ? "高" : "中",
+        role: "pm",
+        recipients: notificationRecipientsForRole("pm"),
+        projectId: project.id,
+        projectName: project.name,
+        source: "project-scanner",
+        sourceId: project.id,
+        actionLabel: "看项目",
+        actionView: "project-detail"
+      }));
+    }
+
+    const costPressure = projectCostPressure(project);
+    if (activeProject && costPressure.executionBudget && costPressure.rate >= 0.8) {
+      const overBudget = costPressure.rate >= 1;
+      notifications.push(upsertSystemNotification(db, {
+        type: overBudget ? "project-cost-overrun" : "project-cost-pressure",
+        title: overBudget ? "项目成本已超预算" : "项目成本接近预算",
+        text: `「${project.name}」执行成本 ${costPressure.costUsed.toLocaleString("zh-CN")} 元，预算 ${costPressure.executionBudget.toLocaleString("zh-CN")} 元，已使用 ${costPressure.percent}%。${overBudget ? "建议暂停非必要支出并做成本复盘。" : "建议 PM 先确认后续支出是否必须发生。"}`,
+        severity: overBudget ? "高" : "中",
+        role: "pm",
+        recipients: Array.from(new Set([...notificationRecipientsForRole("pm"), "finance"])),
+        projectId: project.id,
+        projectName: project.name,
+        source: "cost-scanner",
+        sourceId: project.id,
+        actionLabel: overBudget ? "看成本复盘" : "看成本压力",
+        actionView: "project-detail"
+      }));
+    }
+
+    const contract = Number(project.contract || 0);
+    const receivable = Number(project.receivable || Math.max(contract - Number(project.paid || 0), 0));
+    const receivableRate = contract ? Math.round((receivable / contract) * 100) : 0;
+    if (activeProject && receivable > 0 && (receivableRate >= 50 || /逾期|本月底|月底|付款|回款/.test(String(project.paymentDue || "")))) {
+      notifications.push(upsertSystemNotification(db, {
+        type: "project-receivable-risk",
+        title: "项目回款需要跟进",
+        text: `「${project.name}」待回款 ${receivable.toLocaleString("zh-CN")} 元，占合同 ${receivableRate}%。建议销售/PM确认「${project.paymentDue || "下一笔回款节点"}」。`,
+        severity: receivableRate >= 80 ? "高" : "中",
+        role: "sales",
+        recipients: notificationRecipientsForRole("sales"),
+        projectId: project.id,
+        projectName: project.name,
+        source: "project-scanner",
+        sourceId: project.id,
+        actionLabel: "看回款",
+        actionView: "project-detail"
+      }));
+    }
+
+    const targetText = monthlyVerificationTargetText(project);
+    if (activeProject && targetText) {
+      notifications.push(upsertSystemNotification(db, {
+        type: "verification-sheet-missing",
+        title: "本月核销表待上传",
+        text: `「${project.name}」本月还没有核销记录。AI 已从报价表识别月度目标：${targetText}。请 PM 或执行同事完成后上传核销表。`,
+        severity: "中",
+        role: "pm",
+        recipients: notificationRecipientsForRole("pm"),
+        projectId: project.id,
+        projectName: project.name,
+        source: "verification-scanner",
+        sourceId: project.id,
+        actionLabel: "上传核销表",
+        actionView: "project-files"
+      }));
+    }
+
+    const pendingSupplierRows = pendingSupplierRowsForProject(db, project);
+    const pendingSupplierAmount = pendingSupplierRows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    if (activeProject && pendingSupplierRows.length) {
+      const topSuppliers = pendingSupplierRows
+        .slice()
+        .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
+        .slice(0, 3)
+        .map((item) => `${item.supplier || "未命名供应商"} ${Number(item.amount || 0).toLocaleString("zh-CN")}元`)
+        .join("、");
+      notifications.push(upsertSystemNotification(db, {
+        type: "supplier-settlement-pending",
+        title: "供应商待结算",
+        text: `「${project.name}」还有 ${pendingSupplierRows.length} 条供应商待结算，合计 ${pendingSupplierAmount.toLocaleString("zh-CN")} 元。${topSuppliers ? `主要为：${topSuppliers}。` : ""}请 PM/财务确认是否发起供应商付款或标记已付款。`,
+        severity: pendingSupplierAmount >= 20000 || pendingSupplierRows.length >= 3 ? "高" : "中",
+        role: "finance",
+        recipients: Array.from(new Set([...notificationRecipientsForRole("finance"), ...notificationRecipientsForRole("pm")])),
+        projectId: project.id,
+        projectName: project.name,
+        source: "supplier-scanner",
+        sourceId: project.id,
+        actionLabel: "看供应商结算",
+        actionView: "project-detail"
+      }));
+    }
+  }
+
+  const runway = cashRunwayForNotifications(db.settings || {});
+  if (runway && runway.runwayMonths < 6) {
+    notifications.push(upsertSystemNotification(db, {
+      type: "company-cash-runway",
+      title: runway.runwayMonths < 3 ? "危险！你快倒闭啦！需要收缩现金流" : "公司现金流低于 6 个月安全线",
+      text: `当前现金可撑 ${runway.runwayMonths.toFixed(1)} 个月，月固定支出 ${runway.monthlyFixedCost.toLocaleString("zh-CN")} 元，6个月安全线缺口 ${runway.gap.toLocaleString("zh-CN")} 元。`,
+      severity: runway.runwayMonths < 3 ? "高" : "中",
+      role: "finance",
+      recipients: notificationRecipientsForRole("finance"),
+      source: "finance-scanner",
+      sourceId: "company-cash-runway",
+      actionLabel: "看现金流",
+      actionView: "management:cash"
+    }));
+  }
+
+  for (const item of db.feishuPendingFiles || []) {
+    if (item.status !== "待确认") continue;
+    const createdAt = item.createdAt ? new Date(item.createdAt) : now;
+    const hours = Math.max(0, (now - createdAt) / 36e5);
+    notifications.push(upsertSystemNotification(db, {
+      type: "feishu-pending-file",
+      title: "飞书文件待确认",
+      text: `「${item.file?.name || item.preview?.fileName || "飞书文件"}」来自飞书，等待确认后才会写入「${item.projectName || "待匹配项目"}」。`,
+      severity: hours >= 24 ? "高" : "中",
+      role: "pm",
+      recipients: notificationRecipientsForRole("pm"),
+      projectId: item.projectId || "",
+      projectName: item.projectName || "",
+      source: "feishu",
+      sourceId: item.id,
+      actionLabel: "处理文件",
+      actionView: "project-files"
+    }));
+  }
+
+  for (const approval of db.approvals || []) {
+    if (!isPendingApprovalForScan(approval)) continue;
+    const createdAt = approval.createdAt ? new Date(approval.createdAt) : now;
+    const hours = Math.max(0, (now - createdAt) / 36e5);
+    if (hours < 24) continue;
+    const financeRole = approval.currentRole === "finance" || /财务/.test(String(approval.currentRole || ""));
+    const ownerRole = approval.currentRole === "owner" || /老板/.test(String(approval.status || ""));
+    notifications.push(upsertSystemNotification(db, {
+      type: "approval-stale",
+      title: "审批等待超过 24 小时",
+      text: `「${approval.projectName || "项目"}」的${approval.typeLabel || approval.type || "审批"} ${approval.amount || 0} 元已等待较久，请${financeRole ? "财务" : ownerRole ? "老板线" : "负责人"}及时处理。`,
+      severity: hours >= 48 ? "高" : "中",
+      role: financeRole ? "finance" : ownerRole ? "management" : "management",
+      recipients: financeRole ? notificationRecipientsForRole("finance") : approval.currentRole === "pm" ? notificationRecipientsForRole("pm") : notificationRecipientsForRole("management"),
+      projectId: approval.projectId || "",
+      projectName: approval.projectName || "",
+      source: "approval",
+      sourceId: approval.id,
+      actionLabel: "看审批",
+      actionView: "approvals"
+    }));
+  }
+
+  db.systemNotifications = db.systemNotifications.slice(0, 200);
+  db.auditLogs.unshift({
+    type: "notification",
+    target: "system",
+    action: "scan",
+    user: user.name || "系统扫描",
+    meta: { active: db.systemNotifications.filter((item) => item.status === "待处理").length, generated: notifications.length },
+    at: new Date().toISOString()
+  });
+  return db.systemNotifications;
+}
+
+function isPendingApprovalForScan(approval = {}) {
+  const status = String(approval.status || "");
+  if (!approval.id || ["已完成", "已驳回", "已撤回"].includes(status)) return false;
+  if (status.includes("待") || status.includes("审批中") || status.includes("处理中")) return true;
+  return Boolean(approval.currentRole && currentApprovalStep(approval));
+}
+
+function monthlyVerificationTargetText(project = {}, now = new Date()) {
+  const revenue = project.extractedFields?.revenueRecognition || {};
+  const quoteRules = Array.isArray(revenue.quoteRules) ? revenue.quoteRules : [];
+  if (!quoteRules.length) return "";
+  const targetText = monthlyTargetSummaryFromRules(quoteRules);
+  if (!targetText) return "";
+  const currentMonth = monthKey(now);
+  const hasVerification = (revenue.verificationRecords || []).some((record) => record.month === currentMonth);
+  return hasVerification ? "" : targetText;
+}
+
 export function updateSystemNotification(db, body, user) {
-  return updateSystemNotificationCore(db, body, user);
+  const id = String(body?.id || "").trim();
+  const item = (db.systemNotifications || []).find((notice) => notice.id === id);
+  if (!item) throw new Error("系统通知不存在");
+  const at = new Date().toISOString();
+  const action = body?.action === "ignore" ? "ignore" : body?.action === "reopen" ? "reopen" : "resolve";
+  if (action === "reopen") {
+    item.status = "待处理";
+    item.reopenedAt = at;
+    item.reopenedBy = user.id;
+    item.reopenedByName = user.name;
+    item.reopenReason = String(body.note || body.reason || "").trim();
+  } else {
+    item.status = action === "ignore" ? "已忽略" : "已处理";
+    item.handledAt = at;
+    item.handledBy = user.id;
+    item.handledByName = user.name;
+    item.note = String(body.note || "").trim();
+  }
+  item.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "notification",
+    target: item.title,
+    action,
+    user: user.name,
+    meta: { notificationId: item.id, source: item.source, sourceId: item.sourceId },
+    at
+  });
+  return item;
+}
+
+function feishuMessageTextForNotification(item = {}) {
+  const lines = [
+    `【${item.title || "OA 待办"}】`,
+    item.projectName ? `项目：${item.projectName}` : "",
+    item.severity ? `优先级：${item.severity}` : "",
+    item.text || "",
+    item.actionLabel ? `建议动作：${item.actionLabel}` : ""
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
+function candidateUsersForNotification(db, item = {}) {
+  const roles = Array.isArray(item.recipients) && item.recipients.length ? item.recipients : notificationRecipientsForRole(item.role);
+  const activeUsers = (db.users || []).filter((user) => user.status !== "disabled");
+  const project = (db.projects || []).find((row) => row.id === item.projectId || row.name === item.projectName);
+  const projectNames = new Set([project?.pm, project?.owner, project?.sales].filter(Boolean).map((name) => String(name).toLowerCase()));
+  let users = activeUsers.filter((user) => roles.includes(user.role));
+  if (item.projectId && projectNames.size) {
+    const projectUsers = activeUsers.filter((user) => projectNames.has(String(user.name || "").toLowerCase()) || projectNames.has(String(user.email || "").toLowerCase()));
+    users = [...projectUsers, ...users];
+  }
+  return Array.from(new Map(users.map((user) => [user.id, user])).values());
+}
+
+async function sendFeishuTextMessage(settings = {}, openId, text) {
+  if (!openId) throw new Error("缺少飞书 open_id");
+  const mockSend = settings.mockSend === true || settings.mockSend === "true" || settings.mockNotificationSend === true || settings.mockNotificationSend === "true";
+  if (mockSend) {
+    return { mocked: true, receiveId: openId, messageId: `mock-${Date.now()}` };
+  }
+  const token = await getFeishuTenantAccessToken(settings);
+  const res = await fetch("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      receive_id: openId,
+      msg_type: "text",
+      content: JSON.stringify({ text })
+    })
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload.code !== 0) {
+    throw new Error(`飞书私聊发送失败：${payload.msg || res.status}`);
+  }
+  return { messageId: payload.data?.message_id || "", receiveId: openId, raw: payload.data || {} };
 }
 
 export async function sendSystemNotificationToFeishu(db, body, user) {
-  return sendSystemNotificationToFeishuCore(db, body, user, { getFeishuTenantAccessToken });
+  const id = String(body?.id || "").trim();
+  const item = (db.systemNotifications || []).find((notice) => notice.id === id);
+  if (!item) throw new Error("系统通知不存在");
+  const settings = db.settings?.feishu || {};
+  const recipients = candidateUsersForNotification(db, item)
+    .map((recipient) => ({
+      id: recipient.id,
+      name: recipient.name,
+      email: recipient.email || "",
+      role: recipient.role,
+      openId: recipient.feishuOpenId || recipient.feishuUserId || "",
+      feishuName: recipient.feishuName || recipient.name
+    }));
+  const targets = recipients.filter((recipient) => recipient.openId);
+  const missingRecipients = recipients.filter((recipient) => !recipient.openId)
+    .map((recipient) => ({
+      id: recipient.id,
+      name: recipient.name,
+      email: recipient.email,
+      role: recipient.role
+    }));
+  if (!targets.length) {
+    const delivery = {
+      sentAt: new Date().toISOString(),
+      sentBy: user.id,
+      sentByName: user.name,
+      text: "",
+      results: [],
+      missingRecipients,
+      okCount: 0,
+      total: recipients.length,
+      missingCount: missingRecipients.length,
+      blocked: true,
+      error: "没有找到已绑定飞书 Open ID 的收件人，请先在成员管理里填写飞书 Open ID。"
+    };
+    item.feishuDelivery = delivery;
+    item.updatedAt = delivery.sentAt;
+    throw Object.assign(new Error(delivery.error), { data: delivery });
+  }
+  const text = String(body.text || feishuMessageTextForNotification(item)).trim();
+  const at = new Date().toISOString();
+  const results = [];
+  for (const target of targets) {
+    try {
+      const result = await sendFeishuTextMessage(settings, target.openId, text);
+      results.push({ ...target, ok: true, ...result });
+    } catch (error) {
+      results.push({ ...target, ok: false, error: error.message });
+    }
+  }
+  item.feishuDelivery = {
+    sentAt: at,
+    sentBy: user.id,
+    sentByName: user.name,
+    text,
+    results,
+    missingRecipients,
+    okCount: results.filter((row) => row.ok).length,
+    failCount: results.filter((row) => !row.ok).length,
+    missingCount: missingRecipients.length,
+    total: recipients.length
+  };
+  item.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "feishu",
+    target: item.title,
+    action: "send-notification",
+    user: user.name,
+    meta: { notificationId: item.id, total: results.length, ok: results.filter((row) => row.ok).length },
+    at
+  });
+  return item.feishuDelivery;
+}
+
+async function sendWechatWebhookMessage(settings = {}, text) {
+  const webhookUrl = String(settings.webhookUrl || settings.webhook || "").trim();
+  if (!webhookUrl) throw new Error("企业微信 Webhook 未配置，请先在产品设置里填写群机器人 Webhook。");
+  const mockSend = settings.mockSend === true || settings.mockSend === "true" || settings.mockNotificationSend === true || settings.mockNotificationSend === "true";
+  if (mockSend) {
+    return { mocked: true, webhookConfigured: true, messageId: `mock-wechat-${Date.now()}` };
+  }
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({
+      msgtype: "text",
+      text: { content: text }
+    })
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || Number(payload.errcode || 0) !== 0) {
+    throw new Error(`企业微信发送失败：${payload.errmsg || res.status}`);
+  }
+  return { webhookConfigured: true, raw: payload };
 }
 
 export async function sendSystemNotificationToWechat(db, body, user) {
-  return sendSystemNotificationToWechatCore(db, body, user);
+  const id = String(body?.id || "").trim();
+  const item = (db.systemNotifications || []).find((notice) => notice.id === id);
+  if (!item) throw new Error("系统通知不存在");
+  const settings = db.settings?.wechat || {};
+  const text = String(body.text || feishuMessageTextForNotification(item)).trim();
+  const at = new Date().toISOString();
+  const result = await sendWechatWebhookMessage(settings, text);
+  item.wechatDelivery = {
+    sentAt: at,
+    sentBy: user.id,
+    sentByName: user.name,
+    text,
+    ok: true,
+    ...result
+  };
+  item.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "wechat",
+    target: item.title,
+    action: "send-notification",
+    user: user.name,
+    meta: { notificationId: item.id, ok: true, mocked: Boolean(result.mocked) },
+    at
+  });
+  return item.wechatDelivery;
 }
 
-export async function dispatchNewHighSeverityNotifications(db, notices, user) {
-  return dispatchNewHighSeverityNotificationsCore(db, notices, user, { getFeishuTenantAccessToken });
+const APPROVAL_LABELS = {
+  petty_cash: "项目备用金",
+  reimbursement: "报销",
+  supplier_payment: "供应商付款"
+};
+const EXPENSE_CATEGORIES = ["拍摄交通", "餐饮", "住宿", "道具", "场地", "达人/KOL", "制作", "投放", "快递", "办公杂费", "其他"];
+const EXPENSE_CATEGORY_RULES = [
+  { category: "拍摄交通", keywords: ["打车", "出租", "网约车", "滴滴", "油费", "停车", "过路", "高速", "高铁", "火车", "机票", "航班", "交通", "车费", "租车"] },
+  { category: "餐饮", keywords: ["餐", "饭", "盒饭", "午餐", "晚餐", "饮料", "咖啡", "奶茶", "招待", "餐费"] },
+  { category: "住宿", keywords: ["住宿", "酒店", "民宿", "房费", "客房"] },
+  { category: "道具", keywords: ["道具", "物料", "服装", "化妆", "造型", "布景", "美术", "样品", "置景"] },
+  { category: "场地", keywords: ["场地", "影棚", "摄影棚", "录音棚", "租场", "场租"] },
+  { category: "达人/KOL", keywords: ["达人", "kol", "koc", "博主", "主播", "演员", "模特", "出镜", "艺人", "肖像"] },
+  { category: "制作", keywords: ["拍摄", "摄影", "摄像", "剪辑", "后期", "制作", "导演", "灯光", "收音", "器材", "设备", "航拍", "调色"] },
+  { category: "投放", keywords: ["投放", "广告费", "信息流", "dou+", "巨量", "小红书", "流量", "推广", "媒介"] },
+  { category: "快递", keywords: ["快递", "物流", "顺丰", "邮寄", "运费", "同城"] },
+  { category: "办公杂费", keywords: ["办公", "打印", "复印", "文具", "耗材", "软件", "会员", "杂费"] }
+];
+
+function inferExpenseCategory(body = {}) {
+  const manual = String(body.expenseCategory || body.categoryDetail || "").trim();
+  if (manual && manual !== "自动识别" && EXPENSE_CATEGORIES.includes(manual)) {
+    return { category: manual, source: "manual", confidence: 1 };
+  }
+  const text = [body.reason, body.payee, body.note, body.description, body.scope]
+    .map((item) => String(item || "").toLowerCase())
+    .join(" ");
+  for (const rule of EXPENSE_CATEGORY_RULES) {
+    const hits = rule.keywords.filter((keyword) => text.includes(String(keyword).toLowerCase())).length;
+    if (hits) return { category: rule.category, source: "ai-rule", confidence: Math.min(0.95, 0.58 + hits * 0.12) };
+  }
+  return { category: "其他", source: "ai-rule", confidence: 0.35 };
 }
 
-function assistantServiceDeps() {
+function nextApprovalId() {
+  return `ap-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function approvalRuleNumber(rules = {}, key, fallback) {
+  const value = Number(rules[key]);
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function approvalSteps(type, amount = 0, rules = {}) {
+  const numericAmount = Number(amount || 0);
+  const pettyCashDirectorLimit = approvalRuleNumber(rules, "pettyCashDirectorLimit", 3000);
+  const financeRequiredAmount = approvalRuleNumber(rules, "financeRequiredAmount", 1000);
+  const ownerRequiredAmount = approvalRuleNumber(rules, "ownerRequiredAmount", 10000);
+  const needsDirector = type === "petty_cash"
+    ? numericAmount >= pettyCashDirectorLimit
+    : type === "reimbursement"
+      ? numericAmount > financeRequiredAmount
+      : true;
+  const needsFinance = type !== "petty_cash" || numericAmount >= financeRequiredAmount;
+  const needsOwner = numericAmount >= ownerRequiredAmount;
+  const base = [
+    { key: "submit", label: "员工提交", role: "member", status: "done" },
+    { key: "pm", label: "PM确认", role: "pm", status: "current" },
+    { key: "director", label: "总监审批", role: "director", status: "todo" },
+    { key: "finance", label: "财务处理", role: "finance", status: "todo" },
+    { key: "owner", label: "老板审批", role: "owner", status: "todo" },
+    { key: "done", label: type === "reimbursement" ? "完成入账" : "完成付款", role: "finance", status: "todo" }
+  ];
+  if (type === "supplier_payment") base[0].label = "PM发起";
+  return base.filter((step) => {
+    if (step.key === "director") return needsDirector;
+    if (step.key === "finance") return needsFinance;
+    if (step.key === "owner") return needsOwner;
+    return true;
+  });
+}
+
+function currentApprovalStep(approval) {
+  return (approval.steps || []).find((step) => step.status === "current");
+}
+
+function approvalHandlerLabel(role = "") {
+  if (role === "pm") return "PM / 项目负责人";
+  if (role === "director") return "项目总监";
+  if (role === "finance") return "财务";
+  if (role === "owner") return "老板 / 股东";
+  return "审批负责人";
+}
+
+function approvalNextActionHint(approval = {}) {
+  if (approval.status === "已完成") return "审批已完成，财务影响已写入项目。";
+  if (approval.status === "已驳回") return "审批已驳回，可按意见补充后重新提交。";
+  if (approval.status === "已撤回") return "审批已撤回，不会继续流转。";
+  const step = currentApprovalStep(approval);
+  if (!step) return "等待提交或流程已结束。";
+  return `当前轮到${approvalHandlerLabel(step.role)}处理「${step.label}」。`;
+}
+
+function enrichApprovalRuntimeFields(approval = {}, at = new Date().toISOString()) {
+  const step = currentApprovalStep(approval);
+  const terminal = ["已完成", "已驳回", "已撤回"].includes(String(approval.status || ""));
+  const updatedAt = approval.updatedAt || approval.createdAt || at;
+  const waitHours = terminal ? 0 : Math.max(0, Math.round((new Date(at) - new Date(updatedAt)) / 36e5));
+  const slaDueAt = terminal ? "" : new Date(new Date(updatedAt).getTime() + 24 * 36e5).toISOString();
+  approval.currentStepLabel = step?.label || "";
+  approval.currentHandlerLabel = step ? approvalHandlerLabel(step.role) : "";
+  approval.nextActionHint = approvalNextActionHint(approval);
+  approval.waitHours = waitHours;
+  approval.slaDueAt = slaDueAt;
+  approval.slaStatus = terminal ? "已结束" : waitHours >= 24 ? "已超时" : waitHours >= 18 ? "即将超时" : "正常";
+  return approval;
+}
+
+function syncApprovalSteps(approval, action, user) {
+  const currentIndex = (approval.steps || []).findIndex((step) => step.status === "current");
+  if (currentIndex < 0) return;
+  if (action === "reject") {
+    approval.steps[currentIndex].status = "rejected";
+    approval.status = "已驳回";
+    approval.currentRole = "";
+    return;
+  }
+  approval.steps[currentIndex].status = "done";
+  const nextIndex = approval.steps.findIndex((step, index) => index > currentIndex && step.key !== "done");
+  if (nextIndex >= 0) {
+    approval.steps[nextIndex].status = "current";
+    approval.currentRole = approval.steps[nextIndex].role;
+    approval.status = `待${approval.steps[nextIndex].label}`;
+    return;
+  }
+  const doneStep = approval.steps.find((step) => step.key === "done");
+  if (doneStep) doneStep.status = "done";
+  approval.status = "已完成";
+  approval.currentRole = "";
+  approval.completedAt = new Date().toISOString();
+  approval.completedBy = user.name;
+}
+
+function canRoleHandleApproval(userRole, currentRole) {
+  if (["shareholder", "admin"].includes(userRole)) return true;
+  if (currentRole === "pm") return ["pm", "director"].includes(userRole);
+  if (currentRole === "director") return userRole === "director";
+  if (currentRole === "finance") return userRole === "finance";
+  if (currentRole === "owner") return userRole === "shareholder";
+  return false;
+}
+
+function applyApprovedFinanceImpact(db, approval) {
+  if (approval.status !== "已完成" || approval.appliedAt) return;
+  const project = (db.projects || []).find((item) => item.id === approval.projectId);
+  if (!project) return;
+  project.extractedFields = project.extractedFields || {};
+  const amount = Number(approval.amount || 0);
+  if (approval.type === "petty_cash") {
+    const currentBudget = Number(project.extractedFields.pettyCashBudget || project.extractedFields.projectPettyCashBudget || 0);
+    project.extractedFields.pettyCashBudget = currentBudget + amount;
+  }
+  if (approval.type === "reimbursement") {
+    const currentUsed = Number(project.extractedFields.pettyCashUsed || project.extractedFields.projectPettyCashUsed || 0);
+    const category = approval.expenseCategory || "其他";
+    const costName = `员工报销-${category}`;
+    project.extractedFields.pettyCashUsed = currentUsed + amount;
+    project.costUsed = Number(project.costUsed || 0) + amount;
+    const costs = Array.isArray(project.costs) ? project.costs : [];
+    const row = costs.find((item) => Array.isArray(item) && item[0] === costName);
+    if (row) row[1] = Number(row[1] || 0) + amount;
+    else costs.push([costName, amount]);
+    project.costs = costs;
+  }
+  if (approval.type === "supplier_payment") {
+    project.costUsed = Number(project.costUsed || 0) + amount;
+    const costs = Array.isArray(project.costs) ? project.costs : [];
+    const supplierName = approval.payee || "供应商付款";
+    const row = costs.find((item) => Array.isArray(item) && item[0] === supplierName);
+    if (row) row[1] = Number(row[1] || 0) + amount;
+    else costs.push([supplierName, amount]);
+    project.costs = costs;
+    db.suppliers = db.suppliers || [];
+    const at = new Date().toISOString();
+    const pendingRow = db.suppliers.find((item) => {
+      if (item.status === "已付款") return false;
+      const sameProject = item.projectId === project.id || item.project === project.name;
+      const sameSupplier = String(item.supplier || "").trim() === supplierName;
+      const sameAmount = Math.abs(Number(item.amount || 0) - amount) <= 0.01;
+      return sameProject && sameSupplier && sameAmount;
+    });
+    const supplierRow = pendingRow || {
+      supplier: supplierName,
+      projectId: project.id,
+      project: project.name,
+      type: approval.reason || "供应商付款",
+      amount,
+      status: "待结算"
+    };
+    supplierRow.status = "已付款";
+    supplierRow.approvalId = approval.id;
+    supplierRow.paidAt = supplierRow.paidAt || at;
+    supplierRow.paidBy = approval.completedBy || "审批完成";
+    supplierRow.paymentNote = supplierRow.paymentNote || "供应商付款审批完成后自动标记已付款";
+    supplierRow.updatedAt = at;
+    supplierRow.updatedBy = approval.completedBy || "";
+    if (!pendingRow) db.suppliers.unshift(supplierRow);
+    syncSupplierSettlementNotificationAfterUpdate(db, supplierRow, { id: approval.completedBy || "", name: approval.completedBy || "审批完成" }, "已付款");
+  }
+  project.receivable = Math.max(Number(project.contract || 0) - Number(project.paid || 0), 0);
+  project.margin = Number(project.contract || 0)
+    ? Math.round(((Number(project.contract || 0) - Number(project.costUsed || 0)) / Number(project.contract || 1)) * 100)
+    : 0;
+  project.updatedAt = new Date().toISOString();
+  approval.appliedAt = project.updatedAt;
+}
+
+function syncSupplierSettlementAfterApprovalStopped(db, approval = {}, user = {}, action = "reject") {
+  if (approval.type !== "supplier_payment" || !approval.id) return null;
+  const at = new Date().toISOString();
+  const stoppedStatus = action === "withdraw" ? "审批已撤回" : "审批已驳回";
+  let affected = null;
+  for (const row of db.suppliers || []) {
+    if (row.approvalId !== approval.id) continue;
+    if (row.status === "已付款" || row.paidAt) continue;
+    row.status = stoppedStatus;
+    row.paymentNote = [row.paymentNote, approval.logs?.[0]?.note || ""].filter(Boolean).join("；") || stoppedStatus;
+    row.updatedAt = at;
+    row.updatedBy = user.id || "";
+    row.updatedByName = user.name || "";
+    row.approvalStoppedAt = at;
+    row.approvalStoppedBy = user.id || "";
+    row.approvalStoppedAction = action;
+    affected = row;
+    syncSupplierSettlementNotificationAfterUpdate(db, row, user, stoppedStatus);
+  }
+  return affected;
+}
+
+function settlementCostRowId(row = {}) {
+  const id = row.id || row.supplierId || "";
+  if (id) return `supplier-settlement:${id}`;
+  return `supplier-settlement:${row.projectId || row.project || ""}:${row.supplier || ""}:${row.amount || 0}:${row.createdAt || ""}`;
+}
+
+function findProjectForSupplierSettlement(db, row = {}) {
+  return (db.projects || []).find((item) => {
+    if (row.projectId && item.id === row.projectId) return true;
+    return row.project && item.name === row.project;
+  });
+}
+
+function recalculateProjectMargin(project = {}) {
+  project.receivable = Math.max(Number(project.contract || 0) - Number(project.paid || 0), 0);
+  project.margin = Number(project.contract || 0)
+    ? Math.round(((Number(project.contract || 0) - Number(project.costUsed || 0)) / Number(project.contract || 1)) * 100)
+    : 0;
+  project.updatedAt = new Date().toISOString();
+}
+
+function applySupplierSettlementCost(db, row = {}, user = {}) {
+  if (row.costAppliedAt) return null;
+  const project = findProjectForSupplierSettlement(db, row);
+  if (!project) return null;
+  const amount = Number(row.amount || 0);
+  if (!amount) return null;
+  const costRow = {
+    id: settlementCostRowId(row),
+    name: row.supplier || "供应商结算",
+    type: row.type || "供应商结算",
+    amount,
+    source: "supplier-settlement",
+    supplier: row.supplier || "",
+    settlementId: row.id || "",
+    appliedBy: user.id || "",
+    appliedByName: user.name || "",
+    appliedAt: new Date().toISOString()
+  };
+  const costs = Array.isArray(project.costs) ? project.costs : [];
+  if (!costs.some((item) => item?.source === "supplier-settlement" && item?.settlementId && item.settlementId === costRow.settlementId)) {
+    costs.push(costRow);
+  }
+  project.costs = costs;
+  project.costUsed = Number(project.costUsed || 0) + amount;
+  recalculateProjectMargin(project);
+  row.costAppliedAt = costRow.appliedAt;
+  row.costAppliedBy = user.id || "";
+  row.costAppliedByName = user.name || "";
+  return project;
+}
+
+function rollbackSupplierSettlementCost(db, row = {}, user = {}) {
+  if (!row.costAppliedAt) return null;
+  const project = findProjectForSupplierSettlement(db, row);
+  if (!project) return null;
+  const rowId = settlementCostRowId(row);
+  const amount = Number(row.amount || 0);
+  project.costs = (Array.isArray(project.costs) ? project.costs : []).filter((item) => {
+    if (item?.source === "supplier-settlement" && item?.settlementId && row.id && item.settlementId === row.id) return false;
+    if (item?.id && item.id === rowId) return false;
+    return true;
+  });
+  project.costUsed = Math.max(0, Number(project.costUsed || 0) - amount);
+  recalculateProjectMargin(project);
+  row.costRolledBackAt = new Date().toISOString();
+  row.costRolledBackBy = user.id || "";
+  row.costAppliedAt = "";
+  row.costAppliedBy = "";
+  row.costAppliedByName = "";
+  return project;
+}
+
+function money(value) {
+  return `¥${Number(value || 0).toLocaleString("zh-CN")}`;
+}
+
+function textIncludes(text, target) {
+  return Boolean(target) && String(text || "").includes(String(target || ""));
+}
+
+function findAssistantProject(query, projects = [], selectedProjectId = "") {
+  const text = String(query || "");
+  return projects.find((project) => project.id === selectedProjectId)
+    || projects.find((project) => textIncludes(text, project.name) || textIncludes(text, project.client))
+    || projects[0]
+    || null;
+}
+
+function amountFromAssistantText(text) {
+  const match = String(text || "").match(/(\d+(?:\.\d+)?)\s*(万|元)?/);
+  if (!match) return 0;
+  const amount = Number(match[1]);
+  return match[2] === "万" ? amount * 10000 : amount;
+}
+
+function assistantApprovalTypeFromText(text = "") {
+  const value = String(text || "");
+  if (/备用金|预算/.test(value)) return "petty_cash";
+  if (/报销|票据|发票|打车|出租|网约车|滴滴|油费|停车|过路|高速|交通|车费|餐费|盒饭|午餐|晚餐|餐饮|住宿|酒店|道具|物料|场地|影棚|达人|kol|koc|制作|拍摄|剪辑|投放|快递|物流|办公|杂费/.test(value)) return "reimbursement";
+  return "";
+}
+
+function parseAssistantTaskDraft(query = "", user = {}) {
+  const text = String(query || "").trim();
+  if (!/(任务|节点|待办|安排|加一个|新增|创建|跟进|推进)/.test(text)) return null;
+  if (!/(任务|节点|待办)/.test(text) && !/(加一个|新增|创建|安排)/.test(text)) return null;
+  const cleaned = text
+    .replace(/帮我|请|麻烦|给我|在.+?项目|到.+?项目|给.+?项目/g, "")
+    .replace(/(新增|创建|加一个|安排|登记|记录)?(一个|一条)?(项目)?(任务|节点|待办)/g, "")
+    .replace(/截止.*$/g, "")
+    .replace(/负责人.*$/g, "")
+    .replace(/进度\s*\d+%?/g, "")
+    .replace(/[，,。；;]/g, " ")
+    .trim();
+  const title = cleaned || text.match(/(?:任务|节点|待办)[：: ]?(.+?)(?:截止|负责人|进度|$)/)?.[1]?.trim() || "";
+  const owner = text.match(/负责人[是为:]?([^，,。；; ]+)/)?.[1]?.trim() || user.name || "";
+  const dueDate = text.match(/(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}|明天|后天|今天|本周五|本周内|这周内|下周[一二三四五六日天]?)/)?.[1] || "";
+  const progressMatch = text.match(/进度\s*(\d{1,3})%?/);
+  const progress = progressMatch ? Math.max(0, Math.min(100, Number(progressMatch[1]))) : 0;
+  if (!title) return null;
+  return { title, owner, dueDate, progress, note: query };
+}
+
+function simpleProjectHealth(project = {}) {
+  const completion = Math.max(0, Math.min(100, Math.round(Number(project.progress || 0))));
+  const start = new Date(project.startDate || project.createdAt || Date.now());
+  const end = new Date(project.endDate || project.serviceEnd || project.deadline || Date.now() + 30 * 86400000);
+  const now = new Date();
+  const total = Math.max(1, end - start);
+  const elapsed = Math.max(0, now - start);
+  const timeProgress = Math.max(0, Math.min(100, Math.round((elapsed / total) * 100)));
+  const diff = completion - timeProgress;
   return {
-    createApproval,
-    postAi,
-    resolveAiSettings,
-    upsertProjectTask
+    completion,
+    timeProgress,
+    label: diff >= 8 ? "超前" : diff <= -8 ? "滞后" : "正常",
+    text: diff >= 8 ? "进度比时间更快，可以保持节奏并准备复盘材料。" : diff <= -8 ? "进度落后于时间，建议先拆出本周必须完成的交付节点。" : "进度和时间基本匹配，继续按当前节奏推进。"
+  };
+}
+
+function assistantRunway(settings = {}) {
+  const finance = settings.companyFinance || {};
+  const currentCash = Number(finance.currentCash || 0);
+  const monthlyFixedCost = [
+    finance.monthlyLaborCost,
+    finance.monthlyRent,
+    finance.monthlyLoan,
+    finance.monthlyInterest,
+    finance.monthlyOtherCost
+  ].reduce((sum, value) => sum + Number(value || 0), 0);
+  const runwayMonths = monthlyFixedCost ? currentCash / monthlyFixedCost : 0;
+  const safetyReserve = monthlyFixedCost * 6;
+  const gap = Math.max(safetyReserve - currentCash, 0);
+  let label = "待设置现金流参数";
+  if (monthlyFixedCost) {
+    if (runwayMonths < 3) label = "危险！你快倒闭啦！需要收缩现金流";
+    else if (runwayMonths < 6) label = "现金偏紧，需要控制支出并加快回款";
+    else label = "现金安全线达标，可以稳健推进";
+  }
+  return { currentCash, monthlyFixedCost, runwayMonths, safetyReserve, gap, label };
+}
+
+function assistantMetrics(scopedDb = {}) {
+  const projects = scopedDb.projects || [];
+  const approvals = scopedDb.approvals || [];
+  const contract = projects.reduce((sum, project) => sum + Number(project.contract || 0), 0);
+  const paid = projects.reduce((sum, project) => sum + Number(project.paid || 0), 0);
+  const receivable = projects.reduce((sum, project) => sum + Number(project.receivable || Math.max(Number(project.contract || 0) - Number(project.paid || 0), 0)), 0);
+  const spending = projects.reduce((sum, project) => sum + Number(project.costUsed || project.executionCost || 0), 0);
+  const profit = contract - spending;
+  const pendingApprovals = approvals.filter((item) => String(item.status || "").includes("待"));
+  return {
+    contract,
+    paid,
+    receivable,
+    spending,
+    profit,
+    margin: contract ? Math.round((profit / contract) * 100) : 0,
+    pendingApprovals
+  };
+}
+
+function assistantProjectContext(project = {}) {
+  if (!project?.id) return "";
+  const pettyBudget = Number(project.pettyCashBudget || project.extractedFields?.pettyCashBudget || project.extractedFields?.projectPettyCashBudget || 0);
+  const pettyUsed = Number(project.pettyCashUsed || project.extractedFields?.pettyCashUsed || project.extractedFields?.projectPettyCashUsed || 0);
+  const health = simpleProjectHealth(project);
+  return [
+    `项目：${project.name}`,
+    `客户：${project.client || "未填写"}`,
+    `状态：${project.status || "未填写"}`,
+    `进度：${health.completion}% / 时间进度：${health.timeProgress}% / 判断：${health.label}`,
+    `合同：${money(project.contract)} / 已回款：${money(project.paid)} / 待回款：${money(project.receivable)}`,
+    `已用成本：${money(project.costUsed)} / 备用金预算：${money(pettyBudget)} / 已用备用金：${money(pettyUsed)}`,
+    `下一节点：${project.nextMilestone || "待确认"}`,
+    `回款节点：${project.paymentDue || "待确认"}`
+  ].join("\n");
+}
+
+function assistantSafeSettings(settings = {}) {
+  return {
+    companyFinance: settings.companyFinance ? assistantRunway(settings) : null,
+    approvalRules: settings.approvalRules || null
+  };
+}
+
+async function requestAssistantAiReply(db, { query, user, scopedDb, target, fallbackReply }) {
+  const ai = resolveAiSettings(db.settings?.aiService || {});
+  if (!ai?.["API Key"]) return null;
+  const url = `${ai["Base URL"].replace(/\/$/, "")}/chat/completions`;
+  const metrics = assistantMetrics(scopedDb);
+  const visibleProjects = (scopedDb.projects || []).slice(0, 8).map((project) => ({
+    name: project.name,
+    client: project.client,
+    status: project.status,
+    progress: project.progress,
+    contract: Number(project.contract || 0),
+    paid: Number(project.paid || 0),
+    receivable: Number(project.receivable || 0),
+    costUsed: Number(project.costUsed || 0)
+  }));
+  const messages = [
+    {
+      role: "system",
+      content: [
+        "你是广告公司内部 OA 的 AI 项目伙伴，回答要像靠谱同事，简洁、具体、会说人话。",
+        "你只能根据用户可见项目和已授权数据回答，不要编造不可见项目、密钥、利润明细或公司现金流。",
+        "普通员工不能看到公司经营现金流、全公司利润、密钥或非自己项目；遇到敏感问题要礼貌说明权限。",
+        "不要直接承诺已经写入数据。报销、备用金、供应商付款、成本写入等动作必须走系统确认流程。",
+        "输出纯文本，不要 Markdown 表格。优先给 1-3 条具体下一步。"
+      ].join("\n")
+    },
+    {
+      role: "user",
+      content: [
+        `用户：${user.name} / 角色：${user.role}`,
+        `问题：${query}`,
+        `当前匹配项目：\n${assistantProjectContext(target) || "无"}`,
+        `可见项目摘要：${JSON.stringify(visibleProjects)}`,
+        `可见经营汇总：${JSON.stringify(metrics)}`,
+        `安全设置摘要：${JSON.stringify(assistantSafeSettings(scopedDb.settings || db.settings || {}))}`,
+        `系统规则兜底回答：${fallbackReply}`
+      ].join("\n\n")
+    }
+  ];
+  const res = await postAi(url, ai["API Key"], {
+    model: ai["模型名称"] || "deepseek-chat",
+    temperature: 0.4,
+    messages
+  });
+  if (!res.ok) throw new Error(`AI 服务返回 ${res.res.status}：${res.detail || "请求失败"}`);
+  const data = await res.res.json();
+  return String(data.choices?.[0]?.message?.content || "").trim().slice(0, 1600);
+}
+
+function answerAiAssistantByRules(db, body, user, scopedDb) {
+  const query = String(body?.query || "").trim();
+  if (!query) throw new Error("先输入一个问题");
+  const projects = scopedDb.projects || [];
+  const target = findAssistantProject(query, projects, body?.selectedProjectId);
+  if (!target) {
+    return {
+      reply: "你当前还没有可见项目。请让管理员或总监先把你加入项目，分派后我就能回答进度、备用金、报销和文件归档。",
+      action: "empty-projects"
+    };
+  }
+
+  const amount = amountFromAssistantText(query);
+  if (amount && /(提交|申请|登记|记录|记一笔|报销|备用金|费用|花了|支出)/.test(query)) {
+    const type = assistantApprovalTypeFromText(query);
+    if (type) {
+      const category = type === "reimbursement" ? inferExpenseCategory({ reason: query, payee: user.name }) : null;
+      const pendingAction = {
+        kind: "create-approval",
+        projectId: target.id,
+        projectName: target.name,
+        type,
+        typeLabel: type === "petty_cash" ? "项目备用金" : "报销",
+        amount,
+        payee: user.name,
+        reason: query,
+        expenseCategory: category?.category || ""
+      };
+      if (!body?.confirmAction || body.confirmAction.kind !== pendingAction.kind) {
+        return {
+          reply: `我理解你要给「${target.name}」提交${pendingAction.typeLabel}申请，金额 ${money(amount)}${pendingAction.expenseCategory ? `，类目 ${pendingAction.expenseCategory}` : ""}。这会进入审批流程，还不会直接影响成本；请确认后我再提交。`,
+          action: "approval-confirmation-required",
+          pendingAction
+        };
+      }
+      const approval = createApproval(db, pendingAction, user);
+      return {
+        reply: `已帮你提交「${target.name}」的${pendingAction.typeLabel}申请，金额 ${money(amount)}${approval.expenseCategory ? `，类目 ${approval.expenseCategory}` : ""}。当前状态：${approval.status}。`,
+        action: "approval-created",
+        approval
+      };
+    }
+  }
+
+  const taskDraft = parseAssistantTaskDraft(query, user);
+  if (taskDraft) {
+    const pendingAction = {
+      kind: "create-task",
+      projectId: target.id,
+      projectName: target.name,
+      title: taskDraft.title,
+      owner: taskDraft.owner,
+      dueDate: taskDraft.dueDate,
+      progress: taskDraft.progress,
+      note: taskDraft.note
+    };
+    if (!body?.confirmAction || body.confirmAction.kind !== pendingAction.kind) {
+      return {
+        reply: `我理解你要给「${target.name}」新增任务「${taskDraft.title}」${taskDraft.dueDate ? `，截止 ${taskDraft.dueDate}` : ""}${taskDraft.owner ? `，负责人 ${taskDraft.owner}` : ""}。确认后我会写入项目进度，不会直接影响财务数据。`,
+        action: "task-confirmation-required",
+        pendingAction
+      };
+    }
+    const result = upsertProjectTask(db, pendingAction, user);
+    return {
+      reply: `已给「${target.name}」新增任务「${result.task.title}」，项目进度已刷新到 ${result.project.progress || 0}%。`,
+      action: "task-created",
+      task: result.task,
+      project: result.project
+    };
+  }
+
+  const pettyBudget = Number(target.pettyCashBudget || target.extractedFields?.pettyCashBudget || target.extractedFields?.projectPettyCashBudget || 0);
+  const pettyUsed = Number(target.pettyCashUsed || target.extractedFields?.pettyCashUsed || target.extractedFields?.projectPettyCashUsed || 0);
+  if (/备用金|预算/.test(query)) {
+    return {
+      reply: `「${target.name}」备用金预算 ${money(pettyBudget)}，已使用 ${money(pettyUsed)}，当前剩余 ${money(Math.max(pettyBudget - pettyUsed, 0))}。`,
+      action: "petty-cash"
+    };
+  }
+  if (/报销|票据|审批/.test(query)) {
+    const rows = (scopedDb.approvals || []).filter((item) => item.projectId === target.id || item.projectName === target.name);
+    return {
+      reply: rows.length
+        ? `「${target.name}」共有 ${rows.length} 条审批：${rows.slice(0, 3).map((item) => `${item.typeLabel || item.type} ${money(item.amount)} ${item.status}`).join("；")}。`
+        : `「${target.name}」当前没有审批记录。你可以说“帮我提交 500 元报销到${target.name}”，我会直接生成审批单。`,
+      action: "approval-summary"
+    };
+  }
+  if (/回款|收款|催收|待收|尾款|首款/.test(query)) {
+    const contract = Number(target.contract || 0);
+    const paid = Number(target.paid || 0);
+    const receivable = Number(target.receivable || Math.max(contract - paid, 0));
+    const rate = contract ? Math.round((paid / contract) * 100) : 0;
+    return {
+      reply: `「${target.name}」合同 ${money(contract)}，已回款 ${money(paid)}，待回款 ${money(receivable)}，回款率 ${rate}%。建议围绕「${target.paymentDue || "待确认回款节点"}」温和确认付款安排。`,
+      action: "collection-context"
+    };
+  }
+  if (/登记|上传|归档|成本/.test(query)) {
+    const explicitMatches = projects.filter((project) => textIncludes(query, project.name) || textIncludes(query, project.client));
+    return {
+      reply: !explicitMatches.length && projects.length > 1
+        ? `我识别到你有 ${projects.length} 个可见项目。为了避免成本记错账，请在上传入口选择项目；如果你直接说项目名，比如“这个统计到${target.name}成本里”，我会按项目匹配。`
+        : `当前匹配项目是「${target.name}」。财务类写入我会优先走审批单，文件归档请用上传入口，避免误改成本数据。`,
+      action: "filing-guidance"
+    };
+  }
+  if (/创意|内容|过稿|脚本/.test(query)) {
+    return {
+      reply: `针对「${target.client || target.name}」，建议先给真实使用场景，再给客户能确认的执行路径，减少空概念。可以把历史反馈继续上传，我会沉淀客户偏好和雷区。`,
+      action: "content-idea"
+    };
+  }
+  if (/进度|节点|滞后|超前|完成度/.test(query)) {
+    const health = simpleProjectHealth(target);
+    return {
+      reply: `「${target.name}」当前完成度 ${health.completion}%，时间进度 ${health.timeProgress}%，AI 判断为${health.label}。${health.text}`,
+      action: "progress"
+    };
+  }
+  if (/现金流|经营|倒闭|安全线|老板|公司/.test(query)) {
+    if (!["shareholder", "admin", "director", "finance"].includes(user.role)) {
+      return {
+        reply: "公司经营和现金流属于管理层可见内容。你可以继续问自己项目的进度、备用金、报销和材料状态。",
+        action: "management-denied"
+      };
+    }
+    const metrics = assistantMetrics(scopedDb);
+    const runway = assistantRunway(scopedDb.settings || db.settings || {});
+    return {
+      reply: `公司经营判断：${runway.label}。待回款 ${money(metrics.receivable)}，待审批 ${metrics.pendingApprovals.length} 条，现金可撑 ${runway.monthlyFixedCost ? `${runway.runwayMonths.toFixed(1)}个月` : "待设置"}，6个月安全线缺口 ${money(runway.gap)}。`,
+      action: "management-advice"
+    };
+  }
+  if (/我的项目|有哪些项目/.test(query)) {
+    return {
+      reply: `你当前可见 ${projects.length} 个项目：${projects.slice(0, 5).map((project) => `${project.name}(${simpleProjectHealth(project).label})`).join("、")}。`,
+      action: "project-list"
+    };
+  }
+  return {
+    reply: `我先按当前项目「${target.name}」理解：进度 ${Number(target.progress || 0)}%，下一节点是「${target.nextMilestone || "待确认"}」。你可以问“我的项目备用金还有多少”，也可以说“帮我提交 500 元报销到${target.name}”。`,
+    action: "fallback"
   };
 }
 
 export async function answerAiAssistant(db, body, user, scopedDb) {
-  return answerAiAssistantCore(db, body, user, scopedDb, assistantServiceDeps());
-}
-
-function approvalServiceDeps() {
-  return {
-    supplierLibrary,
-    syncApprovalNotificationAfterAction,
-    syncProjectHealthNotificationsAfterUpdate,
-    syncSupplierSettlementNotificationAfterUpdate
-  };
+  const rules = answerAiAssistantByRules(db, body, user, scopedDb);
+  if (rules.pendingAction || ["approval-created", "task-created"].includes(rules.action)) return rules;
+  if (["management-denied", "empty-projects"].includes(rules.action)) return rules;
+  if ([
+    "petty-cash",
+    "approval-summary",
+    "collection-context",
+    "progress",
+    "management-advice",
+    "project-list",
+    "filing-guidance"
+  ].includes(rules.action)) return rules;
+  try {
+    const target = findAssistantProject(body?.query, scopedDb.projects || [], body?.selectedProjectId);
+    const reply = await requestAssistantAiReply(db, {
+      query: String(body?.query || "").trim(),
+      user,
+      scopedDb,
+      target,
+      fallbackReply: rules.reply
+    });
+    if (reply) {
+      return {
+        ...rules,
+        reply,
+        aiGenerated: true,
+        action: rules.action === "fallback" ? "ai-chat" : rules.action
+      };
+    }
+  } catch (error) {
+    return {
+      ...rules,
+      aiGenerated: false,
+      aiFallbackReason: error.message
+    };
+  }
+  return rules;
 }
 
 export function createApproval(db, body, user) {
-  return createApprovalCore(db, body, user);
+  const project = (db.projects || []).find((item) => item.id === body.projectId);
+  if (!project) throw new Error("项目不存在");
+  const type = body.type || "reimbursement";
+  if (!APPROVAL_LABELS[type]) throw new Error("不支持的审批类型");
+  const amount = Number(body.amount || 0);
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("请填写正确的审批金额");
+  const at = new Date().toISOString();
+  const rules = db.settings?.approvalRules || {};
+  const steps = approvalSteps(type, amount, rules);
+  const current = steps.find((step) => step.status === "current");
+  const expenseCategory = type === "reimbursement" ? inferExpenseCategory(body) : null;
+  const approval = {
+    id: nextApprovalId(),
+    type,
+    typeLabel: APPROVAL_LABELS[type],
+    projectId: project.id,
+    projectName: project.name,
+    amount,
+    reason: String(body.reason || "").trim() || "未填写说明",
+    payee: String(body.payee || "").trim(),
+    category: body.category || APPROVAL_LABELS[type],
+    expenseCategory: expenseCategory?.category || "",
+    expenseCategorySource: expenseCategory?.source || "",
+    expenseCategoryConfidence: expenseCategory?.confidence || 0,
+    status: `待${current?.label || "PM确认"}`,
+    currentRole: current?.role || "pm",
+    applicantId: user.id,
+    applicantName: user.name,
+    applicantRole: user.role,
+    createdAt: at,
+    updatedAt: at,
+    steps,
+    ruleSnapshot: {
+      pettyCashDirectorLimit: approvalRuleNumber(rules, "pettyCashDirectorLimit", 3000),
+      financeRequiredAmount: approvalRuleNumber(rules, "financeRequiredAmount", 1000),
+      ownerRequiredAmount: approvalRuleNumber(rules, "ownerRequiredAmount", 10000)
+    },
+    logs: [{ action: "submit", user: user.name, role: user.role, note: body.reason || "", at }]
+  };
+  enrichApprovalRuntimeFields(approval, at);
+  db.approvals = db.approvals || [];
+  db.approvals.unshift(approval);
+  db.auditLogs.unshift({ type: "approval", target: project.name, action: "submit", user: user.name, meta: { approvalId: approval.id, approvalType: type, amount }, at });
+  return approval;
 }
 
 export function actOnApproval(db, body, user) {
-  return actOnApprovalCore(db, body, user, approvalServiceDeps());
+  const approval = (db.approvals || []).find((item) => item.id === body.id);
+  if (!approval) throw new Error("审批不存在");
+  if (["已完成", "已驳回"].includes(approval.status)) throw new Error("该审批已结束");
+  const step = currentApprovalStep(approval);
+  if (!step || !canRoleHandleApproval(user.role, step.role)) throw new Error("当前角色不能处理这一步审批");
+  const action = body.action === "reject" ? "reject" : "approve";
+  const at = new Date().toISOString();
+  syncApprovalSteps(approval, action, user);
+  approval.updatedAt = at;
+  enrichApprovalRuntimeFields(approval, at);
+  approval.logs = approval.logs || [];
+  approval.logs.unshift({
+    action,
+    user: user.name,
+    role: user.role,
+    step: step.label,
+    note: String(body.note || "").trim(),
+    at
+  });
+  const stoppedSupplierSettlement = action === "reject"
+    ? syncSupplierSettlementAfterApprovalStopped(db, approval, user, "reject")
+    : null;
+  applyApprovedFinanceImpact(db, approval);
+  db.auditLogs.unshift({
+    type: "approval",
+    target: approval.projectName,
+    action,
+    user: user.name,
+    meta: {
+      approvalId: approval.id,
+      approvalType: approval.type,
+      amount: approval.amount,
+      status: approval.status,
+      stoppedSupplierSettlementId: stoppedSupplierSettlement?.id || ""
+    },
+    at
+  });
+  syncApprovalNotificationAfterAction(db, approval, user, action);
+  return approval;
 }
 
 export function withdrawApproval(db, body, user) {
-  return withdrawApprovalCore(db, body, user, approvalServiceDeps());
+  const approval = (db.approvals || []).find((item) => item.id === body.id);
+  if (!approval) throw new Error("审批不存在");
+  if (["已完成", "已驳回", "已撤回"].includes(approval.status)) throw new Error("该审批已结束，不能撤回");
+  const canWithdraw = approval.applicantId === user.id || ["shareholder", "admin", "director"].includes(user.role);
+  if (!canWithdraw) throw new Error("只有提交人或管理层可以撤回该审批");
+  const at = new Date().toISOString();
+  approval.status = "已撤回";
+  approval.currentRole = "";
+  approval.withdrawnAt = at;
+  approval.withdrawnBy = user.id;
+  approval.withdrawnByName = user.name;
+  approval.updatedAt = at;
+  approval.steps = (approval.steps || []).map((step) => step.status === "current" ? { ...step, status: "pending" } : step);
+  enrichApprovalRuntimeFields(approval, at);
+  approval.logs = approval.logs || [];
+  approval.logs.unshift({
+    action: "withdraw",
+    user: user.name,
+    role: user.role,
+    note: String(body.note || body.reason || "").trim() || "提交人撤回审批",
+    at
+  });
+  const stoppedSupplierSettlement = syncSupplierSettlementAfterApprovalStopped(db, approval, user, "withdraw");
+  db.auditLogs.unshift({
+    type: "approval",
+    target: approval.projectName,
+    action: "withdraw",
+    user: user.name,
+    meta: {
+      approvalId: approval.id,
+      approvalType: approval.type,
+      amount: approval.amount,
+      reason: String(body.reason || body.note || "").trim(),
+      stoppedSupplierSettlementId: stoppedSupplierSettlement?.id || ""
+    },
+    at
+  });
+  syncApprovalNotificationAfterAction(db, approval, user, "withdraw");
+  return approval;
 }
 
-export function updateSupplierSettlement(db, body, user) {
-  return updateSupplierSettlementCore(db, body, user, approvalServiceDeps());
+export function supplierCsv(db) {
+  const header = "供应商,归属项目,费用类型,应结金额,状态,付款时间,付款备注\n";
+  const rows = db.suppliers.map((item) => [item.supplier, item.project, item.type, item.amount, item.status, item.paidAt || "", item.paymentNote || ""]
+    .map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(","));
+  return header + rows.join("\n");
 }
 
-export { feishuPendingFiles, feishuProjectBindings, getFeishuTenantAccessToken, saveFeishuProjectBinding };
+function redactSecretValue(value) {
+  if (value === null || value === undefined || value === "") return value;
+  return "[已脱敏]";
+}
 
-function feishuServiceDeps() {
+function redactSettingsForBackup(settings = {}) {
+  const clone = JSON.parse(JSON.stringify(settings || {}));
+  const secretKeys = new Set([
+    "API Key",
+    "apiKey",
+    "appSecret",
+    "app_secret",
+    "secret",
+    "Secret",
+    "secretAccessKey",
+    "accessKeySecret",
+    "tenantAccessToken",
+    "verificationToken",
+    "webhookUrl",
+    "mockFileBase64"
+  ]);
+  function walk(target) {
+    if (!target || typeof target !== "object") return;
+    for (const [key, value] of Object.entries(target)) {
+      if (secretKeys.has(key) || /secret|token|key|webhook/i.test(key)) {
+        target[key] = redactSecretValue(value);
+      } else if (value && typeof value === "object") {
+        walk(value);
+      }
+    }
+  }
+  walk(clone);
+  return clone;
+}
+
+export function exportBackupSnapshot(db, user) {
+  const safeUsers = (db.users || []).map((item) => {
+    const { pin, ...rest } = item;
+    return rest;
+  });
   return {
-    createProject,
-    projectRiskAlerts,
-    syncFeishuPendingNotificationAfterAction,
-    uploadProjectCostSheet,
-    uploadProjectQuoteSheet,
-    uploadProjectVerificationSheet
+    exportedAt: new Date().toISOString(),
+    exportedBy: { id: user.id, name: user.name, role: user.role },
+    app: "ad-project-hub",
+    format: "safe-backup-v1",
+    counts: {
+      users: safeUsers.length,
+      projects: (db.projects || []).length,
+      approvals: (db.approvals || []).length,
+      payments: (db.payments || []).length,
+      suppliers: (db.suppliers || []).length,
+      files: (db.files || []).length,
+      parseJobs: (db.parseJobs || []).length,
+      notifications: (db.systemNotifications || []).length
+    },
+    data: {
+      users: safeUsers,
+      projects: db.projects || [],
+      approvals: db.approvals || [],
+      payments: db.payments || [],
+      suppliers: db.suppliers || [],
+      supplierProfiles: db.supplierProfiles || [],
+      clientProfiles: db.clientProfiles || [],
+      collectionScripts: db.collectionScripts || [],
+      files: db.files || [],
+      parseJobs: db.parseJobs || [],
+      comments: db.comments || [],
+      alertUpdates: db.alertUpdates || [],
+      systemNotifications: db.systemNotifications || [],
+      feishuProjectBindings: db.feishuProjectBindings || [],
+      feishuEvents: db.feishuEvents || [],
+      feishuPendingFiles: db.feishuPendingFiles || [],
+      auditLogs: db.auditLogs || [],
+      settings: redactSettingsForBackup(db.settings || {})
+    }
   };
 }
 
+const BACKUP_COLLECTIONS = [
+  "users",
+  "projects",
+  "approvals",
+  "payments",
+  "suppliers",
+  "supplierProfiles",
+  "clientProfiles",
+  "collectionScripts",
+  "files",
+  "parseJobs",
+  "comments",
+  "alertUpdates",
+  "systemNotifications",
+  "feishuProjectBindings",
+  "feishuEvents",
+  "feishuPendingFiles",
+  "auditLogs"
+];
+
+function arrayCount(value) {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+const BACKUP_DIFF_LABELS = {
+  users: "成员",
+  projects: "项目",
+  approvals: "审批",
+  payments: "回款",
+  suppliers: "供应商结算",
+  supplierProfiles: "供应商档案",
+  clientProfiles: "客户档案",
+  collectionScripts: "催收话术",
+  files: "文件批次",
+  parseJobs: "解析任务",
+  comments: "评论",
+  alertUpdates: "预警处理",
+  systemNotifications: "系统待办",
+  feishuProjectBindings: "飞书群绑定",
+  feishuEvents: "飞书事件",
+  feishuPendingFiles: "飞书待确认文件",
+  auditLogs: "审计日志"
+};
+
+function backupRestoreDiff(currentCounts = {}, backupCounts = {}) {
+  const items = BACKUP_COLLECTIONS.map((key) => {
+    const current = Number(currentCounts[key] || 0);
+    const backup = Number(backupCounts[key] || 0);
+    const delta = backup - current;
+    return {
+      key,
+      label: BACKUP_DIFF_LABELS[key] || key,
+      current,
+      backup,
+      delta,
+      direction: delta > 0 ? "increase" : delta < 0 ? "decrease" : "same"
+    };
+  });
+  const changed = items.filter((item) => item.delta !== 0);
+  return {
+    items,
+    changed,
+    changedCount: changed.length,
+    increases: changed.filter((item) => item.delta > 0).length,
+    decreases: changed.filter((item) => item.delta < 0).length,
+    summary: changed.length
+      ? changed.slice(0, 5).map((item) => `${item.label}${item.delta > 0 ? "+" : ""}${item.delta}`).join("，")
+      : "备份数量与当前 OA 基本一致"
+  };
+}
+
+function parseBackupInput(body = {}) {
+  const source = body.backup ?? body.text ?? body.json ?? body;
+  if (typeof source === "string") {
+    const trimmed = source.trim();
+    if (!trimmed) throw new Error("请粘贴备份 JSON 后再校验");
+    return JSON.parse(trimmed);
+  }
+  if (source && typeof source === "object") return source;
+  throw new Error("请粘贴备份 JSON 后再校验");
+}
+
+export function validateBackupSnapshot(db, body = {}, user = {}) {
+  let backup;
+  try {
+    backup = parseBackupInput(body);
+  } catch {
+    return {
+      ok: false,
+      dryRunOnly: true,
+      error: "备份 JSON 格式无法解析，请确认粘贴的是完整导出的 .json 文件。",
+      warnings: ["本次只是校验，不会写入或恢复任何 OA 数据。"]
+    };
+  }
+
+  const warnings = ["本次只是校验/恢复预演，不会写入、覆盖或恢复任何 OA 数据。"];
+  const data = backup?.data && typeof backup.data === "object" ? backup.data : {};
+  const counts = {};
+  const currentCounts = {};
+  for (const key of BACKUP_COLLECTIONS) {
+    counts[key] = arrayCount(data[key]);
+    currentCounts[key] = arrayCount(db[key]);
+    if (!Array.isArray(data[key])) warnings.push(`备份缺少 ${key} 列表，后续不能直接用于完整恢复。`);
+  }
+
+  const expectedCounts = backup?.counts && typeof backup.counts === "object" ? backup.counts : {};
+  for (const [key, expected] of Object.entries(expectedCounts)) {
+    const mappedKey = key === "notifications" ? "systemNotifications" : key;
+    if (mappedKey in counts && Number(expected) !== counts[mappedKey]) {
+      warnings.push(`${key} 数量与备份 counts 不一致：counts=${expected}，实际=${counts[mappedKey]}。`);
+    }
+  }
+
+  const settingsText = JSON.stringify(data.settings || {});
+  if (/cli_mock_secret|123456|sk-|AKIA|secretAccessKey|webhook/i.test(settingsText) && !settingsText.includes("[已脱敏]")) {
+    warnings.push("备份设置里可能包含未脱敏密钥，请不要直接分享或上传到公开仓库。");
+  }
+  if (!backup?.exportedAt) warnings.push("备份缺少导出时间 exportedAt。");
+  if (!backup?.exportedBy?.name) warnings.push("备份缺少导出人信息 exportedBy。");
+
+  const ok = backup?.format === "safe-backup-v1" && Array.isArray(data.projects);
+  if (backup?.format !== "safe-backup-v1") warnings.push("备份版本不是 safe-backup-v1，暂不建议用于恢复。");
+  if (!Array.isArray(data.projects)) warnings.push("备份缺少 projects 项目列表。");
+  const diff = backupRestoreDiff(currentCounts, counts);
+
+  return {
+    ok,
+    dryRunOnly: true,
+    canRestoreLater: ok,
+    format: backup?.format || "",
+    exportedAt: backup?.exportedAt || "",
+    exportedBy: backup?.exportedBy || null,
+    checkedAt: new Date().toISOString(),
+    checkedBy: { id: user.id, name: user.name, role: user.role },
+    counts,
+    currentCounts,
+    diff,
+    warnings
+  };
+}
+
+function mergeRestoredUsers(currentUsers = [], backupUsers = []) {
+  const currentById = new Map((currentUsers || []).map((item) => [item.id, item]));
+  return (backupUsers || []).map((item) => {
+    const current = currentById.get(item.id) || {};
+    return {
+      ...item,
+      pin: current.pin || "123456",
+      status: item.status || current.status || "active"
+    };
+  });
+}
+
+function restoreSettingValue(currentValue, backupValue) {
+  if (backupValue === "[已脱敏]") return currentValue;
+  if (Array.isArray(backupValue)) return backupValue.map((item, index) => restoreSettingValue(currentValue?.[index], item));
+  if (backupValue && typeof backupValue === "object") {
+    const merged = { ...(currentValue && typeof currentValue === "object" ? currentValue : {}) };
+    for (const [key, value] of Object.entries(backupValue)) {
+      merged[key] = restoreSettingValue(merged[key], value);
+    }
+    return merged;
+  }
+  return backupValue;
+}
+
+function mergeRestoredSettings(currentSettings = {}, backupSettings = {}) {
+  const restored = { ...(currentSettings || {}) };
+  for (const [key, value] of Object.entries(backupSettings || {})) {
+    restored[key] = restoreSettingValue(restored[key], value);
+  }
+  return restored;
+}
+
+export function restoreBackupSnapshot(db, body = {}, user = {}) {
+  const confirmText = String(body.confirmText || body.confirm || "").trim();
+  if (confirmText !== "确认恢复OA备份") throw new Error("请输入确认恢复OA备份，系统才会执行恢复。");
+  const backup = parseBackupInput(body);
+  const validation = validateBackupSnapshot(db, backup, user);
+  if (!validation.ok) throw new Error(validation.error || "备份校验未通过，不能恢复。");
+  const data = backup.data || {};
+  const beforeCounts = {};
+  const afterCounts = {};
+  for (const key of BACKUP_COLLECTIONS) beforeCounts[key] = arrayCount(db[key]);
+
+  db.users = mergeRestoredUsers(db.users || [], data.users || []);
+  for (const key of BACKUP_COLLECTIONS.filter((item) => item !== "users" && item !== "auditLogs")) {
+    db[key] = Array.isArray(data[key]) ? data[key] : [];
+  }
+  db.settings = mergeRestoredSettings(db.settings || {}, data.settings || {});
+  db.auditLogs = Array.isArray(data.auditLogs) ? data.auditLogs : [];
+
+  const at = new Date().toISOString();
+  db.auditLogs.unshift({
+    type: "backup",
+    target: "safe-backup-v1",
+    action: "restore",
+    user: user.name,
+    meta: {
+      restoredBy: user.id,
+      exportedAt: backup.exportedAt || "",
+      exportedBy: backup.exportedBy || null,
+      beforeCounts,
+      backupCounts: validation.counts,
+      diff: validation.diff
+    },
+    at
+  });
+
+  for (const key of BACKUP_COLLECTIONS) afterCounts[key] = arrayCount(db[key]);
+  return {
+    ok: true,
+    restored: true,
+    restoredAt: at,
+    restoredBy: { id: user.id, name: user.name, role: user.role },
+    format: backup.format,
+    exportedAt: backup.exportedAt || "",
+    exportedBy: backup.exportedBy || null,
+    counts: afterCounts,
+    beforeCounts,
+    diff: backupRestoreDiff(beforeCounts, afterCounts),
+    warnings: [
+      "恢复已完成。出于安全原因，备份里的 PIN、API Key、Webhook、Secret 等脱敏字段不会凭空恢复；系统会保留当前环境已有密钥。",
+      ...validation.warnings.filter((item) => !/不会写入|不会恢复|不会覆盖/.test(item))
+    ]
+  };
+}
+
+function supplierProfileFor(db, supplierName) {
+  db.supplierProfiles = db.supplierProfiles || [];
+  const name = String(supplierName || "").trim();
+  let profile = db.supplierProfiles.find((item) => item.supplier === name);
+  if (!profile) {
+    profile = { supplier: name, market: "", contact: "", note: "", ratings: [], updatedAt: new Date().toISOString() };
+    db.supplierProfiles.unshift(profile);
+  }
+  profile.ratings = Array.isArray(profile.ratings) ? profile.ratings : [];
+  return profile;
+}
+
+function supplierRiskInsights({ profile = {}, rows = [], projects = [], totalAmount = 0, paidCount = 0, averageRating = 0, ratings = [] }) {
+  const comments = ratings.map((item) => `${item.comment || ""} ${item.project || ""}`).join(" ");
+  const pendingRows = rows.filter((item) => !/已付|已结|审批已驳回|审批已撤回/.test(String(item.status || "")));
+  const pendingAmount = pendingRows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const signals = [];
+  const addSignal = (tag, level = "medium", advice = "") => {
+    if (!signals.some((item) => item.tag === tag)) signals.push({ tag, level, advice });
+  };
+
+  if (/发票慢|开票慢|票慢|结算慢|回票慢|发票/.test(comments)) {
+    addSignal("发票/结算偏慢", "medium", "下次合作前先约定开票节点、资料格式和最晚提交时间。");
+  }
+  if (/需比价|比价|报价偏高|价格高|贵|溢价/.test(comments)) {
+    addSignal("报价需比价", "medium", "同类项目建议至少找 2 家备选报价，再决定是否继续使用。");
+  }
+  if (/临时追加|追加费用|加钱|超预算|预算偏高/.test(comments)) {
+    addSignal("易追加费用", "high", "报价阶段要求拆清服务项和追加边界，避免执行中被动加钱。");
+  }
+  if (/返工|质量|不稳定|客户不满意|差评|翻车/.test(comments)) {
+    addSignal("质量需复核", "high", "重要交付建议设置样稿/小样确认，不要一次性放量。");
+  }
+  if (/交付慢|逾期|延期|拖延|排期不稳/.test(comments)) {
+    addSignal("交付时效风险", "high", "时间紧的项目谨慎使用，必须写清交付节点和延期责任。");
+  }
+  if (averageRating > 0 && averageRating < 3.5) {
+    addSignal("内部评分偏低", "high", `当前内部评分 ${averageRating}/5，复用前建议先看历史评价。`);
+  }
+  if (pendingAmount > 0 && totalAmount > 0 && pendingAmount / totalAmount >= 0.5) {
+    addSignal("待结算占比高", "medium", `待结算 ${money(pendingAmount)}，继续合作前先确认付款/发票状态。`);
+  } else if (pendingAmount > 0) {
+    addSignal("存在待结算", "low", `还有 ${money(pendingAmount)} 待结算，合作前同步财务状态。`);
+  }
+  if (rows.length <= 1 && totalAmount >= 50000) {
+    addSignal("大额首合作", "medium", "合作记录较少但金额较大，建议先拆阶段验收或保留备选供应商。");
+  }
+  if (rows.length >= 3 && paidCount === 0) {
+    addSignal("暂无已付款闭环", "medium", "已有多次结算记录但缺少已付款闭环，建议财务确认真实结算状态。");
+  }
+
+  const hasHigh = signals.some((item) => item.level === "high");
+  const hasMedium = signals.some((item) => item.level === "medium");
+  const riskLevel = hasHigh ? "高" : hasMedium ? "中" : signals.length ? "低" : "低";
+  const riskTags = signals.map((item) => item.tag);
+  const positiveEvidence = [];
+  if (rows.length >= 3) positiveEvidence.push(`合作 ${rows.length} 次`);
+  if (projects.length >= 2) positiveEvidence.push(`覆盖 ${projects.length} 个项目`);
+  if (averageRating >= 4.5) positiveEvidence.push(`内部评分 ${averageRating}/5`);
+  if (paidCount > 0) positiveEvidence.push(`${paidCount} 次已付款闭环`);
+
+  let recommendationAction = "可试用";
+  if (hasHigh) recommendationAction = "谨慎使用";
+  else if (riskTags.includes("报价需比价") || riskTags.includes("待结算占比高") || riskTags.includes("大额首合作")) recommendationAction = "先比价";
+  else if (rows.length >= 3 && averageRating >= 4 && !hasMedium) recommendationAction = "优先推荐";
+  else if (rows.length >= 2 && averageRating >= 4) recommendationAction = "可优先考虑";
+
+  const selectionAdvice = hasHigh
+    ? signals.find((item) => item.level === "high")?.advice || "该供应商存在高风险信号，建议先复盘历史项目再决定。"
+    : riskTags.length
+      ? signals[0]?.advice || "该供应商可用，但下次合作建议补充约束条件。"
+      : positiveEvidence.length
+        ? `暂无明显风险，${positiveEvidence.join("，")}，可作为同类型项目备选。`
+        : "暂无足够历史数据，建议从小额或低风险项目开始合作并补充评分。";
+
+  return {
+    riskLevel,
+    riskTags,
+    riskSignals: signals,
+    recommendationAction,
+    selectionAdvice,
+    pendingAmount
+  };
+}
+
+export function supplierLibrary(db) {
+  const profiles = new Map((db.supplierProfiles || []).map((item) => [item.supplier, { ...item, ratings: Array.isArray(item.ratings) ? item.ratings : [] }]));
+  for (const row of db.suppliers || []) {
+    const name = String(row.supplier || "未命名供应商").trim();
+    if (!profiles.has(name)) profiles.set(name, { supplier: name, market: "", contact: "", note: "", ratings: [], updatedAt: "" });
+  }
+  return Array.from(profiles.values()).map((profile) => {
+    const rows = (db.suppliers || []).filter((item) => String(item.supplier || "").trim() === profile.supplier);
+    const projects = Array.from(new Set(rows.map((item) => item.project).filter(Boolean)));
+    const types = Array.from(new Set(rows.map((item) => item.type).filter(Boolean)));
+    const totalAmount = rows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const paidCount = rows.filter((item) => /已付|已结/.test(String(item.status || ""))).length;
+    const ratings = profile.ratings || [];
+    const averageRating = ratings.length
+      ? Number((ratings.reduce((sum, item) => sum + Number(item.score || 0), 0) / ratings.length).toFixed(1))
+      : 0;
+    const reuseScore = Math.min(5, projects.length + Math.floor(rows.length / 3));
+    const ratingScore = averageRating || 3;
+    const star = Math.max(1, Math.min(5, Math.round((reuseScore + ratingScore) / 2)));
+    const insights = supplierRiskInsights({ profile, rows, projects, totalAmount, paidCount, averageRating, ratings });
+    return {
+      ...profile,
+      cooperationCount: rows.length,
+      projectCount: projects.length,
+      projects,
+      types,
+      totalAmount,
+      paidCount,
+      pendingAmount: insights.pendingAmount,
+      averageRating,
+      ratingCount: ratings.length,
+      star,
+      riskLevel: insights.riskLevel,
+      riskTags: insights.riskTags,
+      riskSignals: insights.riskSignals,
+      recommendationAction: insights.recommendationAction,
+      selectionAdvice: insights.selectionAdvice,
+      recommendationReason: rows.length
+        ? `合作 ${rows.length} 次，覆盖 ${projects.length} 个项目，累计金额 ${Math.round(totalAmount)}，内部评分 ${averageRating || "待评分"}。`
+        : "暂无项目结算记录，建议合作后补充评分。"
+    };
+  }).sort((a, b) => b.star - a.star || b.cooperationCount - a.cooperationCount || b.totalAmount - a.totalAmount);
+}
+
+export function rateSupplier(db, body, user) {
+  const supplierName = String(body.supplier || "").trim();
+  if (!supplierName) throw new Error("请填写供应商名称");
+  const score = Number(body.score || 0);
+  if (!Number.isFinite(score) || score < 1 || score > 5) throw new Error("评分需要在 1-5 之间");
+  const at = new Date().toISOString();
+  const profile = supplierProfileFor(db, supplierName);
+  profile.market = String(body.market || profile.market || "").trim();
+  profile.contact = String(body.contact || profile.contact || "").trim();
+  profile.note = String(body.note || profile.note || "").trim();
+  profile.ratings.unshift({
+    score,
+    project: String(body.project || "").trim(),
+    comment: String(body.comment || "").trim(),
+    user: user.name,
+    userId: user.id,
+    at
+  });
+  profile.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "supplier",
+    target: supplierName,
+    action: "rate",
+    user: user.name,
+    meta: { score, project: body.project || "" },
+    at
+  });
+  return supplierLibrary(db).find((item) => item.supplier === supplierName);
+}
+
+export function updateSupplierSettlement(db, body, user) {
+  const supplierId = String(body.id || body.supplierId || "").trim();
+  const supplierName = String(body.supplier || "").trim();
+  const projectName = String(body.project || body.projectName || "").trim();
+  const row = (db.suppliers || []).find((item) => {
+    if (supplierId && item.id === supplierId) return true;
+    return supplierName
+      && String(item.supplier || "").trim() === supplierName
+      && (!projectName || String(item.project || "").trim() === projectName);
+  });
+  if (!row) throw new Error("供应商结算记录不存在");
+  const status = body.status === "待结算" ? "待结算" : "已付款";
+  const at = new Date().toISOString();
+  row.status = status;
+  row.paymentNote = String(body.note || body.paymentNote || row.paymentNote || "").trim();
+  row.updatedAt = at;
+  row.updatedBy = user.id;
+  let affectedProject = null;
+  if (status === "已付款") {
+    row.paidAt = body.paidAt || row.paidAt || at;
+    row.paidBy = user.name;
+    affectedProject = applySupplierSettlementCost(db, row, user);
+  } else {
+    affectedProject = rollbackSupplierSettlementCost(db, row, user);
+    row.paidAt = "";
+    row.paidBy = "";
+  }
+  syncSupplierSettlementNotificationAfterUpdate(db, row, user, status);
+  if (affectedProject) syncProjectHealthNotificationsAfterUpdate(db, affectedProject, user);
+  db.auditLogs.unshift({
+    type: "supplier",
+    target: row.project || row.supplier,
+    action: status === "已付款" ? "settlement-paid" : "settlement-pending",
+    user: user.name,
+    meta: {
+      supplierId: row.id || "",
+      supplier: row.supplier,
+      project: row.project,
+      amount: row.amount,
+      status,
+      note: row.paymentNote,
+      costAppliedAt: row.costAppliedAt || "",
+      projectCostUsed: affectedProject?.costUsed ?? null
+    },
+    at
+  });
+  return {
+    settlement: row,
+    project: affectedProject,
+    supplier: supplierLibrary(db).find((item) => item.supplier === row.supplier)
+  };
+}
+
+function splitLines(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
+  return String(value || "")
+    .split(/\n|；|;/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function clientProfileFor(db, clientName) {
+  db.clientProfiles = db.clientProfiles || [];
+  const client = String(clientName || "").trim();
+  let profile = db.clientProfiles.find((item) => item.client === client);
+  if (!profile) {
+    profile = { client, likes: [], dislikes: [], pitfalls: [], handoffNote: "", contactStyle: "", updatedAt: new Date().toISOString() };
+    db.clientProfiles.unshift(profile);
+  }
+  profile.likes = Array.isArray(profile.likes) ? profile.likes : splitLines(profile.likes);
+  profile.dislikes = Array.isArray(profile.dislikes) ? profile.dislikes : splitLines(profile.dislikes);
+  profile.pitfalls = Array.isArray(profile.pitfalls) ? profile.pitfalls : splitLines(profile.pitfalls);
+  return profile;
+}
+
+function clientHandoffPackage({ profile = {}, projects = [], comments = [], pitfalls = [] }) {
+  const activeProjects = projects.filter((project) => !/已完成|已结案|关闭|取消|作废/.test(String(project.status || "")));
+  const receivableProjects = projects
+    .filter((project) => Number(project.receivable || 0) > 0)
+    .sort((a, b) => Number(b.receivable || 0) - Number(a.receivable || 0));
+  const latestProject = [...projects].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))[0];
+  const latestComments = comments
+    .slice()
+    .sort((a, b) => new Date(b.at || b.createdAt || 0) - new Date(a.at || a.createdAt || 0))
+    .slice(0, 3)
+    .map((comment) => String(comment.body || comment.text || "").trim())
+    .filter(Boolean);
+  const totalReceivable = receivableProjects.reduce((sum, project) => sum + Number(project.receivable || 0), 0);
+  const mustAvoid = pitfalls.slice(0, 5);
+  const firstActions = [];
+  if (activeProjects.length) firstActions.push(`先确认在执行项目：${activeProjects.slice(0, 3).map((project) => `${project.name}（${project.status || "状态待补"}）`).join("、")}`);
+  if (receivableProjects.length) firstActions.push(`优先跟进回款：${receivableProjects[0].name} 待回款 ${money(receivableProjects[0].receivable)}`);
+  if (mustAvoid.length) firstActions.push(`沟通前先避开雷区：${mustAvoid.slice(0, 2).join("；")}`);
+  if (profile.handoffNote) firstActions.push(`先读交接备注：${String(profile.handoffNote).split(/\n/).filter(Boolean)[0]}`);
+  if (!firstActions.length) firstActions.push("先补充客户偏好、雷区、最近项目状态和回款节点。");
+
+  return {
+    title: `${profile.client || "客户"} PM 自动交接包`,
+    activeProjectCount: activeProjects.length,
+    activeProjects: activeProjects.map((project) => ({
+      id: project.id || "",
+      name: project.name,
+      status: project.status || "",
+      owner: project.pm || project.owner || "",
+      receivable: Number(project.receivable || 0),
+      paymentDue: project.paymentDue || ""
+    })).slice(0, 5),
+    latestProject: latestProject ? {
+      id: latestProject.id || "",
+      name: latestProject.name,
+      status: latestProject.status || "",
+      owner: latestProject.pm || latestProject.owner || "",
+      receivable: Number(latestProject.receivable || 0),
+      paymentDue: latestProject.paymentDue || ""
+    } : null,
+    receivableProjects: receivableProjects.map((project) => ({
+      id: project.id || "",
+      name: project.name,
+      amount: Number(project.receivable || 0),
+      paymentDue: project.paymentDue || ""
+    })).slice(0, 5),
+    totalReceivable,
+    likes: (profile.likes || []).slice(0, 5),
+    dislikes: (profile.dislikes || []).slice(0, 5),
+    mustAvoid,
+    contactStyle: profile.contactStyle || "",
+    firstActions,
+    latestFeedback: latestComments,
+    handoffNote: profile.handoffNote || "",
+    summary: [
+      activeProjects.length ? `在执行 ${activeProjects.length} 个项目` : "暂无在执行项目",
+      totalReceivable ? `待回款 ${money(totalReceivable)}` : "暂无待回款",
+      mustAvoid.length ? `雷区 ${mustAvoid.length} 条` : "雷区待沉淀",
+      profile.contactStyle ? `沟通风格：${profile.contactStyle}` : ""
+    ].filter(Boolean).join("；")
+  };
+}
+
+export function clientLibrary(db) {
+  const profiles = new Map((db.clientProfiles || []).map((item) => [item.client, {
+    ...item,
+    likes: splitLines(item.likes),
+    dislikes: splitLines(item.dislikes),
+    pitfalls: splitLines(item.pitfalls)
+  }]));
+  for (const project of db.projects || []) {
+    const client = String(project.client || project.brand || project.name || "").trim();
+    if (!client) continue;
+    if (!profiles.has(client)) profiles.set(client, { client, likes: [], dislikes: [], pitfalls: [], handoffNote: "", contactStyle: "", updatedAt: "" });
+  }
+  return Array.from(profiles.values()).map((profile) => {
+    const projects = (db.projects || []).filter((project) => String(project.client || project.brand || project.name || "").trim() === profile.client);
+    const comments = (db.comments || []).filter((comment) => projects.some((project) => project.name === comment.project));
+    const totalContract = projects.reduce((sum, project) => sum + Number(project.contract || 0), 0);
+    const receivable = projects.reduce((sum, project) => sum + Number(project.receivable || 0), 0);
+    const latestProject = [...projects].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))[0];
+    const inferredPitfalls = comments
+      .map((comment) => String(comment.body || ""))
+      .filter((text) => /雷区|不要|被骂|客户不喜欢|驳回|吐槽|差评|不满意/.test(text))
+      .slice(0, 5);
+    const pitfalls = Array.from(new Set([...profile.pitfalls, ...inferredPitfalls]));
+    const handoffPackage = clientHandoffPackage({ profile: { ...profile, client: profile.client }, projects, comments, pitfalls });
+    return {
+      ...profile,
+      pitfalls,
+      projectCount: projects.length,
+      projects: projects.map((project) => project.name),
+      totalContract,
+      receivable,
+      latestProject: latestProject?.name || "",
+      latestStatus: latestProject?.status || "",
+      commentCount: comments.length,
+      handoffPackage,
+      handoffSummary: [
+        profile.likes.length ? `客户偏好：${profile.likes.slice(0, 3).join("；")}` : "",
+        pitfalls.length ? `注意雷区：${pitfalls.slice(0, 3).join("；")}` : "",
+        profile.handoffNote ? `交接备注：${profile.handoffNote}` : "",
+        latestProject ? `最近项目：${latestProject.name}（${latestProject.status || "状态待补"}）` : ""
+      ].filter(Boolean).join("。") || "暂无客户偏好沉淀，建议 PM 在项目动态中记录客户反馈。"
+    };
+  }).sort((a, b) => b.projectCount - a.projectCount || b.totalContract - a.totalContract);
+}
+
+export function saveClientProfile(db, body, user) {
+  const client = String(body.client || "").trim();
+  if (!client) throw new Error("请填写客户名称");
+  const at = new Date().toISOString();
+  const profile = clientProfileFor(db, client);
+  const appendMode = body.append === true || body.append === "true";
+  if (appendMode) {
+    profile.likes = Array.from(new Set([...(profile.likes || []), ...splitLines(body.likes)]));
+    profile.dislikes = Array.from(new Set([...(profile.dislikes || []), ...splitLines(body.dislikes)]));
+    profile.pitfalls = Array.from(new Set([...(profile.pitfalls || []), ...splitLines(body.pitfalls)]));
+    const nextHandoff = String(body.handoffNote || "").trim();
+    profile.handoffNote = [profile.handoffNote, nextHandoff].filter(Boolean).join("\n");
+  } else {
+    profile.likes = splitLines(body.likes ?? profile.likes);
+    profile.dislikes = splitLines(body.dislikes ?? profile.dislikes);
+    profile.pitfalls = splitLines(body.pitfalls ?? profile.pitfalls);
+    profile.handoffNote = String(body.handoffNote ?? profile.handoffNote ?? "").trim();
+  }
+  profile.contactStyle = String(body.contactStyle ?? profile.contactStyle ?? "").trim();
+  profile.updatedAt = at;
+  db.auditLogs.unshift({
+    type: "client",
+    target: client,
+    action: "profile",
+    user: user.name,
+    meta: { likes: profile.likes.length, pitfalls: profile.pitfalls.length },
+    at
+  });
+  return clientLibrary(db).find((item) => item.client === client);
+}
+
+function nextCollectionScriptId() {
+  return `collection-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function sameProject(row, project) {
+  return row.projectId === project.id || row.projectName === project.name || row.project === project.name;
+}
+
+function closeCollectionFollowUpNotification(db, record = {}, user = {}, note = "") {
+  db.systemNotifications = db.systemNotifications || [];
+  const at = new Date().toISOString();
+  for (const item of db.systemNotifications) {
+    if (item.type !== "collection-follow-up" || item.sourceId !== record.id || item.status !== "待处理") continue;
+    item.status = "已处理";
+    item.handledAt = at;
+    item.handledBy = user.id || "";
+    item.handledByName = user.name || "";
+    item.note = note || "催收跟进已处理。";
+    item.updatedAt = at;
+  }
+}
+
+function syncCollectionFollowUpNotification(db, record = {}, user = {}) {
+  db.systemNotifications = db.systemNotifications || [];
+  const at = new Date().toISOString();
+  const hasFollowUp = !record.success && (record.nextFollowUpAt || record.nextAction);
+  if (!hasFollowUp) {
+    closeCollectionFollowUpNotification(db, record, user, record.success ? "催收已标记有效，系统关闭二次跟进。" : "催收未设置下一步，系统关闭二次跟进。");
+    return;
+  }
+  const action = record.nextAction || "再次跟进客户付款";
+  const dueText = record.nextFollowUpAt ? `，计划 ${record.nextFollowUpAt} 跟进` : "";
+  const text = `「${record.projectName}」本次催收未推进付款${dueText}：${action}。待回款 ${Number(record.amount || 0).toLocaleString("zh-CN")} 元。`;
+  const existing = db.systemNotifications.find((item) => item.type === "collection-follow-up" && item.sourceId === record.id);
+  if (existing) {
+    existing.status = "待处理";
+    existing.title = "催收需要二次跟进";
+    existing.text = text;
+    existing.severity = record.nextFollowUpAt ? "中" : "低";
+    existing.projectId = record.projectId || existing.projectId;
+    existing.projectName = record.projectName || existing.projectName;
+    existing.actionLabel = "继续催收";
+    existing.actionView = "collections";
+    existing.nextFollowUpAt = record.nextFollowUpAt || "";
+    existing.nextAction = action;
+    existing.updatedAt = at;
+    return;
+  }
+  db.systemNotifications.unshift({
+    id: nextNotificationId(`collection-follow-up-${record.id}`),
+    key: `collection-follow-up::${record.id}`,
+    type: "collection-follow-up",
+    title: "催收需要二次跟进",
+    text,
+    severity: record.nextFollowUpAt ? "中" : "低",
+    role: "sales",
+    recipients: notificationRecipientsForRole("sales"),
+    projectId: record.projectId || "",
+    projectName: record.projectName || "",
+    source: "collection",
+    sourceId: record.id,
+    actionLabel: "继续催收",
+    actionView: "collections",
+    nextFollowUpAt: record.nextFollowUpAt || "",
+    nextAction: action,
+    status: "待处理",
+    createdAt: at,
+    updatedAt: at
+  });
+}
+
+function collectionStats(db, salesName = "") {
+  const rows = db.collectionScripts || [];
+  const completed = rows.filter((item) => item.outcome || typeof item.success === "boolean");
+  const bySales = completed.filter((item) => item.salesName === salesName);
+  const successful = completed.filter((item) => item.success);
+  const best = [...successful].sort((a, b) => Number(b.score || 0) - Number(a.score || 0))[0];
+  return {
+    total: completed.length,
+    ownTotal: bySales.length,
+    ownSuccess: bySales.filter((item) => item.success).length,
+    bestScript: best?.script || "",
+    bestSalesName: best?.salesName || "",
+    bestStyle: best?.style || ""
+  };
+}
+
+function inferSalesStyle(db, user, body = {}) {
+  if (body.style) return String(body.style).trim();
+  const ownRows = (db.collectionScripts || []).filter((item) => item.salesName === user.name && item.style);
+  if (ownRows[0]?.style) return ownRows[0].style;
+  if (user.role === "sales") return "自然、轻松、先同步项目进展，再温和确认付款安排";
+  return "专业、清楚、给客户留出确认空间";
+}
+
+function scriptToneFor(project, clientProfile, body = {}) {
+  if (body.tone) return String(body.tone).trim();
+  const due = String(project.paymentDue || "");
+  if (/逾期|超期|已到期|尾款/.test(due) || Number(project.receivable || 0) > Number(project.contract || 0) * 0.5) {
+    return "礼貌但要推进";
+  }
+  if (clientProfile?.contactStyle) return clientProfile.contactStyle;
+  return "自然提醒";
+}
+
+function humanCollectionScript({ project, user, clientProfile, style, tone, stats }) {
+  const clientName = project.client || project.brand || "客户";
+  const amount = parseMoney(project.receivable);
+  const paymentDue = project.paymentDue || "当前回款节点";
+  const likes = (clientProfile?.likes || []).slice(0, 2).join("、");
+  const pitfalls = (clientProfile?.pitfalls || []).slice(0, 2).join("、");
+  const progress = project.nextMilestone || project.status || "项目正在推进中";
+  const amountText = amount ? `${Math.round(amount).toLocaleString("zh-CN")} 元` : "这期款项";
+  const lines = [
+    `${clientName}老师，我跟您同步下「${project.name}」现在的进展：${progress}，我们这边已经在按节点往前推。`,
+    `我想顺手跟您确认一下${paymentDue}这笔${amountText}的安排，您看大概什么时候方便走一下流程？我这边也好提前配合您补材料、开票或对账。`,
+    `如果财务那边需要合同、报价明细或阶段交付说明，您直接跟我说，我今天就整理好发过去。`
+  ];
+  if (likes) lines.splice(1, 0, `我会按您之前比较认可的方向（${likes}）把交付资料整理得更清楚。`);
+  if (pitfalls) lines.push(`另外我会避开之前提到过的点：${pitfalls}，这次沟通尽量不让您多费时间。`);
+  if (stats.bestScript && stats.bestSalesName && stats.bestSalesName !== user.name) {
+    lines.push(`我参考了${stats.bestSalesName}之前成功率比较高的说法，核心是先把交付和配合讲清楚，再轻轻推动付款节点。`);
+  }
+  return lines.join("\n");
+}
+
+export function collectionLibrary(db) {
+  const rows = db.collectionScripts || [];
+  return rows.map((item) => ({
+    ...item,
+    successRateNote: item.salesName
+      ? (() => {
+          const stats = collectionStats(db, item.salesName);
+          return stats.ownTotal ? `${item.salesName} 已记录 ${stats.ownTotal} 次，成功 ${stats.ownSuccess} 次` : "暂无结果沉淀";
+        })()
+      : "暂无销售归属"
+  }));
+}
+
+export function suggestCollectionScript(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body?.projectId || item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  const receivable = parseMoney(project.receivable);
+  if (receivable <= 0) throw new Error("这个项目当前没有待回款，不需要生成催收话术");
+  const clientProfile = clientLibrary(db).find((item) => item.client === (project.client || project.brand));
+  const style = inferSalesStyle(db, user, body);
+  const tone = scriptToneFor(project, clientProfile, body);
+  const stats = collectionStats(db, user.name);
+  const at = new Date().toISOString();
+  const record = {
+    id: nextCollectionScriptId(),
+    projectId: project.id,
+    projectName: project.name,
+    client: project.client || project.brand || "",
+    salesId: user.id,
+    salesName: user.name,
+    style,
+    tone,
+    amount: receivable,
+    paymentDue: project.paymentDue || "",
+    script: humanCollectionScript({ project, user, clientProfile, style, tone, stats }),
+    reason: [
+      `待回款 ${receivable.toLocaleString("zh-CN")} 元`,
+      project.paymentDue ? `回款节点：${project.paymentDue}` : "回款节点待补",
+      clientProfile?.pitfalls?.length ? `已避开客户雷区：${clientProfile.pitfalls.slice(0, 2).join("、")}` : "",
+      stats.ownTotal ? `你的历史催收记录 ${stats.ownTotal} 次，成功 ${stats.ownSuccess} 次` : "暂无个人话术结果，先用稳妥模板"
+    ].filter(Boolean).join("；"),
+    outcome: "",
+    success: null,
+    score: null,
+    createdAt: at,
+    updatedAt: at
+  };
+  db.collectionScripts = db.collectionScripts || [];
+  db.collectionScripts.unshift(record);
+  db.auditLogs.unshift({
+    type: "collection",
+    target: project.name,
+    action: "suggest",
+    user: user.name,
+    meta: { scriptId: record.id, amount: receivable },
+    at
+  });
+  return record;
+}
+
+export function saveCollectionOutcome(db, body, user) {
+  const id = String(body?.id || "").trim();
+  const record = (db.collectionScripts || []).find((item) => item.id === id);
+  if (!record) throw new Error("催收记录不存在");
+  const at = new Date().toISOString();
+  record.outcome = String(body.outcome || record.outcome || "").trim();
+  record.success = Boolean(body.success);
+  record.score = Number(body.score || (record.success ? 5 : 2));
+  record.nextFollowUpAt = record.success ? "" : String(body.nextFollowUpAt || record.nextFollowUpAt || "").trim();
+  record.nextAction = record.success ? "" : String(body.nextAction || record.nextAction || "").trim();
+  record.followUpStatus = record.success ? "已关闭" : (record.nextFollowUpAt || record.nextAction ? "待跟进" : "待补计划");
+  record.updatedAt = at;
+  syncCollectionFollowUpNotification(db, record, user);
+  db.auditLogs.unshift({
+    type: "collection",
+    target: record.projectName,
+    action: "outcome",
+    user: user.name,
+    meta: { scriptId: record.id, success: record.success, score: record.score, nextFollowUpAt: record.nextFollowUpAt, nextAction: record.nextAction },
+    at
+  });
+  return record;
+}
+
+function nextFeishuEventId() {
+  return `feishu-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function nextFeishuPendingFileId() {
+  return `feishu-file-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function normalizeFeishuTextContent(message = {}) {
+  const raw = message.content ?? message.text ?? "";
+  if (typeof raw !== "string") return "";
+  try {
+    const parsed = JSON.parse(raw);
+    return String(parsed.text || parsed.content || raw).trim();
+  } catch {
+    return raw.trim();
+  }
+}
+
+function normalizeFeishuFileName(message = {}) {
+  const raw = message.content ?? "";
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed.file_name || parsed.name || message.fileName || "";
+    } catch {
+      return message.fileName || "";
+    }
+  }
+  return message.fileName || message.name || "";
+}
+
+function normalizeFeishuEvent(payload = {}) {
+  const event = payload.event || payload;
+  const message = event.message || payload.message || {};
+  const sender = event.sender || payload.sender || {};
+  const chatId = message.chat_id || event.chat_id || payload.chatId || payload.chat_id || "";
+  const chatName = message.chat_name || event.chat_name || payload.chatName || payload.chat_name || "";
+  const messageType = message.message_type || payload.messageType || payload.message_type || "text";
+  return {
+    eventId: payload.header?.event_id || payload.event_id || event.event_id || `event-${Date.now()}`,
+    messageId: message.message_id || message.messageId || payload.messageId || payload.message_id || "",
+    chatId,
+    chatName,
+    senderId: sender.sender_id?.open_id || sender.sender_id?.user_id || sender.open_id || payload.senderId || "",
+    senderName: sender.sender_name || sender.name || payload.senderName || "",
+    messageType,
+    text: normalizeFeishuTextContent(message),
+    fileName: normalizeFeishuFileName(message),
+    fileKey: message.file_key || message.fileKey || payload.fileKey || ""
+  };
+}
+
+function findProjectFromText(db, text = "") {
+  const normalized = String(text || "").toLowerCase();
+  return (db.projects || []).find((project) => {
+    const keys = [project.name, project.client, project.brand].filter(Boolean).map((item) => String(item).toLowerCase());
+    return keys.some((key) => key && normalized.includes(key));
+  }) || null;
+}
+
+function feishuBindingFor(db, chatId) {
+  return (db.feishuProjectBindings || []).find((item) => item.chatId === chatId) || null;
+}
+
+function findFeishuSenderUser(db, event) {
+  const senderText = `${event.senderId || ""} ${event.senderName || ""}`.toLowerCase();
+  return (db.users || []).find((user) => {
+    const fields = [user.feishuOpenId, user.feishuUserId, user.feishuName, user.name, user.email]
+      .filter(Boolean)
+      .map((item) => String(item).toLowerCase());
+    return fields.some((field) => field && senderText.includes(field));
+  }) || null;
+}
+
+function inferFeishuUploadType(event = {}, text = "") {
+  const sample = `${event.fileName || ""} ${text || ""}`.toLowerCase();
+  if (/核销|verification/.test(sample)) return "verification-sheet";
+  if (/报价|quote/.test(sample)) return "quote-sheet";
+  if (/成本|支出|费用|结算|cost/.test(sample)) return "cost-sheet";
+  if (/合同|contract/.test(sample)) return "create-project";
+  return "file-reference";
+}
+
+export async function getFeishuTenantAccessToken(settings = {}) {
+  if (settings.mockTenantAccessToken) return settings.mockTenantAccessToken;
+  if (settings.tenantAccessToken) return settings.tenantAccessToken;
+  const appId = settings.appId || settings.app_id;
+  const appSecret = settings.appSecret || settings.app_secret;
+  if (!appId || !appSecret) throw new Error("飞书 App ID / App Secret 未配置，无法下载文件");
+  const res = await fetch("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ app_id: appId, app_secret: appSecret })
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload.code !== 0 || !payload.tenant_access_token) {
+    throw new Error(`获取飞书 tenant_access_token 失败：${payload.msg || res.status}`);
+  }
+  return payload.tenant_access_token;
+}
+
+async function downloadFeishuMessageFile(settings = {}, event = {}) {
+  if (settings.mockFileBase64) {
+    return {
+      name: settings.mockFileName || event.fileName || "飞书模拟文件.csv",
+      type: settings.mockFileType || "text/csv",
+      base64: settings.mockFileBase64,
+      size: Buffer.byteLength(settings.mockFileBase64, "base64"),
+      source: "feishu-mock"
+    };
+  }
+  if (!event.messageId || !event.fileKey) throw new Error("飞书消息缺少 message_id 或 file_key，无法下载文件");
+  const token = await getFeishuTenantAccessToken(settings);
+  const url = `https://open.feishu.cn/open-apis/im/v1/messages/${encodeURIComponent(event.messageId)}/resources/${encodeURIComponent(event.fileKey)}?type=file`;
+  const res = await fetch(url, {
+    headers: {
+      authorization: `Bearer ${token}`
+    }
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`下载飞书文件失败：${res.status}${text ? ` ${text.slice(0, 120)}` : ""}`);
+  }
+  const arrayBuffer = await res.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  return {
+    name: event.fileName || `飞书文件-${event.fileKey}`,
+    type: res.headers.get("content-type") || "application/octet-stream",
+    base64: buffer.toString("base64"),
+    size: buffer.length,
+    source: "feishu"
+  };
+}
+
+async function applyFeishuDownloadedFile(db, project, file, uploadType, sender, event) {
+  const payloadFile = {
+    ...file,
+    uploadedBy: sender.id,
+    uploadedByName: sender.name || "飞书成员",
+    uploadedAt: new Date().toISOString(),
+    source: "feishu",
+    feishuFileKey: event.fileKey,
+    feishuMessageId: event.messageId
+  };
+  const actor = {
+    id: sender.id || "feishu-bot",
+    name: sender.name || "飞书成员",
+    role: sender.role || "member"
+  };
+  if (uploadType === "cost-sheet") {
+    return await uploadProjectCostSheet(db, { id: project.id, files: [payloadFile] }, actor);
+  }
+  if (uploadType === "quote-sheet") {
+    return await uploadProjectQuoteSheet(db, { id: project.id, files: [payloadFile] }, actor);
+  }
+  if (uploadType === "verification-sheet") {
+    return await uploadProjectVerificationSheet(db, { id: project.id, files: [payloadFile] }, actor);
+  }
+  if (uploadType === "create-project") {
+    return await createProject(db, { "项目名称": project?.name || file.name.replace(/\.[^.]+$/, "") }, [payloadFile], actor);
+  }
+  if (project?.id) {
+    project.files = [...(project.files || []), payloadFile];
+    project.updatedAt = new Date().toISOString();
+    db.files = db.files || [];
+    db.files.unshift({
+      files: [payloadFile],
+      projectId: project.id,
+      projectName: project.name,
+      user: actor.name,
+      at: payloadFile.uploadedAt,
+      source: "feishu"
+    });
+    db.auditLogs.unshift({
+      type: "upload",
+      target: project.name,
+      action: "feishu-file-reference",
+      user: actor.name,
+      meta: { fileName: payloadFile.name, source: "feishu", uploadType },
+      at: payloadFile.uploadedAt
+    });
+    return { project, file: payloadFile };
+  }
+  return null;
+}
+
+function createFeishuPendingFile(db, { event, project, file, uploadType, sender, note = "" }) {
+  const at = new Date().toISOString();
+  const preview = {
+    fileName: file.name,
+    size: file.size || 0,
+    type: file.type || "",
+    uploadType,
+    projectName: project?.name || "",
+    canConfirm: Boolean(project?.id && file.base64),
+    summary: file.text
+      ? String(file.text).slice(0, 300)
+      : `飞书文件已下载，等待人工确认后写入「${project?.name || "待匹配项目"}」。`
+  };
+  const record = {
+    id: nextFeishuPendingFileId(),
+    eventId: event.eventId,
+    chatId: event.chatId,
+    chatName: event.chatName,
+    senderId: event.senderId,
+    senderName: sender.name || event.senderName || "飞书成员",
+    projectId: project?.id || "",
+    projectName: project?.name || "",
+    uploadType,
+    file,
+    preview,
+    status: "待确认",
+    note,
+    createdAt: at,
+    handledAt: "",
+    handledBy: ""
+  };
+  db.feishuPendingFiles = db.feishuPendingFiles || [];
+  db.feishuPendingFiles.unshift(record);
+  return record;
+}
+
+export function feishuProjectBindings(db) {
+  return (db.feishuProjectBindings || []).map((item) => ({
+    ...item,
+    projectExists: (db.projects || []).some((project) => project.id === item.projectId)
+  }));
+}
+
+export function feishuPendingFiles(db) {
+  return db.feishuPendingFiles || [];
+}
+
+export function saveFeishuProjectBinding(db, body, user) {
+  const chatId = String(body.chatId || body.chat_id || "").trim();
+  const project = (db.projects || []).find((item) => item.id === body.projectId || item.name === body.projectName);
+  if (!chatId) throw new Error("请填写飞书群 Chat ID");
+  if (!project) throw new Error("请选择要绑定的项目");
+  const at = new Date().toISOString();
+  db.feishuProjectBindings = db.feishuProjectBindings || [];
+  const existing = db.feishuProjectBindings.find((item) => item.chatId === chatId);
+  const record = {
+    chatId,
+    chatName: String(body.chatName || body.chat_name || existing?.chatName || "").trim(),
+    projectId: project.id,
+    projectName: project.name,
+    boundBy: user.id,
+    boundAt: existing?.boundAt || at,
+    updatedAt: at
+  };
+  if (existing) Object.assign(existing, record);
+  else db.feishuProjectBindings.unshift(record);
+  db.auditLogs.unshift({
+    type: "feishu",
+    target: record.chatName || record.chatId,
+    action: "bind-project",
+    user: user.name,
+    meta: { projectId: project.id, projectName: project.name },
+    at
+  });
+  return record;
+}
+
 export async function handleFeishuEvent(db, payload, user = { id: "system", name: "飞书机器人", role: "system" }) {
-  return handleFeishuEventCore(db, payload, user, feishuServiceDeps());
+  if (payload?.challenge) return { challenge: payload.challenge };
+  const token = db.settings?.feishu?.verificationToken;
+  if (token && payload?.token && payload.token !== token) throw new Error("飞书 Verification Token 不匹配");
+  const event = normalizeFeishuEvent(payload);
+  const binding = feishuBindingFor(db, event.chatId);
+  const textProject = findProjectFromText(db, `${event.text} ${event.fileName}`);
+  const project = textProject || (binding ? (db.projects || []).find((item) => item.id === binding.projectId) : null);
+  const sender = findFeishuSenderUser(db, event) || user;
+  const text = event.text || "";
+  const asksNewProject = /新谈|新项目|登记.*项目|创建项目|立项/.test(text);
+  const fileLike = event.messageType !== "text" || event.fileName || event.fileKey;
+  const uploadType = inferFeishuUploadType(event, text);
+  const at = new Date().toISOString();
+  let action = "message";
+  let status = "已记录";
+  let reply = "已收到，我会把这条消息沉淀到 OA。";
+
+  if (asksNewProject && !project) {
+    const projectName = event.fileName
+      ? event.fileName.replace(/\.[^.]+$/, "")
+      : `飞书新项目-${new Date().toLocaleString("zh-CN", { hour12: false })}`;
+    const draft = {
+      id: `P-${Date.now()}`,
+      name: projectName,
+      client: "",
+      owner: sender.name || user.name || "飞书机器人",
+      contract: 0,
+      costBudget: 0,
+      costUsed: 0,
+      paid: 0,
+      receivable: 0,
+      status: "待补合同/报价",
+      risk: "低",
+      aiSummary: "飞书机器人已接收销售的新项目线索。请在 OA 上传/补齐合同与报价表后确认入库。",
+      nextMilestone: "等待销售补齐合同/报价表",
+      paymentDue: "",
+      margin: 0,
+      tasks: [],
+      costs: [],
+      extractedFields: { source: "feishu-bot", feishuChatId: event.chatId, feishuEventId: event.eventId },
+      createdAt: at,
+      createdBy: sender.id || user.id,
+      files: []
+    };
+    draft.alerts = projectRiskAlerts(draft);
+    db.projects.unshift(draft);
+    action = "create-project-draft";
+    status = "已创建项目草稿";
+    reply = `已创建「${draft.name}」项目草稿。请补齐合同/报价表，AI 会继续解析项目金额、客户和回款节点。`;
+  } else if (project && fileLike) {
+    const fileRecord = {
+      name: event.fileName || `飞书文件-${event.eventId}`,
+      size: 0,
+      type: event.messageType,
+      category: "feishu-intake",
+      storageUrl: event.fileKey ? `feishu://${event.fileKey}` : "",
+      uploadedAt: at,
+      uploadedBy: sender.id || user.id,
+      uploadedByName: sender.name || event.senderName || "飞书成员",
+      source: "feishu"
+    };
+    try {
+      const downloaded = await downloadFeishuMessageFile(db.settings?.feishu || {}, event);
+      const pending = createFeishuPendingFile(db, { event, project, file: downloaded, uploadType, sender });
+      action = `download-and-pending-${uploadType}`;
+      status = "待人工确认";
+      reply = `已下载飞书文件「${downloaded.name}」，已进入待确认队列。确认后才会写入「${project.name}」。`;
+      fileRecord.pendingFileId = pending.id;
+    } catch (error) {
+      fileRecord.downloadStatus = `下载/解析待处理：${error.message}`;
+      project.files = [...(project.files || []), fileRecord];
+      db.files.unshift({ files: [fileRecord], projectId: project.id, projectName: project.name, user: fileRecord.uploadedByName, at });
+      action = "record-file-reference";
+      status = "已记录文件引用";
+      reply = `已把飞书文件「${fileRecord.name}」登记到「${project.name}」，但暂未完成下载解析：${error.message}`;
+    }
+  } else if (project) {
+    db.comments.unshift({
+      project: project.name,
+      body: `飞书群消息：${text || "无文本内容"}`,
+      mentions: "",
+      user: sender.name || event.senderName || "飞书成员",
+      at
+    });
+    action = "record-comment";
+    status = "已记录到项目动态";
+    reply = `已把消息记录到「${project.name}」项目动态。`;
+  } else {
+    status = "待匹配项目";
+    reply = "已收到，但还没匹配到项目。请在后台把飞书群 Chat ID 绑定项目，或在消息里写清项目/客户名称。";
+  }
+
+  const record = {
+    id: nextFeishuEventId(),
+    ...event,
+    projectId: project?.id || "",
+    projectName: project?.name || "",
+    action,
+    status,
+    reply,
+    createdAt: at
+  };
+  db.feishuEvents = db.feishuEvents || [];
+  db.feishuEvents.unshift(record);
+  db.auditLogs.unshift({
+    type: "feishu",
+    target: project?.name || event.chatName || event.chatId || "飞书事件",
+    action,
+    user: sender.name || event.senderName || "飞书机器人",
+    meta: { eventId: record.id, chatId: event.chatId, status },
+    at
+  });
+  return { event: record, reply };
 }
 
 export async function handleFeishuPendingFile(db, body, user) {
-  return handleFeishuPendingFileCore(db, body, user, feishuServiceDeps());
+  const id = String(body?.id || "").trim();
+  const action = body?.action === "reject" ? "reject" : "confirm";
+  const pending = (db.feishuPendingFiles || []).find((item) => item.id === id);
+  if (!pending) throw new Error("飞书待确认文件不存在");
+  if (pending.status !== "待确认") throw new Error(`该文件已处理：${pending.status}`);
+  const at = new Date().toISOString();
+  if (action === "reject") {
+    pending.status = "已驳回";
+    pending.note = String(body.note || "人工驳回").trim();
+    pending.handledAt = at;
+    pending.handledBy = user.id;
+    db.auditLogs.unshift({
+      type: "feishu",
+      target: pending.projectName || pending.file?.name || pending.id,
+      action: "reject-pending-file",
+      user: user.name,
+      meta: { pendingFileId: pending.id, uploadType: pending.uploadType },
+      at
+    });
+    syncFeishuPendingNotificationAfterAction(db, pending, user, "reject");
+    return pending;
+  }
+
+  const project = (db.projects || []).find((item) => item.id === pending.projectId);
+  if (!project && pending.uploadType !== "create-project") throw new Error("待确认文件未匹配到项目，无法确认入库");
+  await applyFeishuDownloadedFile(db, project, pending.file, pending.uploadType, user, {
+    eventId: pending.eventId,
+    fileKey: pending.file?.feishuFileKey || "",
+    messageId: pending.file?.feishuMessageId || ""
+  });
+  pending.status = "已确认入库";
+  pending.note = String(body.note || "人工确认入库").trim();
+  pending.handledAt = at;
+  pending.handledBy = user.id;
+  db.auditLogs.unshift({
+    type: "feishu",
+    target: pending.projectName || pending.file?.name || pending.id,
+    action: "confirm-pending-file",
+    user: user.name,
+    meta: { pendingFileId: pending.id, uploadType: pending.uploadType },
+    at
+  });
+  syncFeishuPendingNotificationAfterAction(db, pending, user, "confirm");
+  return pending;
 }
 
 export function normalizeAiSettings(values = {}) {
@@ -1089,8 +4747,99 @@ export function normalizeAiSettings(values = {}) {
   return normalized;
 }
 
+function parseMoney(value) {
+  if (value === null || value === undefined || value === "") return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+
+  const text = String(value).trim();
+  if (!text) return 0;
+
+  const chineseAmount = parseChineseMoney(text);
+  if (chineseAmount) return chineseAmount;
+
+  const match = text.replaceAll(",", "").match(/-?\d+(?:\.\d+)?/);
+  if (!match) return 0;
+  const number = Number(match[0]);
+  if (!Number.isFinite(number)) return 0;
+
+  if (/万|w/i.test(text)) return number * 10000;
+  return number;
+}
+
+function parseChineseMoney(text) {
+  const source = String(text);
+  const chineseMatch = source.match(/[壹贰叁肆伍陆柒捌玖拾佰仟万亿零一二三四五六七八九十百千万两]+(?:元|圆|整|正|人民币|RMB|¥|￥)*/);
+  if (!chineseMatch && !/[壹贰叁肆伍陆柒捌玖拾佰仟万亿]/.test(source)) return 0;
+
+  const normalized = (chineseMatch?.[0] || source)
+    .replace(/[圆元整正]/g, "")
+    .replace(/零/g, "")
+    .replace(/两/g, "二")
+    .replace(/[壹一]/g, "1")
+    .replace(/[贰二]/g, "2")
+    .replace(/[叁三]/g, "3")
+    .replace(/[肆四]/g, "4")
+    .replace(/[伍五]/g, "5")
+    .replace(/[陆六]/g, "6")
+    .replace(/[柒七]/g, "7")
+    .replace(/[捌八]/g, "8")
+    .replace(/[玖九]/g, "9")
+    .replace(/拾/g, "十")
+    .replace(/佰/g, "百")
+    .replace(/仟/g, "千");
+
+  const han = normalized.match(/[1-9十百千万亿]+/);
+  const hasChineseDigits = /[壹贰叁肆伍陆柒捌玖拾佰仟零一二三四五六七八九十百两]/.test(source);
+  if (hasChineseDigits && han && /[十百千万亿]/.test(han[0])) return parseChineseNumber(han[0]);
+
+  const direct = normalized.match(/([1-9]\d*(?:\.\d+)?)\s*(亿|千万|百万|十万|万)/);
+  if (direct) return Number(direct[1]) * chineseUnitValue(direct[2]);
+
+  return 0;
+}
+
+function chineseUnitValue(unit) {
+  return {
+    十万: 100000,
+    百万: 1000000,
+    千万: 10000000,
+    万: 10000,
+    亿: 100000000
+  }[unit] || 1;
+}
+
+function parseChineseNumber(value) {
+  const digits = { "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9 };
+  const smallUnits = { 十: 10, 百: 100, 千: 1000 };
+  let total = 0;
+  let section = 0;
+  let number = 0;
+
+  for (const char of value) {
+    if (digits[char]) {
+      number = digits[char];
+      continue;
+    }
+
+    if (smallUnits[char]) {
+      section += (number || 1) * smallUnits[char];
+      number = 0;
+      continue;
+    }
+
+    if (char === "万" || char === "亿") {
+      section += number;
+      total += section * chineseUnitValue(char);
+      section = 0;
+      number = 0;
+    }
+  }
+
+  return total + section + number;
+}
+
 async function analyzeProjectFiles(aiSettings, values, files, interestRateSettings) {
-  const extractedFiles = await Promise.all(files.map((file) => extractFileContent(file, { shouldUseOcrForPdf })));
+  const extractedFiles = await Promise.all(files.map(extractFileContent));
   const text = extractedFiles
     .map((file) => `文件：${file.name}\n类型：${file.type || "unknown"}\n提取状态：${file.extractionStatus}\n${file.text || ""}`)
     .join("\n\n")
@@ -1197,6 +4946,120 @@ async function readAiError(res) {
   } catch {
     return "";
   }
+}
+
+async function extractFileContent(file) {
+  const name = file.name || "未命名文件";
+  const type = file.type || "";
+  const lowerName = name.toLowerCase();
+  const fallback = {
+    ...file,
+    text: file.text || `文件名：${name}\n文件类型：${type || "unknown"}\n文件大小：${file.size || 0} bytes`,
+    extractionStatus: "仅记录文件信息"
+  };
+
+  try {
+    if (file.text && !file.base64) return { ...file, extractionStatus: "浏览器已读取文本" };
+    if (!file.base64) return fallback;
+
+    const buffer = Buffer.from(file.base64, "base64");
+    if (lowerName.endsWith(".pdf") || type === "application/pdf") {
+      const pdfParse = (await import("pdf-parse")).default;
+      const parsed = await pdfParse(buffer);
+      const text = (parsed.text || "").trim();
+      if (shouldUseOcrForPdf(text) && tencentOcrConfigured()) {
+        const reason = text ? "PDF 文本缺少可解析金额/日期" : "PDF 未提取到文本";
+        console.log(`[OCR] ${name}: ${reason}; calling Tencent OCR`);
+        try {
+          const ocr = await recognizeFileWithTencentOcrDetailed(file, { isPdf: true, pageCount: parsed.numpages });
+          console.log(`[OCR] ${name}: Tencent OCR returned ${ocr.text.length} characters`);
+          return {
+            ...file,
+            text: ocr.text,
+            tableRows: ocr.tableRows || [],
+            pageCount: parsed.numpages,
+            extractionStatus: ocr.text.trim() ? `${reason}，已使用腾讯云 OCR 识别` : "腾讯云 OCR 未识别到文本"
+          };
+        } catch (error) {
+          console.error(`[OCR] ${name}: Tencent OCR failed: ${error.message}`);
+          return {
+            ...file,
+            text,
+            extractionStatus: `${reason}，但腾讯云 OCR 调用失败：${error.message}`
+          };
+        }
+      }
+      if (shouldUseOcrForPdf(text) && !tencentOcrConfigured()) {
+        console.warn(`[OCR] ${name}: Tencent OCR is not configured`);
+      }
+      return {
+        ...file,
+        text,
+        extractionStatus: text
+          ? "PDF 文本提取成功"
+          : "PDF 未提取到可解析文本，可能是扫描件或图片合同；需要接入 OCR/视觉模型后才能精准识别"
+      };
+    }
+
+    if (type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(lowerName)) {
+      if (!tencentOcrConfigured()) return fallback;
+      try {
+        console.log(`[OCR] ${name}: calling Tencent OCR for image`);
+        const ocrText = await recognizeFileWithTencentOcr(file, { isPdf: false });
+        console.log(`[OCR] ${name}: Tencent OCR returned ${ocrText.length} characters`);
+        return {
+          ...file,
+          text: ocrText,
+          extractionStatus: ocrText.trim() ? "图片合同已使用腾讯云 OCR 识别" : "腾讯云 OCR 未识别到文本"
+        };
+      } catch (error) {
+        console.error(`[OCR] ${name}: Tencent OCR failed: ${error.message}`);
+        return { ...fallback, extractionStatus: `图片合同腾讯云 OCR 调用失败：${error.message}` };
+      }
+    }
+
+    if (lowerName.endsWith(".docx") || type.includes("wordprocessingml")) {
+      const mammoth = await import("mammoth");
+      const parsed = await mammoth.extractRawText({ buffer });
+      return { ...file, text: parsed.value || "", extractionStatus: parsed.value ? "Word 文本提取成功" : "Word 未提取到文本" };
+    }
+
+    if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsm") || type.includes("spreadsheet")) {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+      const tableRows = [];
+      const text = workbook.SheetNames.map((sheetName) => {
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+        rows.forEach((row) => tableRows.push({ sheetName, cells: row.map((cell) => String(cell ?? "").replace(/\r?\n/g, " ")) }));
+        const tsv = rows.map((row) => row.map((cell) => String(cell ?? "").replace(/\r?\n/g, " ")).join("\t")).join("\n");
+        return `工作表：${sheetName}\n${tsv}`;
+      }).join("\n\n");
+      return { ...file, text, tableRows, extractionStatus: text ? "Excel 表格提取成功" : "Excel 未提取到表格内容" };
+    }
+
+    if (lowerName.endsWith(".csv") || lowerName.endsWith(".txt") || lowerName.endsWith(".md") || lowerName.endsWith(".tsv") || type.startsWith("text/")) {
+      return { ...file, text: buffer.toString("utf8"), extractionStatus: "文本文件读取成功" };
+    }
+
+    return fallback;
+  } catch (error) {
+    return { ...fallback, extractionStatus: `文件内容提取失败：${humanizeExtractionError(error, name)}` };
+  }
+}
+
+function humanizeExtractionError(error, fileName = "文件") {
+  const message = String(error?.message || error || "");
+  if (/invalid pdf|bad xref|xref|pdf structure|invalid root|no pdf/i.test(message)) {
+    return `${fileName} 不是标准 PDF 或文件已损坏，请重新导出 PDF 后上传；如果是扫描件，建议先转成清晰图片或接入 OCR 后再识别`;
+  }
+  if (/password|encrypted|decrypt/i.test(message)) {
+    return `${fileName} 可能被加密或设置了密码，请解除密码后重新上传`;
+  }
+  if (/end of file|unexpected/i.test(message)) {
+    return `${fileName} 内容不完整，可能上传中断或文件损坏，请重新上传完整文件`;
+  }
+  return message || "文件暂时无法读取，请换一个清晰版本重新上传";
 }
 
 function shouldUseOcrForPdf(text) {

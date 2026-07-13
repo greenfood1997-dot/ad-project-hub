@@ -1,0 +1,87 @@
+这次请优先使用完整替换包：
+/Users/greenfood/Documents/中台产品/ad-project-hub-github-upload-latest-replace.zip
+
+这个压缩包解压后，里面就是完整的 ad-project-hub-github-upload 文件夹。
+最稳的做法是：在 GitHub 里删除旧的 ad-project-hub-github-upload 文件夹，上传解压后的新文件夹。
+
+如果 GitHub 网页不方便替换整个文件夹，再使用这个文件夹里的内容上传：
+GitHub上传-最终只上传这里面的内容
+这时只上传“这个文件夹里面的内容”，不要上传这个外层文件夹本身。
+
+正确做法：
+1. GitHub 打开分支 `oa-test-version` 里的 `ad-project-hub-github-upload`。
+2. 先删除旧的 `dist` 文件夹；如果网页可操作，最稳的是删除整个旧 `ad-project-hub-github-upload` 文件夹。
+3. 解压完整替换包后，上传里面同名的 `ad-project-hub-github-upload` 文件夹；或打开 `GitHub上传-最终只上传这里面的内容` 后全选内部文件上传。
+4. 确认 GitHub 目录里出现 `RELEASE_VERSION.txt` 和 `RENDER_POSTGRES_MIGRATION.md`。
+5. 不要选择 node_modules、dist 或任何 .zip 压缩包；GitHub 里也不能有 dist。
+6. 上传完成后点击 GitHub 的 Commit changes，再去 Render 点 `Manual Deploy -> Clear build cache & deploy`。
+
+你要在 GitHub 上传后的目录里看到这些东西：
+- src
+- server
+- data
+- db
+- tests
+- package.json
+- package-lock.json
+- server.mjs
+- index.html
+- RELEASE_VERSION.txt（内容必须是 2026-07-13-production-readiness-pass）
+- RENDER_POSTGRES_MIGRATION.md
+
+验证这次是否真的上传成功，不再只看“移除”：
+1. 打开 GitHub 的 ad-project-hub-github-upload/tests/frontend-upload-progress-entry.mjs。
+   如果这个文件不存在，说明 GitHub 还不是最新版。
+2. 打开 GitHub 的 ad-project-hub-github-upload/package.json。
+   不能有 "prestart": "npm run build"，否则 Render 启动时会二次构建，可能一直检测不到端口。
+3. 打开 GitHub 的 ad-project-hub-github-upload/src/main.jsx。
+   必须能搜到：UploadProgressPanel、缩到后台、appendPickedFiles、dropFiles。
+4. GitHub 的 ad-project-hub-github-upload 里面不能再有 dist 文件夹。
+
+验证识别进度和缩到后台是否真的上传成功：
+打开 GitHub 里的 src/main.jsx，搜索“缩到后台”或“UploadProgressPanel”。
+如果能搜到，说明这次上传包含识别进度。
+如果搜不到，说明 Render 线上看到的还是旧版本。
+
+这份版本已经包含：
+- 发布版本：2026-07-13-production-readiness-pass。部署后打开 /api/health，version 必须是这个值；仍是 2026-07-08 说明 Render 还没有换到新包。
+- 多次拖拽文件会追加显示，不会覆盖前一个文件。
+- 每个文件右侧有“移除”按钮，可以单独删除。
+- 文件选中后会立刻显示识别进度。
+- 识别过程中可以“缩到后台”。
+- Render 构建命令为 npm install && npm run build，避免线上继续读取旧 dist。
+- package.json 已移除 prestart，npm start 只负责启动服务，避免 Render 启动时二次构建导致部署失败。
+- 上传前检查会自动跑前后端 API 覆盖测试，防止前端按钮调用不存在的后端接口。
+- 上传前检查会自动跑上传进度入口测试，防止“多次拖拽又覆盖、没有进度提示、没有缩到后台”这种旧版问题再次混进 GitHub。
+- 上传前检查会自动跑权限边界测试，防止普通员工看到非自己项目、成员后台或飞书密钥。
+- 上传前检查会自动跑 JSON 数据库韧性测试：tests/json-db-resilience-regression.mjs，防止 data/db.json 损坏后 OA 启动失败。
+- 后端写库测试会改 data/db.json，请按“上传前检查.command”顺序运行，不要手动并行同时跑多个写库测试。
+- 日常快速自检可以运行：npm run check。
+- 上传 GitHub 或大改动前建议运行：npm run check:full。它会按顺序跑写库测试，避免 data/db.json 被并行测试互相覆盖。
+- AI 助手已接入后端 /api/ai/assistant，会按账号权限回答项目备用金、进度、审批和现金流问题。
+- 后端已支持 /api/system/scan 主动巡检，会生成待分派、进度滞后、回款跟进和现金流安全线提醒。
+- 管理员可在后台产品设置开启“自动外部提醒”：默认关闭，只会向飞书/企业微信推送本次新出现的高风险待办，不会重复打扰旧待办。
+- 后台产品设置可安全清理误建项目，必须输入完整项目名确认；建议先导出 OA 备份。
+- 后台产品设置可刷新 1 年期 LPR，供后续垫资利息与利润测算使用。
+- 正式长期使用前请按 RENDER_POSTGRES_MIGRATION.md 把 Render 从 JSON 存储迁移到 PostgreSQL。
+- 管理层/财务在通知抽屉里可以点“立即巡检”，手动触发 /api/system/scan 并刷新智能待办。
+- 项目分派页已接入 AI 分派建议，会根据角色、部门和当前项目负载推荐 PM、销售和执行成员，并支持一键套用。
+- 不包含 node_modules 和 dist，所以不会因为文件过大无法上传。
+
+如果上传后线上还是旧页面：
+1. 先双击“部署后检查.command”。
+2. 如果提示 tests 文件 404，说明 GitHub 没传完整，请重新用完整替换包上传。
+3. 如果提示 package.json 还有 prestart，说明 GitHub 还是旧包，请重新上传。
+4. 如果提示 GitHub 还有 dist，删除 GitHub 上 ad-project-hub-github-upload/dist 后重新部署。
+5. 如果 GitHub 都通过但 Render 不通过，去 Render 点 Manual Deploy / Clear build cache & deploy。
+
+部署后快速确认：
+上传 GitHub 并且 Render 部署完成后，双击“部署后检查.command”。
+如果中文文件名不好点，也可以双击英文版“post-deploy-check.command”。
+它会自动检查：
+- GitHub 是否真的有识别进度、缩到后台、无 prestart、/api/health。
+- GitHub 是否还残留旧 dist。
+- Render 线上 /api/health 是否已经是最新版。
+
+如果它提示“全部通过”，说明线上已经更新成功。
+如果它提示“需要处理”，按它写的那一条修，不用再猜页面为什么还是旧的。

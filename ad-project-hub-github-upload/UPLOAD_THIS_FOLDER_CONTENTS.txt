@@ -1,0 +1,17 @@
+如果可以替换整个 GitHub 文件夹，优先使用：
+/Users/greenfood/Documents/中台产品/ad-project-hub-github-upload-latest-replace.zip
+
+如果只能进入 GitHub 的 ad-project-hub-github-upload 目录手动上传，请上传本文件夹里面的内容，不要上传外层文件夹本身。
+GitHub 页面应看到 src、server、data、db、tests、package.json 等在当前目录下。
+上传后必须检查：
+1. tests/frontend-upload-progress-entry.mjs 存在。
+2. package.json 不能有 "prestart": "npm run build"。
+3. src/main.jsx 能搜到 UploadProgressPanel、缩到后台、appendPickedFiles、dropFiles。
+4. ad-project-hub-github-upload 里不能有 dist。
+5. tests/json-db-resilience-regression.mjs 存在，上传前检查会验证 JSON 数据库韧性。
+
+注意：
+- 后端写库测试会改 data/db.json，请用“上传前检查.command”顺序运行。
+- 不要手动并行同时跑多个写库测试，否则本地测试数据可能互相覆盖。
+- 日常快速自检可以运行：npm run check。
+- 上传 GitHub 或大改动前建议运行：npm run check:full。

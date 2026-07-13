@@ -59,11 +59,7 @@ const DIRECTOR_ROLES = ["shareholder", "admin", "director"];
 const MANAGEMENT_ROLES = ["shareholder", "admin", "director", "finance"];
 const PROJECT_WRITE_ROLES = ["shareholder", "admin", "director", "pm", "sales"];
 const PROJECT_UPLOAD_ROLES = ["shareholder", "admin", "director", "pm", "sales", "member"];
-const BUILD_VERSION = "2026-07-13-production-readiness-pass";
-// State refreshes happen after most UI actions. Avoid rewriting the full database
-// repeatedly while the scheduler and the explicit scan endpoint remain authoritative.
-const STATE_SCAN_COOLDOWN_MS = 15 * 1000;
-let lastStateScanAt = 0;
+const BUILD_VERSION = "2026-07-08-ai-task-command-pass";
 const ROLE_LABELS = {
   shareholder: "股东",
   admin: "管理员",
@@ -101,7 +97,7 @@ function deployHealthPayload() {
     startCommand: "npm start",
     checkedAt: new Date().toISOString(),
     nodeEnv: process.env.NODE_ENV || "development",
-    storageMode: dbMode(),
+    storageMode: dbMode,
     databaseUrl: envConfigured("DATABASE_URL"),
     scheduler: getSchedulerStatus(),
     aiEnv: {
@@ -624,8 +620,7 @@ function scopedSettings(settings = {}, user) {
     feishu: settings.feishu ? { configured: Boolean(settings.feishu.appId && settings.feishu.appSecret) } : null,
     wechat: settings.wechat ? { configured: Boolean(settings.wechat.webhookUrl || settings.wechat.corpId) } : null,
     storage: settings.storage ? { configured: Boolean(settings.storage.bucket || settings.storage.publicBaseUrl), provider: settings.storage.provider } : null,
-    approvalRules: settings.approvalRules || null,
-    alertSettings: settings.alertSettings || null
+    approvalRules: settings.approvalRules || null
   };
   if (settings.aiService) {
     result.aiService = {
@@ -698,11 +693,7 @@ export async function handleApi(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/state") {
-    const now = Date.now();
-    if (now - lastStateScanAt >= STATE_SCAN_COOLDOWN_MS) {
-      await mutateDb((db) => scanSystemNotifications(db, { id: "system", name: "系统扫描" }));
-      lastStateScanAt = now;
-    }
+    await mutateDb((db) => scanSystemNotifications(db, { id: "system", name: "系统扫描" }));
     const fresh = await readDb();
     const scoped = scopedSnapshot(fresh, ensureMemberFields(user));
     sendJson(res, 200, {

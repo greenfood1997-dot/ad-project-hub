@@ -1,0 +1,66 @@
+import { readFile } from "node:fs/promises";
+
+const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
+const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+assert(source.includes("function UploadProgressPanel"), "upload dialog should render a progress panel");
+assert(source.includes('const BUILD_VERSION = "2026-07-08-ai-task-command-pass"'), "build version should identify the latest AI task command package");
+assert(source.includes("UploadProgressPanel"), "upload dialog should mount UploadProgressPanel");
+assert(source.includes("upload-modal-body"), "upload dialog should separate the scrollable body from the fixed action bar");
+assert(source.includes("读取文件") && source.includes("AI/OCR识别") && source.includes("预览确认") && source.includes("写入项目"), "upload progress should show all recognition steps");
+assert(source.includes("appendPickedFiles"), "file picker and drag-drop should share append logic");
+assert(source.includes("const [uploadInitialFiles, setUploadInitialFiles]") && source.includes("initialFiles={uploadInitialFiles}"), "project dashboard should pass AI-dropped files into the upload dialog");
+assert(source.includes("function UploadDialog({ session, projects, selected, initialType = \"create-project\", initialFiles = []") && source.includes("const [files, setFiles] = useState(() => initialFiles)"), "upload dialog should initialize its file list from AI-dropped files");
+assert(source.includes("已选择 ${initialFiles.length} 个文件，下一步点击 AI 预览识别"), "upload dialog should show ready progress for prefilled AI-dropped files");
+assert(source.includes("setFiles((current) =>") && source.includes("merged.push(file)"), "file picker should append new files instead of replacing current files");
+assert(source.includes("uploadedFileKey") && source.includes("keys.has(key)"), "file picker should deduplicate repeated files while appending");
+assert(source.includes("已选择 ${merged.length} 个文件，下一步点击 AI 预览识别"), "upload progress should update immediately after files are picked or dropped");
+assert(source.includes("progress.step !== \"idle\" || loading || preview || files.length > 0"), "upload progress should remain visible as soon as files exist");
+assert(source.includes("文件已加入任务") && source.includes("预览完成前不会写入项目"), "upload progress should clearly explain the pre-preview waiting state");
+assert(source.includes("preview-progress-note") && source.includes("识别已完成，正在等待你确认入库。") && source.includes("长表格会在弹窗内自动换行"), "upload preview should explain that progress has finished and confirmation is pending");
+assert(source.includes('<strong title={row.name || row.matched || "未命名项"}>'), "long preview row names should expose the full text without stretching the modal");
+assert(source.includes("upload-head-progress") && source.includes("{progressLabel}") && source.includes("{progressPercent}%"), "upload dialog should show recognition progress in the fixed header area");
+assert(source.includes("已选择 ${next.length} 个文件，等待重新预览") && source.includes("等待选择文件"), "removing files should keep progress accurate and reset when empty");
+assert(source.includes("function dropFiles") && source.includes("event.dataTransfer?.files"), "upload dialog should support real drag-and-drop files");
+assert(source.includes("onDrop={dropFiles}") && source.includes("onDragOver={(event) => event.preventDefault()}"), "file drop zone should wire drop and drag-over handlers");
+assert(source.includes("function removeFile") && source.includes("移除"), "upload file list should support removing a single file");
+assert(source.includes("onMinimize") && source.includes("upload-mini-panel") && source.includes("缩到后台继续"), "upload task should be minimizable to background");
+assert(source.includes("const uploadNextAction = loading") && source.includes("点开后开始 AI 预览识别") && source.includes("点开后确认入库"), "minimized upload task should explain the next action");
+assert(source.includes("const uploadTargetName") && source.includes("upload-mini-meta") && source.includes("{uploadTargetName} · {files.length} 个文件"), "minimized upload task should show target project and file count");
+assert(source.includes("const canCloseUpload = !loading") && source.includes("const canEditUploadFiles = !loading && !confirmed"), "upload dialog should separate close/edit safety from background processing");
+assert(source.includes("处理中，缩到后台"), "upload dialog should guide users to minimize instead of closing while processing");
+assert(source.includes('disabled={!canEditUploadFiles}') && source.includes('loading ? "处理中" : "移除"'), "upload files should not be removable while an upload/recognition request is running");
+assert(source.includes("/api/projects/upload-preview"), "upload dialog should preview through backend before writing data");
+assert(source.includes("预览阶段不会写入项目"), "upload dialog should make preview-before-write behavior clear");
+assert(source.includes("function explainUploadError") && source.includes("AI 接入还没配好") && source.includes("扫描件需要 OCR") && source.includes("文件太大，服务端没完整接收"), "upload failures should be translated into actionable user guidance");
+assert(source.includes("function UploadErrorHint") && source.includes("upload-error-hint") && source.includes("setUploadError(explainUploadError(error))"), "upload dialog should render actionable error cards instead of raw error-only text");
+assert(source.includes("已按当前项目预选：{typeLabels[type]}。AI 预览确认前不会写入项目。"), "upload dialog should confirm the preselected project upload type");
+assert(source.includes("const canCreateProject = canCreateProjectRole(session)") && source.includes("safeInitialType"), "upload dialog should derive a role-safe initial upload type");
+assert(source.includes("typeOptions") && source.includes("canUseCreateProject ? [\"create-project\""), "upload dialog should only show create-project option to project creation roles");
+assert(source.includes("当前账号不能创建新项目，已切换为上传到已有项目。"), "upload dialog should automatically switch away from create-project for unauthorized roles");
+assert(source.includes("当前账号不能创建新项目，请让销售、PM 或管理层上传合同创建项目。"), "upload preview/confirm should guard create-project permission");
+assert(source.includes("你的账号不能创建新项目；可以把成本表、报价表、核销表上传到自己可见的项目。"), "upload dialog should explain project creation limits to ordinary staff");
+assert(styles.includes(".upload-progress-panel"), "upload progress panel should have styles");
+assert(styles.includes(".upload-head-progress") && styles.includes("position: relative") && styles.includes("text-overflow: ellipsis"), "upload header should keep a visible compact recognition progress bar");
+assert(styles.includes("grid-template-rows: auto minmax(0, 1fr) auto") && styles.includes(".upload-modal-body") && styles.includes("overscroll-behavior: contain"), "upload modal should keep header/actions fixed while the content scrolls");
+assert(styles.includes(".upload-progress-panel") && styles.includes("position: sticky"), "upload progress should stay visible while reviewing long recognition results");
+assert(styles.includes("width: min(1120px, calc(100vw - 48px))"), "upload modal should be wide enough for quote/cost previews on desktop");
+assert(styles.includes(".preview-table") && styles.includes("overflow-x: auto") && styles.includes("overscroll-behavior-x: contain") && styles.includes("grid-template-columns: minmax(0, 1fr)") && styles.includes(".preview-table p"), "upload preview table should stay inside the modal with contained scrolling for wide quote rows");
+assert(styles.includes("contain: inline-size") && styles.includes("max-width: calc(100vw - 48px)") && styles.includes("isolation: isolate") && styles.includes("grid-template-columns: minmax(0, 1fr) minmax(96px, 148px)"), "upload modal should prevent wide recognition rows from stretching outside the viewport");
+assert(styles.includes("max-inline-size: 100%") && styles.includes("inline-size: 100%") && styles.includes("overflow: clip"), "upload preview should hard-lock wide recognition content inside the modal");
+assert(styles.includes(".modal-backdrop") && styles.includes("overflow: hidden") && styles.includes("height: min(860px, calc(100vh - 48px))"), "upload modal should constrain scrolling to the modal body");
+assert(styles.includes(".modal-actions") && styles.includes("flex: 0 0 auto") && styles.includes("min-height: 58px"), "upload modal actions should remain in the non-scrollable footer below long recognition previews");
+assert(styles.includes("word-break: break-word") && styles.includes("box-sizing: border-box"), "long preview service text should not stretch the upload modal");
+assert(styles.includes(".preview-table b") && styles.includes("white-space: normal"), "upload preview amounts should wrap instead of forcing horizontal movement");
+assert(styles.includes(".upload-preview *,\n.preview-section *,\n.preview-table *") && styles.includes("grid-template-columns: minmax(0, 1fr) minmax(96px, 148px)") && styles.includes("white-space: normal"), "wide preview rows should reserve bounded amount columns and clip/wrap inside the modal");
+assert(styles.includes(".preview-progress-note") && styles.includes("#f0fdf4"), "upload preview completion note should have readable styles");
+assert(styles.includes(".upload-context-note"), "preselected upload type note should have styles");
+assert(styles.includes(".upload-error-hint") && styles.includes("#fecaca") && styles.includes("overflow-wrap: anywhere"), "upload error guidance should have readable warning styles");
+assert(styles.includes(".upload-mini-panel"), "minimized upload panel should have styles");
+assert(styles.includes(".upload-mini-meta"), "minimized upload next-action metadata should have styles");
+
+console.log("frontend upload progress entry passed");

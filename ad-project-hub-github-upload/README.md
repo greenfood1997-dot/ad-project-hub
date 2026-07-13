@@ -72,15 +72,9 @@ npm run db:schema
 npm run serve
 ```
 
-打开 `/api/health`，返回里的 `storageMode` 为 `postgres` 且 `databaseUrl` 为 `true`，即代表已经切换。
+打开 `/api/state`，返回里的 `dbMode` 为 `postgres` 即代表已经切换。
 
 服务启动时会自动读取项目根目录下的 `.env`。如果服务器系统里已经设置了同名环境变量，会优先使用系统环境变量。
-
-Render 从 JSON 安全迁移到 PostgreSQL 的具体点击步骤、备份恢复和验收方法见：
-
-```text
-RENDER_POSTGRES_MIGRATION.md
-```
 
 建表 SQL 在：
 

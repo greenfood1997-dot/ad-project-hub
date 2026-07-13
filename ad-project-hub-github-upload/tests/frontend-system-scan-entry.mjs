@@ -1,0 +1,73 @@
+import { readFile } from "node:fs/promises";
+
+const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
+const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+assert(source.includes('apiRequest("/api/system/scan"'), "frontend should call /api/system/scan");
+assert(source.includes("立即巡检"), "notification drawer should expose the manual scan button");
+assert(source.includes("巡检中"), "manual scan button should show loading state");
+assert(source.includes("canScan={isManagement}"), "manual scan button should be limited to management roles in UI");
+assert(source.includes("function nextStepText(item = {})"), "notification drawer should explain next step by notification type");
+assert(source.includes("function notificationPriorityQueue(items = [])") && source.includes("parseNoticeAmount") && source.includes("typeWeight"), "notification drawer should compute a real priority queue from todo type, age, severity, and amount");
+assert(source.includes("const priorityQueue = notificationPriorityQueue(items)") && source.includes("今天先处理") && source.includes("按高危、等待时间、金额压力和业务类型自动排序。"), "notification drawer should render today's prioritized todo queue");
+assert(source.includes("priorityQueue.map(({ item, reason, ageHours, amount })") && source.includes("onClick={() => onOpenTarget(item)}") && source.includes("涉及 ${money(amount)}"), "priority todo cards should route to the exact target and explain money pressure");
+assert(source.includes("下一步：打开项目分派") && source.includes("下一步：进入审批工作台") && source.includes("下一步：查看现金流压力"), "notification next steps should cover assignment, approval, and cashflow");
+assert(source.includes('item.actionView === "approvals"') && source.includes("下一步：进入审批工作台，通过、驳回或查看流程。"), "approval stale notifications should guide users into the real approval workbench");
+assert(source.includes("下一步：打开文件与 AI 解析区") && source.includes("下一步：打开回款记录"), "notification next steps should cover file parsing and receivable risks");
+assert(source.includes('item.actionView === "project-files"') && source.includes("下一步：打开文件与 AI 解析区，确认资料是否入库。"), "verification missing notifications should guide users to file and AI parsing section");
+assert(source.includes('item.type === "supplier-settlement-pending"') && source.includes("下一步：打开供应商结算区，确认付款审批或标记已付款。"), "supplier settlement notifications should explain supplier payment next step");
+assert(source.includes('"project-cost-pressure"') && source.includes('"project-cost-overrun"') && source.includes("核对执行预算、已发生成本和后续支出"), "cost pressure notifications should explain the budget review next step");
+assert(source.includes("notification-next-step") && source.includes("nextStepText(item)"), "notification cards should render the next-step hint");
+assert(source.includes("立即巡检一次") && source.includes("普通成员只会看到自己项目相关提醒"), "empty notification state should offer role-appropriate guidance");
+assert(source.includes("function openNotificationQuickAction(action = \"\")"), "empty notification state should route quick actions through the dashboard shell");
+assert(source.includes("onQuickAction={openNotificationQuickAction}") && source.includes("canManageAssignments={canManageAssignments}") && source.includes("canCreateProject={canCreateProject}"), "notification drawer should receive quick action permissions");
+assert(source.includes("notification-empty-actions") && source.includes("项目分派") && source.includes("现金流压力") && source.includes("审批工作台") && source.includes("上传合同创建项目") && source.includes("上传项目材料"), "empty notification drawer should expose real navigation and upload actions");
+assert(source.includes("已打开项目分派，可以检查是否有新项目需要 PM、销售或执行成员。"), "assignment quick action should explain the destination");
+assert(source.includes("已打开经营舱现金流压力页，可以检查 6 个月现金安全线。"), "cash quick action should explain the destination");
+assert(source.includes("已打开审批工作台，可以提交或处理报销、备用金和供应商付款。"), "approval quick action should explain the destination");
+assert(source.includes("setNotificationsOpen(true)"), "manual scan should keep/open notification drawer after scan");
+assert(source.includes('item.actionView === "management:cash"') && source.includes('setActiveView("management")') && source.includes('setActiveSubView("现金流压力")'), "cashflow notifications should open the management cashflow cockpit");
+assert(source.includes("const [projectFocus") && source.includes('setProjectFocus("files")') && source.includes('["project-receivable-risk", "supplier-settlement-pending"].includes(item.type)') && source.includes("setProjectFocus(target)"), "project notifications should focus the relevant project detail section");
+assert(source.includes("已打开项目分派："), "assignment notifications should tell users where they were taken");
+assert(source.includes("已打开审批工作台："), "approval notifications should tell users where they were taken");
+assert(source.includes("已打开经营舱现金流压力页，请按 6 个月安全线处理。"), "cashflow notifications should explain the management destination");
+assert(source.includes("文件与 AI 解析区"), "Feishu file notifications should explain the file/AI target section");
+assert(source.includes("function feishuPendingLedgerRows(items = [])") && source.includes("飞书群") && source.includes("处理人") && source.includes("处理时间"), "Feishu pending queue should build a CSV ledger with source and handling fields");
+assert(source.includes("const [exportingPendingFiles") && source.includes("async function exportPendingFiles()") && source.includes("downloadCsv(\"飞书文件入库队列.csv\", feishuPendingLedgerRows(pendingFiles))"), "Feishu bot panel should export pending file queue as CSV");
+assert(source.includes("导出队列") && source.includes("飞书文件入库队列 CSV 已导出：${pendingFiles.length} 条。") && source.includes("当前没有可导出的飞书文件队列。"), "Feishu queue export should show action, empty notice, and success log");
+assert(source.includes("回款流水区") && source.includes("项目进度区"), "project notifications should explain the focused project section");
+assert(source.includes('id="project-files-section"') && source.includes('id="project-payments-section"') && source.includes('id="project-progress-section"'), "project detail should expose scroll targets for files, payments, and progress");
+assert(source.includes("scrollIntoView({ behavior: \"smooth\", block: \"start\" })"), "project detail focus should scroll to the target section");
+assert(source.includes("setNotificationsOpen(false)"), "opening a notification target should close the drawer");
+assert(source.includes("const [handlingNotificationId, setHandlingNotificationId]"), "notification drawer should keep per-item handling state");
+assert(source.includes("const [notificationLastAction, setNotificationLastAction]"), "notification drawer should remember the latest visible action result");
+assert(source.includes("setHandlingNotificationId(item.id)") && source.includes('setHandlingNotificationId("")'), "notification actions should disable only the item being handled and reset afterwards");
+assert(source.includes("const leftCount = Math.max(systemNotifications.length - 1, 0)") && source.includes("当前还剩 ${leftCount} 条待办"), "notification action result should tell user the remaining todo count");
+assert(source.includes("setNotificationLastAction({") && source.includes("已处理") && source.includes("已忽略"), "notification actions should write a visible latest action summary");
+assert(source.includes('action: "reopen"') && source.includes("function reopenNotification(item)") && source.includes("恢复待办"), "notification drawer should allow reopening the latest handled or ignored todo");
+assert(source.includes("canReopen: true") && source.includes("已恢复待办：") && source.includes("它会重新出现在列表里。"), "notification reopen should be limited to handled actions and explain the restored state");
+assert(source.includes("handlingId={handlingNotificationId}") && source.includes('disabled={handlingId === item.id}') && source.includes("处理中"), "notification drawer buttons should show per-item loading");
+assert(source.includes("const [sendingNotificationId, setSendingNotificationId]"), "notification drawer should keep per-item Feishu sending state");
+assert(source.includes("setSendingNotificationId(item.id)") && source.includes('setSendingNotificationId("")'), "Feishu sending should disable only the active notification and reset afterwards");
+assert(source.includes("sendingFeishuId={sendingNotificationId}") && source.includes('disabled={sendingFeishuId === item.id}') && source.includes("发送中"), "Feishu send button should show per-item loading");
+assert(source.includes("飞书已发送：") && source.includes("飞书未发送："), "Feishu send should update the latest visible action summary");
+assert(source.includes("缺少飞书绑定：") && source.includes("data.missingRecipients") && source.includes("error.data"), "Feishu send failures should surface missing member bindings from the API");
+assert(source.includes("const [sendingWechatNotificationId, setSendingWechatNotificationId]"), "notification drawer should keep per-item WeCom sending state");
+assert(source.includes('apiRequest("/api/notifications/wechat/send"') && source.includes("发送企业微信"), "notification drawer should expose WeCom send action");
+assert(source.includes("sendingWechatId={sendingWechatNotificationId}") && source.includes('disabled={sendingWechatId === item.id}'), "WeCom send should disable only the active notification");
+assert(source.includes("企业微信已发送：") && source.includes("item.wechatDelivery?.sentAt"), "WeCom send should update visible action summary and delivery timestamp");
+assert(source.includes("智能巡检已完成，生成/更新"), "manual scan should update the latest visible action summary");
+assert(source.includes("lastAction={notificationLastAction}") && source.includes("notification-last-action") && source.includes('lastAction?.id === item.id ? "fresh" : ""'), "notification drawer should render latest action and highlight the affected card");
+assert(source.includes("飞书通知未找到可发送对象，请检查成员飞书绑定。"), "Feishu send result should explain empty recipient cases");
+assert(source.includes("item.feishuDelivery?.missingRecipients?.length") && source.includes("未收到飞书："), "notification cards should show members that missed Feishu delivery");
+assert(styles.includes(".notification-last-action") && styles.includes(".notification-card.fresh"), "notification latest action and highlighted card should have styles");
+assert(styles.includes(".notification-priority-panel") && styles.includes(".notification-priority-panel button:hover") && styles.includes(".notification-priority-panel b.danger"), "notification priority queue should have dedicated readable styles");
+assert(styles.includes(".notification-delivery.warn"), "missing Feishu delivery rows should have warning styles");
+assert(styles.includes(".notification-next-step") && styles.includes(".notification-empty small"), "notification next-step and empty guidance should have styles");
+assert(styles.includes(".notification-empty-actions") && styles.includes(".notification-empty-actions button"), "notification empty quick actions should have styles");
+
+console.log("frontend system scan entry passed");
