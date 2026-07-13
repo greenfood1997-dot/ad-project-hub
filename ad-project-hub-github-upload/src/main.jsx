@@ -1444,6 +1444,10 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     setView("app");
   }, [view]);
 
+  useEffect(() => {
+    if (view.startsWith("admin") && uploadOpen) setUploadMinimized(true);
+  }, [view, uploadOpen]);
+
   function openUpload(type = "create-project", targetProject = null, initialFiles = []) {
     if (targetProject?.id) setSelectedId(targetProject.id);
     setUploadTargetProject(targetProject || null);
@@ -8646,10 +8650,13 @@ function AppShell() {
   };
   const isAdmin = ["shareholder", "admin"].includes(session.role);
   const canManageAssignments = ["shareholder", "admin", "director"].includes(session.role);
-  if (adminRouteMap[view] && (isAdmin || (view === "admin:assignments" && canManageAssignments))) {
-    return <AdminMembers session={session} setView={setView} onLogout={logout} initialTab={adminRouteMap[view]} />;
-  }
-  return <ProjectDashboard session={session} view={view} setView={setView} onLogout={logout} />;
+  const adminVisible = Boolean(adminRouteMap[view] && (isAdmin || (view === "admin:assignments" && canManageAssignments)));
+  return <>
+    <div className={adminVisible ? "app-route-preserved hidden" : "app-route-preserved"}>
+      <ProjectDashboard session={session} view={view} setView={setView} onLogout={logout} />
+    </div>
+    {adminVisible && <AdminMembers session={session} setView={setView} onLogout={logout} initialTab={adminRouteMap[view]} />}
+  </>;
 }
 
 createRoot(document.getElementById("root")).render(<AppShell />);

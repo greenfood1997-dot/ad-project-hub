@@ -8,6 +8,7 @@ function assert(condition, message) {
 }
 
 assert(source.includes("adminRouteMap"), "app shell should map admin deep links to backend tabs");
+assert(source.includes('app-route-preserved hidden') && source.includes('view.startsWith("admin") && uploadOpen'), "admin navigation should preserve and minimize an active upload task");
 assert(source.includes('"admin:product": "product"'), "admin:product should open product settings");
 assert(source.includes('"admin:assignments": "assignments"'), "admin:assignments should open project assignment");
 assert(source.includes('const canManageAssignments = ["shareholder", "admin", "director"].includes(session?.role)') || source.includes('const canManageAssignments = ["shareholder", "admin", "director"].includes(session.role)'), "directors should be allowed to open project assignment");
