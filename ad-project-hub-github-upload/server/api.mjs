@@ -1,5 +1,6 @@
 import { readDb, mutateDb, dbMode } from "./db.mjs";
 import { getCurrentUser, readBody, requireRole, sendJson } from "./http-utils.mjs";
+import { issueAuthToken } from "./auth.mjs";
 import { getSchedulerStatus, reloadSystemScheduler } from "./scheduler.mjs";
 import {
   addComment,
@@ -677,7 +678,6 @@ export async function handleApi(req, res) {
   }
 
   const snapshot = await readDb();
-  const user = getCurrentUser(req, snapshot);
 
   if (req.method === "POST" && url.pathname === "/api/auth/login") {
     const body = await readBody(req);
@@ -688,7 +688,13 @@ export async function handleApi(req, res) {
       sendJson(res, 401, { ok: false, error: "账号或 PIN 不正确，或账号已停用" });
       return;
     }
-    sendJson(res, 200, { ok: true, data: publicUser(account) });
+    sendJson(res, 200, { ok: true, data: { ...publicUser(account), token: issueAuthToken(account) } });
+    return;
+  }
+
+  const user = getCurrentUser(req, snapshot);
+  if (!user) {
+    sendJson(res, 401, { ok: false, error: "登录已失效，请重新登录" });
     return;
   }
 

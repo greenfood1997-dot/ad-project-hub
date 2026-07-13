@@ -226,7 +226,7 @@ async function apiRequest(path, session, options = {}) {
     ...options,
     headers: {
       "content-type": "application/json",
-      "x-user-id": session.id,
+      authorization: `Bearer ${session.token || ""}`,
       ...(options.headers || {}),
     },
   });
@@ -294,7 +294,7 @@ function explainUploadError(error) {
 async function downloadFile(path, session, filename) {
   const res = await fetch(path, {
     headers: {
-      "x-user-id": session.id,
+      authorization: `Bearer ${session.token || ""}`,
     },
   });
   if (!res.ok) throw new Error("导出失败，请稍后再试");
@@ -1412,7 +1412,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const systemNotifications = (state?.systemNotifications || []).filter((item) => item.status === "待处理");
 
   function loadState() {
-    return fetch("/api/state", { headers: { "x-user-id": session.id } })
+    return fetch("/api/state", { headers: { authorization: `Bearer ${session.token || ""}` } })
       .then((res) => res.json())
       .then((payload) => {
         if (!payload.ok) throw new Error(payload.error || "读取项目数据失败");
@@ -6971,8 +6971,8 @@ function BackupDiffPreview({ diff }) {
 }
 
 function LoginScreen({ onLogin }) {
-  const [email, setEmail] = useState("admin@company.local");
-  const [pin, setPin] = useState("123456");
+  const [email, setEmail] = useState("");
+  const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -7019,7 +7019,7 @@ function LoginScreen({ onLogin }) {
           {error && <p className="form-error">{error}</p>}
           <button type="submit" className="primary" disabled={loading}>{loading ? "登录中" : "进入系统"}</button>
         </form>
-        <p className="login-hint">默认管理员：admin@company.local / 123456。上线后请在成员管理里修改 PIN。</p>
+        <p className="login-hint">请使用管理员分配的内部账号登录。</p>
       </section>
     </main>
   );
@@ -7125,7 +7125,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
       ...options,
       headers: {
         "content-type": "application/json",
-        "x-user-id": session.id,
+        authorization: `Bearer ${session.token || ""}`,
         ...(options.headers || {}),
       },
     });
@@ -7147,7 +7147,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
   }
 
   async function loadSettings() {
-    const res = await fetch("/api/state", { headers: { "x-user-id": session.id } });
+    const res = await fetch("/api/state", { headers: { authorization: `Bearer ${session.token || ""}` } });
     const payload = await res.json();
     if (!payload.ok) throw new Error(payload.error || "读取设置失败");
     const settings = payload.data?.settings || {};
@@ -7512,7 +7512,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
 
   async function loadFeishuBindings() {
     setFeishuBindings(await api("/api/integrations/feishu/bindings"));
-    const res = await fetch("/api/state", { headers: { "x-user-id": session.id } });
+    const res = await fetch("/api/state", { headers: { authorization: `Bearer ${session.token || ""}` } });
     const payload = await res.json();
     if (payload.ok) {
       setFeishuEvents(payload.data?.feishuEvents || []);

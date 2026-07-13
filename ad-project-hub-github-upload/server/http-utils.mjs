@@ -10,7 +10,7 @@ export function sendJson(res, status, body) {
     "content-type": "application/json; charset=utf-8",
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type,x-user-id,x-user-role"
+    "access-control-allow-headers": "content-type,authorization"
   });
   res.end(JSON.stringify(body));
 }
@@ -19,15 +19,18 @@ export function sendCorsPreflight(res) {
   res.writeHead(204, {
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type,x-user-id,x-user-role",
+    "access-control-allow-headers": "content-type,authorization",
     "access-control-max-age": "86400"
   });
   res.end();
 }
 
 export function getCurrentUser(req, db) {
-  const id = req.headers["x-user-id"] || "u-admin";
-  return db.users.find((user) => user.id === id && user.status !== "disabled") || db.users[0];
+  const auth = String(req.headers.authorization || "");
+  const tokenData = verifyAuthToken(auth.startsWith("Bearer ") ? auth.slice(7) : "");
+  const legacyId = process.env.NODE_ENV === "production" ? "" : req.headers["x-user-id"];
+  const id = tokenData?.sub || legacyId;
+  return db.users.find((user) => user.id === id && user.status !== "disabled") || null;
 }
 
 export function requireRole(user, roles, res) {
@@ -35,3 +38,4 @@ export function requireRole(user, roles, res) {
   sendJson(res, 403, { ok: false, error: "无权限执行该操作" });
   return false;
 }
+import { verifyAuthToken } from "./auth.mjs";
