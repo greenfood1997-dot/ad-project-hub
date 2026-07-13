@@ -1429,6 +1429,10 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   }, [session.id]);
 
   useEffect(() => {
+    if (!view.startsWith("admin")) loadState();
+  }, [view]);
+
+  useEffect(() => {
     fetch("/api/health")
       .then((res) => res.json())
       .then((payload) => setHealth(payload?.data || null))
