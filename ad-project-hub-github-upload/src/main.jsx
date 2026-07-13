@@ -5851,6 +5851,8 @@ function CollectionAssistant({ projects = [], scripts = [], session, onOpenProje
   const [style, setStyle] = useState("");
   const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [resetToken, setResetToken] = useState("");
+  const [newPin, setNewPin] = useState("");
   const [savingOutcomeId, setSavingOutcomeId] = useState("");
   const [followUpForms, setFollowUpForms] = useState({});
   const [copyingScriptId, setCopyingScriptId] = useState("");
@@ -6988,6 +6990,7 @@ function LoginScreen({ onLogin }) {
       });
       const payload = await res.json();
       if (!payload.ok) throw new Error(payload.error || "登录失败");
+      if (payload.data.requiresPasswordChange) { setResetToken(payload.data.resetToken); return; }
       localStorage.setItem(SESSION_KEY, JSON.stringify(payload.data));
       onLogin(payload.data);
     } catch (err) {
@@ -6995,6 +6998,16 @@ function LoginScreen({ onLogin }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function changePassword(event) {
+    event.preventDefault(); setLoading(true); setError("");
+    try {
+      const res = await fetch("/api/auth/change-password", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ resetToken, newPin }) });
+      const payload = await res.json();
+      if (!payload.ok) throw new Error(payload.error || "修改 PIN 失败");
+      localStorage.setItem(SESSION_KEY, JSON.stringify(payload.data)); onLogin(payload.data);
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   }
 
   return (
@@ -7007,17 +7020,20 @@ function LoginScreen({ onLogin }) {
             <span>内部项目协作与智能分析</span>
           </div>
         </div>
-        <form onSubmit={submit}>
+        <form onSubmit={resetToken ? changePassword : submit}>
+          {resetToken && <p className="login-hint">这是临时 PIN，请先设置新的 6-12 位数字 PIN。</p>}
+          {!resetToken && <>
           <label>
             <span>邮箱</span>
             <div className="input-row"><Mail size={16} /><input value={email} onChange={(event) => setEmail(event.target.value)} /></div>
           </label>
+          </>}
           <label>
-            <span>PIN</span>
-            <div className="input-row"><LockKeyhole size={16} /><input value={pin} type="password" onChange={(event) => setPin(event.target.value)} /></div>
+            <span>{resetToken ? "新 PIN" : "PIN"}</span>
+            <div className="input-row"><LockKeyhole size={16} /><input value={resetToken ? newPin : pin} type="password" inputMode="numeric" onChange={(event) => resetToken ? setNewPin(event.target.value) : setPin(event.target.value)} /></div>
           </label>
           {error && <p className="form-error">{error}</p>}
-          <button type="submit" className="primary" disabled={loading}>{loading ? "登录中" : "进入系统"}</button>
+          <button type="submit" className="primary" disabled={loading}>{loading ? "处理中" : resetToken ? "保存新 PIN 并进入系统" : "进入系统"}</button>
         </form>
         <p className="login-hint">请使用管理员分配的内部账号登录。</p>
       </section>
@@ -7113,7 +7129,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     feishuUserId: "",
     feishuName: "",
     status: "active",
-    pin: "123456",
+    pin: "",
   });
   const aiReady = Boolean(aiSettings["API Key"]);
   const activeMembers = members.filter((member) => member.status !== "disabled");
@@ -7210,7 +7226,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
 
   function resetForm() {
     setEditingId("");
-    setForm({ name: "", email: "", role: "member", department: "", feishuOpenId: "", feishuUserId: "", feishuName: "", status: "active", pin: "123456" });
+    setForm({ name: "", email: "", role: "member", department: "", feishuOpenId: "", feishuUserId: "", feishuName: "", status: "active", pin: "" });
   }
 
   async function save(event) {

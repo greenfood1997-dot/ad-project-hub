@@ -18,7 +18,12 @@ function sign(value) {
 }
 
 export function issueAuthToken(user) {
-  const payload = encode({ sub: user.id, exp: Date.now() + TOKEN_TTL_MS });
+  const payload = encode({ sub: user.id, purpose: "session", exp: Date.now() + TOKEN_TTL_MS });
+  return `${payload}.${sign(payload)}`;
+}
+
+export function issuePasswordChangeToken(user) {
+  const payload = encode({ sub: user.id, purpose: "password-change", exp: Date.now() + 10 * 60 * 1000 });
   return `${payload}.${sign(payload)}`;
 }
 
@@ -29,10 +34,21 @@ export function verifyAuthToken(token = "") {
   if (signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
   try {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return data.sub && Number(data.exp) > Date.now() ? data : null;
+    return data.sub && data.purpose === "session" && Number(data.exp) > Date.now() ? data : null;
   } catch {
     return null;
   }
+}
+
+export function verifyPasswordChangeToken(token = "") {
+  const [payload, signature] = String(token).split(".");
+  if (!payload || !signature) return null;
+  const expected = sign(payload);
+  if (signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return data.sub && data.purpose === "password-change" && Number(data.exp) > Date.now() ? data : null;
+  } catch { return null; }
 }
 
 export function hashPin(pin) {

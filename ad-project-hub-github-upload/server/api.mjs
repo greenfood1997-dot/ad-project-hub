@@ -1,6 +1,6 @@
 import { readDb, mutateDb, dbMode } from "./db.mjs";
 import { getCurrentUser, readBody, requireRole, sendJson } from "./http-utils.mjs";
-import { clearLoginFailures, hashPin, isLoginLimited, issueAuthToken, loginLimitKey, recordLoginFailure, verifyPin } from "./auth.mjs";
+import { clearLoginFailures, hashPin, isLoginLimited, issueAuthToken, issuePasswordChangeToken, loginLimitKey, recordLoginFailure, verifyPasswordChangeToken, verifyPin } from "./auth.mjs";
 import { getSchedulerStatus, reloadSystemScheduler } from "./scheduler.mjs";
 import {
   addComment,
@@ -146,11 +146,9 @@ function nextUserId(db) {
 function ensureMemberFields(user) {
   return {
     status: "active",
-    pin: "123456",
     ...user,
     email: user.email || DEFAULT_EMAILS[user.id] || `${user.id}@company.local`,
-    status: user.status || "active",
-    pin: user.pin || "123456"
+    status: user.status || "active"
   };
 }
 
@@ -161,6 +159,7 @@ function saveMember(db, body, actor) {
   if (!email) throw new Error("请填写成员邮箱");
   if (!body.name?.trim()) throw new Error("请填写成员姓名");
   const existing = db.users.find((item) => item.id === body.id);
+  if (!existing && !String(body.pin || "").trim()) throw new Error("新成员必须设置临时 PIN");
   const duplicate = db.users.find((item) => normalizeEmail(item.email) === email && item.id !== body.id);
   if (duplicate) throw new Error("该邮箱已经存在");
 
@@ -176,6 +175,7 @@ function saveMember(db, body, actor) {
     status: body.status || "active",
     pinHash: body.pin ? hashPin(body.pin) : existing?.pinHash,
     pin: body.pin ? undefined : existing?.pin,
+    mustChangePin: body.pin ? true : Boolean(existing?.mustChangePin),
     createdAt: existing?.createdAt || new Date().toISOString()
   };
 
@@ -707,7 +707,28 @@ export async function handleApi(req, res) {
         }
       });
     }
+    if (account.mustChangePin) {
+      sendJson(res, 200, { ok: true, data: { requiresPasswordChange: true, resetToken: issuePasswordChangeToken(account) } });
+      return;
+    }
     sendJson(res, 200, { ok: true, data: { ...publicUser(account), token: issueAuthToken(account) } });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/auth/change-password") {
+    const body = await readBody(req);
+    const tokenData = verifyPasswordChangeToken(body.resetToken);
+    const newPin = String(body.newPin || "");
+    if (!tokenData) { sendJson(res, 401, { ok: false, error: "改密凭证已失效，请重新登录" }); return; }
+    if (!/^\d{6,12}$/.test(newPin) || newPin === "123456") { sendJson(res, 400, { ok: false, error: "新 PIN 需为 6-12 位数字，且不能使用 123456" }); return; }
+    const updated = await mutateDb((db) => {
+      const current = db.users.find((item) => item.id === tokenData.sub && item.status !== "disabled");
+      if (!current) return null;
+      current.pinHash = hashPin(newPin); delete current.pin; current.mustChangePin = false;
+      return publicUser(current);
+    });
+    if (!updated) { sendJson(res, 401, { ok: false, error: "账号不可用" }); return; }
+    sendJson(res, 200, { ok: true, data: { ...updated, token: issueAuthToken(updated) } });
     return;
   }
 
