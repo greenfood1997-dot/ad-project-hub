@@ -6979,6 +6979,8 @@ function LoginScreen({ onLogin }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetToken, setResetToken] = useState("");
+  const [newPin, setNewPin] = useState("");
 
   async function submit(event) {
     event.preventDefault();
