@@ -1,0 +1,119 @@
+.task-form {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.4fr) minmax(90px, 0.8fr) minmax(90px, 0.8fr) 72px auto;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.task-form input {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 10px;
+  outline: 0;
+}
+
+.task-row {
+  grid-template-columns: minmax(110px, 1fr) minmax(110px, 1.1fr) 44px auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.task-row button {
+  min-height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.task-row.done {
+  background: #f8fafc;
+}
+
+.task-row.soon,
+.task-row.today {
+  border-color: #fed7aa;
+  background: #fffaf3;
+}
+
+.task-row.overdue {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.task-row.fresh {
+  border-color: #7fb0ff;
+  background: #f3f8ff;
+  box-shadow: 0 10px 24px rgba(56, 108, 216, 0.12);
+}
+
+.task-row.done span,
+.task-row.done b {
+  color: var(--muted);
+}
+
+.task-row small {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  grid-column: 1 / -1;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.task-due-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-style: normal;
+  font-size: 11px;
+}
+
+.task-due-badge.soon,
+.task-due-badge.today {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.task-due-badge.overdue {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.task-due-badge.normal {
+  color: #475569;
+  background: #eef2f7;
+}
+
+.task-template-empty {
+  align-items: start;
+  margin-top: 2px;
+}
+
+.task-template-empty .button-row {
+  justify-content: flex-start;
+}
+
+.cost-row.strong {
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+  padding-top: 9px;
+}
+
+.cost-row.strong b {
+  color: var(--brand);
+}
+
+@media (max-width: 1180px) {
+  .task-form {
+    grid-template-columns: 1fr;
+  }
+}

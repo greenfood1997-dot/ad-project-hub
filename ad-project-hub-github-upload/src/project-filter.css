@@ -1,0 +1,68 @@
+.notice-bar,
+.filter-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.notice-bar {
+  justify-content: space-between;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.notice-bar button,
+.filter-panel button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  padding: 7px 10px;
+}
+
+.filter-panel {
+  flex-wrap: wrap;
+  padding: 10px;
+}
+
+.filter-panel label,
+.filter-group {
+  display: grid;
+  gap: 5px;
+}
+
+.filter-panel label span,
+.filter-group strong {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.filter-panel label select {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  padding: 0 9px;
+  outline: 0;
+}
+
+.filter-group div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-panel button.active {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-weight: 700;
+}

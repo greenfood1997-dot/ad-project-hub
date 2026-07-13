@@ -1,0 +1,268 @@
+.supplier-library {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 14px;
+}
+
+.client-library {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+  gap: 14px;
+}
+
+.client-library .wide-feature,
+.supplier-library .wide-feature {
+  grid-column: auto;
+}
+
+.supplier-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.supplier-card {
+  display: grid;
+  gap: 6px;
+  min-height: 132px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+  text-align: left;
+}
+
+.supplier-card.active {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: var(--brand-soft);
+}
+
+.supplier-card.fresh {
+  border-color: #7fb0ff;
+  background: #f3f8ff;
+  box-shadow: 0 10px 24px rgba(56, 108, 216, 0.12);
+}
+
+.supplier-card strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.supplier-card span {
+  color: #f59e0b;
+  letter-spacing: 0;
+}
+
+.supplier-action {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.supplier-action.action-ok {
+  color: #047857;
+  background: #dcfce7;
+}
+
+.supplier-action.action-warn {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.supplier-action.action-danger {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.supplier-card em,
+.supplier-card small {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.client-handoff-badge {
+  width: fit-content;
+  border-radius: 999px;
+  background: #eef5ff;
+  color: #1d4ed8;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.client-handoff-badge.active {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.client-handoff-badge.warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.supplier-detail-panel {
+  align-self: start;
+}
+
+.client-handoff-pack {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.client-handoff-pack > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.client-handoff-pack strong {
+  font-size: 14px;
+}
+
+.client-handoff-pack span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.client-handoff-actions {
+  display: grid;
+  gap: 7px;
+}
+
+.client-handoff-actions p {
+  margin: 0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.supplier-risk-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.supplier-risk-panel.risk-low {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.supplier-risk-panel.risk-medium {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.supplier-risk-panel.risk-high {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.supplier-risk-panel > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.supplier-risk-panel strong {
+  font-size: 14px;
+}
+
+.supplier-risk-panel span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.supplier-risk-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.supplier-risk-tags b {
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.supplier-rating-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.supplier-rating-tags .tiny {
+  min-height: 30px;
+  border-radius: 999px;
+}
+
+.supplier-settlement-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.supplier-settlement-note {
+  display: grid;
+  gap: 6px;
+}
+
+.supplier-settlement-panel .compact-list > div {
+  align-items: flex-start;
+}
+
+.supplier-settlement-empty {
+  margin-top: 2px;
+}
+
+.client-handoff p {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.handoff-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.handoff-tags span {
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.handoff-tags .good {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.handoff-tags .danger {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+@media (max-width: 1180px) {
+  .supplier-library,
+  .client-library {
+    grid-template-columns: 1fr;
+  }
+}

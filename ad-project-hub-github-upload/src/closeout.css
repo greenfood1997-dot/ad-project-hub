@@ -1,0 +1,66 @@
+.closeout-head {
+  align-items: center;
+  gap: 10px;
+}
+
+.closeout-head .panel-title {
+  min-width: 0;
+}
+
+.closeout-actions,
+.closeout-next-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.closeout-actions {
+  justify-content: flex-end;
+}
+
+.closeout-next-actions {
+  margin-top: 12px;
+}
+
+.closeout-cost-empty {
+  margin-top: 4px;
+}
+
+.closeout-cost-empty .button-row {
+  flex-wrap: wrap;
+}
+
+.closeout-complete-box {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #e3e9f1;
+  border-radius: 8px;
+  background: #f8fafc;
+  display: grid;
+  gap: 10px;
+}
+
+.closeout-complete-box label {
+  display: grid;
+  gap: 6px;
+}
+
+.closeout-complete-box textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.closeout-complete-box > span {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.closeout-memory-actions {
+  margin-top: 0;
+  flex-wrap: wrap;
+}
+
+.closeout-memory-actions .tiny {
+  min-height: 30px;
+}

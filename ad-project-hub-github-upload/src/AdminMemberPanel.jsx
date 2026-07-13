@@ -1,0 +1,62 @@
+import React from "react";
+
+export default function AdminMemberPanel({
+  members = [],
+  activeMembers = [],
+  feishuBoundCount,
+  feishuMissingMembers = [],
+  editingId,
+  form,
+  message,
+  savingMember,
+  togglingMemberId,
+  roleOptions = [],
+  roleLabel,
+  onSave,
+  onEdit,
+  onToggle,
+  onUpdateForm,
+}) {
+  return (
+    <section className="admin-grid">
+      <form className="member-form" onSubmit={onSave}>
+        <div className="section-head"><h2>{editingId ? "编辑成员" : "新增成员"}</h2></div>
+        <label><span>姓名</span><input value={form.name} onChange={(event) => onUpdateForm({ ...form, name: event.target.value })} /></label>
+        <label><span>邮箱</span><input value={form.email} onChange={(event) => onUpdateForm({ ...form, email: event.target.value })} /></label>
+        <label>
+          <span>角色</span>
+          <select value={form.role} onChange={(event) => onUpdateForm({ ...form, role: event.target.value })}>
+            {roleOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+          </select>
+        </label>
+        <label><span>部门</span><input value={form.department} onChange={(event) => onUpdateForm({ ...form, department: event.target.value })} /></label>
+        <label><span>飞书 Open ID</span><input value={form.feishuOpenId} onChange={(event) => onUpdateForm({ ...form, feishuOpenId: event.target.value })} placeholder="用于机器人私聊通知" /></label>
+        <label><span>飞书 User ID（可选）</span><input value={form.feishuUserId} onChange={(event) => onUpdateForm({ ...form, feishuUserId: event.target.value })} /></label>
+        <label><span>飞书姓名（可选）</span><input value={form.feishuName} onChange={(event) => onUpdateForm({ ...form, feishuName: event.target.value })} /></label>
+        <label><span>临时 PIN</span><input value={form.pin} placeholder="留空则保持不变" onChange={(event) => onUpdateForm({ ...form, pin: event.target.value })} /></label>
+        {message && <p className="form-message">{message}</p>}
+        <button type="submit" className="primary" disabled={savingMember}>{savingMember ? "保存中" : "保存成员"}</button>
+      </form>
+
+      <div className="member-table">
+        <div className="section-head"><h2>成员列表</h2><span>{members.length} 人</span></div>
+        <div className={`member-sync-status ${feishuMissingMembers.length ? "warn" : "ok"}`}>
+          <strong>飞书私聊绑定：{feishuBoundCount}/{activeMembers.length || 0}</strong>
+          <span>{feishuMissingMembers.length ? `还差 ${feishuMissingMembers.slice(0, 5).map((member) => member.name || member.email).join("、")}${feishuMissingMembers.length > 5 ? `等 ${feishuMissingMembers.length} 人` : ""}，这些成员暂时收不到 OA 私聊提醒。` : "启用中的成员都已绑定飞书，可以接收 OA 私聊提醒。"}</span>
+        </div>
+        {members.map((member) => (
+          <div className="member-row" key={member.id}>
+            <div>
+              <strong>{member.name}</strong>
+              <span>{member.email} · {member.department || "未分组"}{member.feishuOpenId || member.feishuUserId ? " · 已绑飞书" : " · 未绑飞书"}</span>
+            </div>
+            <b className={`role-pill ${member.role}`}>{roleLabel(member.role)}</b>
+            <b className={`status-pill ${member.status}`}>{member.status === "disabled" ? "已停用" : "启用中"}</b>
+            <button type="button" className="ghost" disabled={savingMember || togglingMemberId === member.id} onClick={() => onEdit(member)}>编辑</button>
+            <button type="button" className="ghost" disabled={togglingMemberId === member.id} onClick={() => onToggle(member)}>{togglingMemberId === member.id ? "处理中" : member.status === "disabled" ? "启用" : "停用"}</button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}

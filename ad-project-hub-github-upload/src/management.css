@@ -1,0 +1,235 @@
+.advisor-action-list {
+  gap: 8px;
+}
+
+.advisor-action-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.advisor-action-card .logic-item {
+  min-width: 0;
+}
+
+.advisor-action-card > span {
+  margin-right: 12px;
+  border: 1px solid #d6defe;
+  border-radius: 999px;
+  color: #3755d8;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.compact-action-row {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.compact-action-row:hover,
+.advisor-action-card:hover {
+  border-color: #b9c7ff;
+  background: #f8faff;
+}
+
+.management-risk-action {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid #edf1f6;
+  padding: 10px 0;
+}
+
+.management-risk-action:first-child {
+  border-top: 0;
+}
+
+.management-risk-action em {
+  color: #3755d8;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.founder-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+}
+
+.management-switcher {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.75fr) minmax(0, 1.25fr);
+  align-items: stretch;
+  gap: 14px;
+}
+
+.management-switcher > div:first-child {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+}
+
+.management-switcher p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.management-tab-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.management-tab-row button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--text);
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.management-tab-row button svg {
+  color: #5b6ee1;
+}
+
+.management-tab-row button strong {
+  min-width: 0;
+  font-size: 13px;
+}
+
+.management-tab-row button span {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.management-tab-row button.active {
+  border-color: #b9c7ff;
+  background: #f5f7ff;
+  box-shadow: 0 10px 26px rgba(78, 106, 230, 0.11);
+}
+
+.cash-formula-card {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcff;
+  padding: 14px;
+}
+
+.cash-formula-card strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.cash-formula-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.cash-formula-card div {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cash-formula-card span {
+  min-width: 0;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--muted);
+  padding: 8px 10px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.cash-formula-card b {
+  color: #172033;
+  font-size: 15px;
+}
+
+.finance-template-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.finance-template-row .tiny {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cash-settings-preview {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #cfe0ff;
+  border-radius: 12px;
+  background: #f3f8ff;
+  padding: 10px 12px;
+}
+
+.cash-settings-preview strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.cash-settings-preview span,
+.cash-settings-preview em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.5;
+}
+
+.cash-settings-preview.danger {
+  border-color: #fecdd3;
+  background: #fff1f2;
+}
+
+.cash-settings-preview.warn {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.cash-settings-preview.ok {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+@media (max-width: 720px) {
+  .management-switcher,
+  .management-tab-row,
+  .cash-formula-card div {
+    grid-template-columns: 1fr;
+  }
+}
