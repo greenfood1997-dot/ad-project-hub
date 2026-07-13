@@ -19,6 +19,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
     "客户 / 品牌": "",
     "负责人": session.name,
     "合同金额": "",
+    "执行预算占比": "60%",
   });
   const [files, setFiles] = useState(() => initialFiles);
   const [message, setMessage] = useState("");

@@ -2598,6 +2598,10 @@ function EmployeeProjectOverview({ projects, selected, feishuPendingFiles = [], 
   const health = projectHealth(selected);
   const tasks = (selected.tasks || []).map(normalizeTask);
   const pettyLeft = Math.max(Number(selected.pettyCashBudget || 0) - Number(selected.pettyCashUsed || 0), 0);
+  const executionBudget = Number(selected.costBudget || selected.extractedFields?.executionBudget || 0);
+  const executionUsed = Number(selected.costUsed || 0);
+  const executionLeft = Math.max(executionBudget - executionUsed, 0);
+  const executionRate = executionBudget ? Math.round(executionUsed / executionBudget * 100) : 0;
   const missingItems = [
     selected.contract ? null : "合同金额待补",
     selected.files?.length ? null : "项目文件待上传",
@@ -2623,7 +2627,7 @@ function EmployeeProjectOverview({ projects, selected, feishuPendingFiles = [], 
       <section className="metrics employee-metrics">
         <Metric icon={LayoutDashboard} label="项目进度" value={`${selected.progress}%`} sub={`AI 判断：${health.label}`} />
         <Metric icon={Clock3} label="时间进度" value={`${health.timeProgress}%`} sub="按合同周期粗略估算" />
-        <Metric icon={CircleDollarSign} label="备用金余额" value={money(pettyLeft)} sub={`已用 ${money(selected.pettyCashUsed)}`} />
+        <Metric icon={CircleDollarSign} label="执行剩余预算" value={money(executionLeft)} sub={`总预算 ${money(executionBudget)} · 已用 ${money(executionUsed)}（${executionRate}%）`} />
         <Metric icon={FileText} label="当前项目数" value={`${activeProjects.length || projects.length} 个`} sub="仅展示你可见的项目" />
       </section>
 
@@ -6439,6 +6443,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
     "客户 / 品牌": "",
     "负责人": session.name,
     "合同金额": "",
+    "执行预算占比": "60%",
   });
   const [files, setFiles] = useState(() => initialFiles);
   const [message, setMessage] = useState("");

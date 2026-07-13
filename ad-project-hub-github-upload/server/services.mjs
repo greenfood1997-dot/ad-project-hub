@@ -31,7 +31,7 @@ export async function createProject(db, values, files, user) {
     client: values["客户 / 品牌"] || "",
     owner: values["负责人"] || user.name,
     contract,
-    costBudget: 0,
+    costBudget: contract * parsePercent(values["执行预算占比"] || values["合同成本率"] || ""),
     costUsed: 0,
     paid: 0,
     receivable: contract,
@@ -43,7 +43,7 @@ export async function createProject(db, values, files, user) {
     margin: 0,
     tasks: [],
     costs: [],
-    extractedFields: {},
+    extractedFields: { executionBudgetRatio: values["执行预算占比"] || values["合同成本率"] || "" },
     createdAt: now,
     createdBy: user.id,
     files
@@ -1518,9 +1518,20 @@ function applyParsedFields(db, project, job, parsed) {
   const existingContract = parseMoney(project.contract);
   const hasCostSheet = Boolean(parsed.hasCostSheet);
   const contract = hasCostSheet ? (existingContract || parsedContract) : (parsedContract || existingContract);
+  const configuredRatioText = project.extractedFields?.executionBudgetRatio || job.sourceValues?.["执行预算占比"] || job.sourceValues?.["合同成本率"] || "";
+  const configuredRatio = parsePercent(configuredRatioText);
+  const configuredBudget = configuredRatio && contract ? contract * configuredRatio : parseMoney(project.costBudget);
   const profitBreakdown = hasCostSheet ? calculateProfitBreakdown(contract, parsed) : null;
-  const costBudget = hasCostSheet ? (profitBreakdown.executionBudget || parseMoney(project.costBudget)) : parseMoney(project.costBudget);
-  const costUsed = hasCostSheet ? profitBreakdown.totalDeduction : parseMoney(project.costUsed);
+  const costBudget = configuredBudget || (hasCostSheet ? profitBreakdown.executionBudget : 0) || parseMoney(project.costBudget);
+  const previousCostUsed = parseMoney(project.costUsed);
+  const currentUploadCost = hasCostSheet ? profitBreakdown.totalDeduction : 0;
+  const costUsed = hasCostSheet ? previousCostUsed + currentUploadCost : previousCostUsed;
+  if (hasCostSheet) {
+    profitBreakdown.executionBudget = costBudget;
+    profitBreakdown.totalDeduction = costUsed;
+    profitBreakdown.profit = contract - costUsed;
+    profitBreakdown.margin = profitMargin(contract, profitBreakdown.profit);
+  }
   const parsedPaid = parseMoney(parsed.paid);
   const existingPaid = parseMoney(project.paid);
   const paid = hasCostSheet ? Math.max(existingPaid, parsedPaid) : parsedPaid;
@@ -1552,6 +1563,8 @@ function applyParsedFields(db, project, job, parsed) {
       revenueRecognition: existingRevenueRecognition
     })
   });
+  project.extractedFields.executionBudgetRatio = configuredRatioText;
+  project.extractedFields.executionBudget = costBudget;
   if (Array.isArray(parsed.extractedFiles) && parsed.extractedFiles.length) {
     project.files = parsed.extractedFiles;
     job.files = parsed.extractedFiles;
