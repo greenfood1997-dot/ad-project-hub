@@ -507,7 +507,8 @@ select {
   height: 8px;
   border-radius: 999px;
   background: #e8eef6;
-  overflow: hidden;
+  overflow: auto;
+  box-sizing: border-box;
 }
 
 .progress-row i {
@@ -4421,6 +4422,7 @@ main.dashboard-main {
   padding: 18px;
   contain: inline-size;
   isolation: isolate;
+  margin: auto;
 }
 
 .upload-modal-body {

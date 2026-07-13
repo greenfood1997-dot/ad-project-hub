@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Minimize2, UploadCloud } from "lucide-react";
 import { apiRequest, fileToPayload, uploadedFileKey } from "./utils/api.js";
 import { fileSize, money } from "./utils/format.js";
@@ -269,7 +270,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
     );
   }
 
-  return (
+  return createPortal(
     <div className="modal-backdrop">
       <form className="upload-modal" onSubmit={submit}>
         <div className="modal-head">
@@ -393,7 +394,8 @@ export default function UploadDialog({ session, projects, selected, initialType 
           </div>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }
 

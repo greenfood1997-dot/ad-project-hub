@@ -6,7 +6,8 @@
   place-items: center;
   background: rgba(15, 23, 42, 0.28);
   padding: 24px;
-  overflow: hidden;
+  overflow: auto;
+  box-sizing: border-box;
 }
 
 .upload-modal {
@@ -30,6 +31,7 @@
   padding: 18px;
   contain: inline-size;
   isolation: isolate;
+  margin: auto;
 }
 
 .upload-modal-body {

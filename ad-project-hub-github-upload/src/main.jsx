@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   BarChart3,
@@ -6685,7 +6686,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
     );
   }
 
-  return (
+  return createPortal(
     <div className="modal-backdrop">
       <form className="upload-modal" onSubmit={submit}>
         <div className="modal-head">
@@ -6797,7 +6798,8 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
           <button type="submit" className="primary" disabled={loading || (preview && !preview.canConfirm)}>{loading ? "处理中" : preview ? "确认入库" : "AI 预览识别"}</button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }
 
