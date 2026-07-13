@@ -1,4 +1,23 @@
-import { recognizeFileWithTencentOcr, recognizeFileWithTencentOcrDetailed, tencentOcrConfigured } from "./tencent-ocr.mjs";
+import { arrayCount, money, nextFileId, parseMoney, splitLines, textIncludes } from "./service-utils.mjs";
+import { currentApprovalStep, inferExpenseCategory } from "./approval-flow.mjs";
+import { answerAiAssistant as answerAiAssistantCore } from "./assistant-service.mjs";
+import { supplierLibrary } from "./supplier-service.mjs";
+import { clientLibrary } from "./client-service.mjs";
+import { persistLocalUploadFile } from "./upload-storage-service.mjs";
+import { extractFileContent } from "./file-extraction-service.mjs";
+import { recordProjectPayment as recordProjectPaymentCore, voidProjectPayment as voidProjectPaymentCore } from "./payment-service.mjs";
+import { archiveProjectTask as archiveProjectTaskCore, normalizeProjectTask, taskDueInfo, upsertProjectTask as upsertProjectTaskCore } from "./project-task-service.mjs";
+import { recordFiles as recordFilesCore, refreshInterestRate as refreshInterestRateCore, saveCompanyFinance as saveCompanyFinanceCore, saveSetting as saveSettingCore, testAiSettings as testAiSettingsCore, testObjectStorage as testObjectStorageCore, validateAiSettings as validateAiSettingsCore } from "./settings-service.mjs";
+import { dispatchNewHighSeverityNotifications as dispatchNewHighSeverityNotificationsCore, notificationRecipientsForRole, projectCostPressure, projectTimeHealth, scanSystemNotifications as scanSystemNotificationsCore, sendSystemNotificationToFeishu as sendSystemNotificationToFeishuCore, sendSystemNotificationToWechat as sendSystemNotificationToWechatCore, updateSystemNotification as updateSystemNotificationCore, upsertSystemNotification } from "./notification-service.mjs";
+import { feishuPendingFiles, feishuProjectBindings, getFeishuTenantAccessToken, handleFeishuEvent as handleFeishuEventCore, handleFeishuPendingFile as handleFeishuPendingFileCore, saveFeishuProjectBinding } from "./feishu-service.mjs";
+import { actOnApproval as actOnApprovalCore, createApproval as createApprovalCore, findProjectForSupplierSettlement, updateSupplierSettlement as updateSupplierSettlementCore, withdrawApproval as withdrawApprovalCore } from "./approval-service.mjs";
+import { analyzeAndApplyProjectFiles as analyzeAndApplyProjectFilesCore, applyParsedFields as applyParsedFieldsCore, createParseJob, fileReference, markParseJobFailed, normalizeUploadedFiles as normalizeUploadedFilesCore, uploadedFileKey } from "./project-parse-service.mjs";
+import { assertUniqueProject, deleteProject as deleteProjectCore, findMatchingProjectForCostSheet, hasContractLikeFile, normalizeProjectText, projectToValues, removeCreatedProject, similarity, syncProjectProfit as syncProjectProfitCore } from "./project-lifecycle-service.mjs";
+export { exportBackupSnapshot, restoreBackupSnapshot, validateBackupSnapshot } from "./backup-service.mjs";
+export { clientLibrary, saveClientProfile } from "./client-service.mjs";
+export { collectionLibrary, saveCollectionOutcome, suggestCollectionScript } from "./collection-service.mjs";
+export { addComment, archiveComment, archiveFileRecord, updateAlert } from "./project-activity-service.mjs";
+export { rateSupplier, supplierCsv, supplierLibrary } from "./supplier-service.mjs";
 
 export async function createProject(db, values, files, user) {
   if (!values?.["项目名称"] && !files.length) throw new Error("请填写项目名称或先上传合同/执行表");
@@ -64,6 +83,225 @@ export async function createProject(db, values, files, user) {
   return { project, parseJob };
 }
 
+export async function previewProjectUpload(db, body, user) {
+  const type = body?.type || "create-project";
+  const now = new Date().toISOString();
+  const targetProject = body?.id
+    ? (db.projects || []).find((item) => item.id === body.id)
+    : null;
+  if (type !== "create-project" && !targetProject) throw new Error("项目不存在");
+
+  const category = type === "cost-sheet"
+    ? "execution-cost"
+    : type === "quote-sheet"
+      ? "quote-sheet"
+      : type === "verification-sheet"
+        ? "verification-sheet"
+        : "project";
+  const files = await normalizeUploadedFiles(body.files || [], category, user, now, db.settings?.storage || {});
+  if (!files.length && type !== "create-project") throw new Error("请先选择要上传的文件");
+
+  const values = body.values || {};
+  const warnings = [];
+  let parsed = {};
+  let preview = {
+    type,
+    targetProject: targetProject ? {
+      id: targetProject.id,
+      name: targetProject.name,
+      client: targetProject.client || "",
+      owner: targetProject.owner || "",
+      contract: Number(targetProject.contract || 0)
+    } : null,
+    files: files.map(fileReference),
+    fields: {},
+    sections: [],
+    warnings,
+    canConfirm: true,
+    previewedAt: now
+  };
+
+  if (type === "quote-sheet") {
+    const rules = extractQuoteRules(files);
+    if (!rules.length) warnings.push("未识别到报价核销规则，请检查是否包含服务内容、数量、单位、单价、小计等字段。");
+    preview.sections.push({
+      title: "报价规则",
+      rows: rules.slice(0, 12).map((rule) => ({
+        name: rule.serviceName,
+        quantity: rule.quantity,
+        unit: rule.unit,
+        unitPrice: rule.unitPrice,
+        amount: rule.amount,
+        status: "待确认"
+      })),
+      total: rules.reduce((sum, rule) => sum + Number(rule.amount || 0), 0)
+    });
+    preview.summary = rules.length ? `识别到 ${rules.length} 条报价规则，确认后会写入项目报价规则库。` : "报价规则识别不足，建议调整表格后再上传。";
+    preview.canConfirm = rules.length > 0;
+    return preview;
+  }
+
+  if (type === "verification-sheet") {
+    const revenue = targetProject.extractedFields?.revenueRecognition || {};
+    const quoteRules = Array.isArray(revenue.quoteRules) ? revenue.quoteRules : [];
+    if (!quoteRules.length) {
+      warnings.push("当前项目还没有报价规则库，请先上传合同报价表。");
+      preview.canConfirm = false;
+      preview.summary = "缺少报价规则，暂不能确认核销入库。";
+      return preview;
+    }
+    const verificationItems = extractVerificationItems(files);
+    const verificationSummary = verificationItems.summary || {};
+    const matchedItems = matchVerificationItems(verificationItems, quoteRules, {
+      recognizedRevenue: Number(revenue.recognizedRevenue || 0),
+      contract: Number(targetProject.contract || 0),
+      records: revenue.verificationRecords || []
+    });
+    const recognizedRevenue = verificationSummary.totalAmount || matchedItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    if (!verificationItems.length && !verificationSummary.totalAmount) {
+      warnings.push("未识别到核销条数或核销金额，请检查核销表是否包含服务项、数量、月份等字段。");
+      preview.canConfirm = false;
+    }
+    preview.fields = {
+      "核销月份": inferVerificationMonth(files) || monthKey(new Date(now)),
+      "确认收入": recognizedRevenue,
+      "匹配状态": matchedItems.some((item) => item.status !== "自动通过") ? "待复核" : "自动通过"
+    };
+    preview.sections.push({
+      title: "核销明细",
+      rows: matchedItems.slice(0, 12).map((item) => ({
+        name: item.serviceName,
+        quantity: item.quantity,
+        amount: item.amount,
+        matched: item.matchedServiceName || "未匹配",
+        status: item.status
+      })),
+      total: recognizedRevenue
+    });
+    if (verificationSummary.breakdown?.length) {
+      preview.sections.push({
+        title: "核销汇总",
+        rows: verificationSummary.breakdown.map((item) => ({
+          name: item.type,
+          amount: item.amount,
+          status: "汇总项"
+        })),
+        total: verificationSummary.totalAmount
+      });
+    }
+    preview.summary = `预计确认收入 ${recognizedRevenue}，确认后会生成一条月度核销记录。`;
+    return preview;
+  }
+
+  try {
+    const sourceValues = type === "cost-sheet"
+      ? { ...projectToValues(targetProject), "文件类型": "月度执行成本表", "上传人": user.name }
+      : values;
+    parsed = files.length ? await analyzeProjectFiles(db.settings?.aiService, sourceValues, files, db.settings?.interestRate) : {};
+  } catch (error) {
+    warnings.push(`AI 解析未完成：${error.message}`);
+    parsed = {};
+  }
+
+  if (type === "cost-sheet") {
+    const contract = Number(targetProject.contract || 0) || parseMoney(parsed.contract);
+    const profitBreakdown = calculateProfitBreakdown(contract, { ...parsed, hasCostSheet: true }, db.settings?.interestRate);
+    const reimbursementItems = extractReimbursementItems(files);
+    const reimbursementTotal = reimbursementItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    preview.fields = {
+      "项目名称": targetProject.name,
+      "执行预算": profitBreakdown.executionBudget,
+      "执行成本": profitBreakdown.executionCost,
+      "项目垫款": profitBreakdown.advancePayment,
+      "垫款利息": profitBreakdown.advanceInterest,
+      "总成本影响": profitBreakdown.totalDeduction
+    };
+    preview.sections.push({
+      title: "成本归集",
+      rows: profitBreakdown.costs.filter(([, amount]) => Number(amount || 0) > 0).map(([name, amount]) => ({
+        name,
+        amount,
+        status: "待入库"
+      })),
+      total: profitBreakdown.totalDeduction
+    });
+    if (reimbursementItems.length) {
+      const reimbursementCategorySummary = Array.from(reimbursementItems.reduce((map, item) => {
+        const category = item.category || "其他";
+        map.set(category, Number(map.get(category) || 0) + Number(item.amount || 0));
+        return map;
+      }, new Map()).entries())
+        .map(([category, amount]) => ({ category, amount }))
+        .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0));
+      preview.sections.push({
+        title: "员工报销/项目报销明细",
+        rows: reimbursementItems.slice(0, 12).map((item) => ({
+          name: `${item.person ? `${item.person} · ` : ""}${item.item}`,
+          amount: item.amount,
+          status: item.category
+        })),
+        total: reimbursementTotal
+      });
+      preview.sections.push({
+        title: "报销类目汇总",
+        rows: reimbursementCategorySummary.map((item) => ({
+          name: item.category,
+          amount: item.amount,
+          status: "类目合计"
+        })),
+        total: reimbursementTotal
+      });
+      warnings.push("已识别为内部报销/项目报表明细，不会按供应商支出预览；请确认明细后入库。");
+    } else if (Array.isArray(parsed.suppliers) && parsed.suppliers.length) {
+      preview.sections.push({
+        title: "供应商支出",
+        rows: parsed.suppliers.slice(0, 12).map((item) => ({
+          name: item.supplier || item.name || "未命名供应商",
+          amount: Number(item.amount || 0),
+          status: item.status || "待结算"
+        })),
+        total: parsed.suppliers.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+      });
+    }
+    preview.summary = parsed.summary || "成本表已完成预解析，确认后会合并到项目成本和利润测算。";
+    return preview;
+  }
+
+  const contract = parseMoney(parsed.contract) || parseMoney(values["合同金额"]);
+  const paid = parseMoney(parsed.paid);
+  preview.fields = {
+    "项目名称": parsed.projectName || parsed.name || values["项目名称"] || "",
+    "客户 / 品牌": parsed.client || values["客户 / 品牌"] || "",
+    "负责人": values["负责人"] || user.name,
+    "合同金额": contract,
+    "已回款": paid,
+    "待回款": parseMoney(parsed.receivable) || Math.max(contract - paid, 0),
+    "服务周期": parsed.servicePeriod || "",
+    "下一节点": parsed.nextMilestone || parsed.deliveryDate || ""
+  };
+  const quoteFiles = files.filter(isPotentialQuoteSheetFile).filter(looksLikeQuoteSheetFile);
+  const quoteRules = extractQuoteRules(quoteFiles);
+  if (quoteRules.length) {
+    preview.sections.push({
+      title: "自动识别报价规则",
+      rows: quoteRules.slice(0, 12).map((rule) => ({
+        name: rule.serviceName,
+        quantity: rule.quantity,
+        unit: rule.unit,
+        unitPrice: rule.unitPrice,
+        amount: rule.amount,
+        status: "待写入"
+      })),
+      total: quoteRules.reduce((sum, rule) => sum + Number(rule.amount || 0), 0)
+    });
+  }
+  if (!preview.fields["项目名称"]) warnings.push("项目名称未明确识别，确认前建议手动填写或检查合同。");
+  if (!contract) warnings.push("合同金额未明确识别，确认后可能需要在项目详情中补充。");
+  else warnings.push(`已识别合同金额 ${money(contract)}，请和合同总价/最终优惠总价核对后再确认入库。`);
+  preview.summary = parsed.summary || "合同/报价文件已完成预解析，确认后会创建项目并写入项目台账。";
+  return preview;
+}
+
 export function updateProject(db, body, user) {
   const project = (db.projects || []).find((item) => item.id === body?.id);
   if (!project) throw new Error("项目不存在");
@@ -73,6 +311,17 @@ export function updateProject(db, body, user) {
   const nextName = String(values["项目名称"] || project.name || "").trim();
   const nextClient = String(values["客户 / 品牌"] || project.client || "").trim();
   const nextOwner = String(values["负责人"] || project.owner || "").trim();
+  const nextPm = String(values["PM"] || values["项目经理"] || project.pm || project.extractedFields?.pm || "").trim();
+  const nextSales = String(values["销售"] || project.sales || project.extractedFields?.sales || "").trim();
+  const nextStatus = String(values["项目状态"] || project.status || "").trim();
+  const nextMilestone = String(values["下一节点"] || project.nextMilestone || "").trim();
+  const nextPaymentDue = String(values["回款节点"] || project.paymentDue || "").trim();
+  const nextCloseoutNote = values["结案复盘备注"] !== undefined
+    ? String(values["结案复盘备注"] || "").trim()
+    : String(project.closeoutNote || project.extractedFields?.closeoutNote || "").trim();
+  const nextClosedAt = values["结案时间"] !== undefined
+    ? String(values["结案时间"] || "").trim()
+    : String(project.closedAt || project.extractedFields?.closedAt || "").trim();
   const contract = values["合同金额"] !== undefined && values["合同金额"] !== ""
     ? parseMoney(values["合同金额"])
     : parseMoney(project.contract);
@@ -92,13 +341,24 @@ export function updateProject(db, body, user) {
   if (nextName) project.name = nextName;
   project.client = nextClient;
   project.owner = nextOwner || user.name;
+  project.pm = nextPm || project.pm || "";
+  project.sales = nextSales || project.sales || "";
+  if (nextStatus) project.status = nextStatus;
+  project.nextMilestone = nextMilestone;
+  project.paymentDue = nextPaymentDue;
+  if (nextCloseoutNote) project.closeoutNote = nextCloseoutNote;
+  if (nextClosedAt) project.closedAt = nextClosedAt;
   project.contract = contract;
   project.paid = paid;
   project.receivable = Math.max(contract - paid, 0);
   project.extractedFields = {
     ...(project.extractedFields || {}),
+    pm: project.pm,
+    sales: project.sales,
     executionBudgetRatio,
-    executionBudget
+    executionBudget,
+    closeoutNote: nextCloseoutNote,
+    closedAt: nextClosedAt
   };
 
   const profitBreakdown = syncProjectProfit(project, executionBudget);
@@ -115,55 +375,291 @@ export function updateProject(db, body, user) {
     if (job.projectId === project.id) job.projectName = project.name;
   }
 
-  db.auditLogs.unshift({ type: "project", target: project.name, action: "update", user: user.name, at: project.updatedAt });
+  db.auditLogs.unshift({
+    type: "project",
+    target: project.name,
+    action: /已完成|结案|已结案/.test(project.status || "") || nextClosedAt ? "closeout" : "update",
+    user: user.name,
+    at: project.updatedAt,
+    meta: { status: project.status, closedAt: project.closedAt || "", closeoutNote: project.closeoutNote || "" }
+  });
+  syncProjectHealthNotificationsAfterUpdate(db, project, user);
   return project;
 }
 
-export function deleteProject(db, body, user) {
-  const project = (db.projects || []).find((item) => item.id === body?.id);
-  if (!project) throw new Error("项目不存在");
-
-  db.projects = (db.projects || []).filter((item) => item.id !== project.id);
-  db.parseJobs = (db.parseJobs || []).filter((item) => item.projectId !== project.id);
-  db.files = (db.files || []).filter((item) => item.projectId !== project.id && item.projectName !== project.name);
-  db.suppliers = (db.suppliers || []).filter((item) => item.projectId !== project.id && item.project !== project.name);
+function syncApprovalNotificationAfterAction(db, approval = {}, user = {}, action = "update") {
+  db.systemNotifications = db.systemNotifications || [];
+  if (!approval.id) return;
   const at = new Date().toISOString();
-  db.auditLogs.unshift({ type: "project", target: project.name, action: "delete", user: user.name, at });
-  return { id: project.id, name: project.name };
+  const notices = db.systemNotifications.filter((item) => item.type === "approval-stale" && item.sourceId === approval.id);
+  if (!notices.length) return;
+
+  const terminal = ["已完成", "已驳回", "已撤回"].includes(String(approval.status || ""));
+  const handledNote = terminal
+    ? `审批已${approval.status.replace(/^已/, "")}，系统自动处理旧审批待办。`
+    : `审批已流转到「${approval.status || "下一步"}」，系统自动处理上一轮超时待办。`;
+
+  for (const notice of notices) {
+    if (notice.status !== "待处理") continue;
+    notice.status = "已处理";
+    notice.handledAt = at;
+    notice.handledBy = user.id || "";
+    notice.handledByName = user.name || "";
+    notice.note = action === "withdraw" ? "审批已撤回，不会继续流转。" : handledNote;
+    notice.updatedAt = at;
+  }
+}
+
+function pendingSupplierRowsForProject(db, project = {}) {
+  return (db.suppliers || []).filter((item) => {
+    const sameProject = item.projectId === project.id || item.project === project.name;
+    return sameProject && !/已付|已结|已付款|已结算|审批已驳回|审批已撤回/.test(String(item.status || ""));
+  });
+}
+
+function syncSupplierSettlementNotificationAfterUpdate(db, row = {}, user = {}, status = "") {
+  db.systemNotifications = db.systemNotifications || [];
+  const project = findProjectForSupplierSettlement(db, row);
+  if (!project) return;
+  const at = new Date().toISOString();
+  const pendingRows = pendingSupplierRowsForProject(db, project);
+  const notices = db.systemNotifications.filter((item) => {
+    const sameProject = item.projectId === project.id || item.projectName === project.name;
+    return sameProject && item.type === "supplier-settlement-pending";
+  });
+
+  if (status === "已付款" && pendingRows.length === 0) {
+    for (const notice of notices) {
+      if (notice.status !== "待处理") continue;
+      notice.status = "已处理";
+      notice.handledAt = at;
+      notice.handledBy = user.id || "";
+      notice.handledByName = user.name || "";
+      notice.note = "项目供应商结算已全部标记为已付款，系统自动处理待办。";
+      notice.updatedAt = at;
+    }
+    return;
+  }
+
+  if (status !== "待结算" || pendingRows.length === 0) return;
+  const pendingAmount = pendingRows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const text = `「${project.name}」仍有 ${pendingRows.length} 条供应商待结算，合计 ${pendingAmount.toLocaleString("zh-CN")} 元。请 PM/财务确认付款或发起供应商付款审批。`;
+  const active = notices.find((item) => item.status === "待处理");
+  if (active) {
+    active.text = text;
+    active.updatedAt = at;
+    return;
+  }
+  const reopen = notices.find((item) => ["已处理", "已忽略"].includes(item.status));
+  if (reopen) {
+    reopen.status = "待处理";
+    reopen.reopenedAt = at;
+    reopen.reopenedBy = user.id || "";
+    reopen.reopenedByName = user.name || "";
+    reopen.reopenReason = "供应商结算退回待结算。";
+    reopen.text = text;
+    reopen.updatedAt = at;
+    return;
+  }
+  upsertSystemNotification(db, {
+    type: "supplier-settlement-pending",
+    title: "供应商待结算",
+    text,
+    severity: pendingAmount >= 20000 || pendingRows.length >= 3 ? "高" : "中",
+    role: "finance",
+    recipients: Array.from(new Set([...notificationRecipientsForRole("finance"), ...notificationRecipientsForRole("pm")])),
+    projectId: project.id,
+    projectName: project.name,
+    source: "supplier-settlement",
+    sourceId: project.id,
+    actionLabel: "看供应商结算",
+    actionView: "project-detail"
+  });
+}
+
+function syncVerificationNotificationAfterUpload(db, project = {}, record = {}, user = {}) {
+  db.systemNotifications = db.systemNotifications || [];
+  if (!project.id) return;
+  const at = new Date().toISOString();
+  const recordMonth = record.month || monthKey(new Date(at));
+  const revenue = project.extractedFields?.revenueRecognition || {};
+  const hasMonthVerification = (revenue.verificationRecords || []).some((item) => item.month === recordMonth);
+  if (!hasMonthVerification) return;
+  for (const notice of db.systemNotifications || []) {
+    const sameProject = notice.projectId === project.id || notice.projectName === project.name;
+    if (!sameProject || notice.type !== "verification-sheet-missing" || notice.status !== "待处理") continue;
+    notice.status = "已处理";
+    notice.handledAt = at;
+    notice.handledBy = user.id || "";
+    notice.handledByName = user.name || "";
+    notice.note = `已上传 ${recordMonth} 核销表，系统自动处理本月核销待办。`;
+    notice.updatedAt = at;
+  }
+}
+
+function syncProjectHealthNotificationsAfterUpdate(db, project = {}, user = {}) {
+  db.systemNotifications = db.systemNotifications || [];
+  if (!project.id) return;
+  const at = new Date().toISOString();
+  const status = String(project.status || "");
+  const inactiveProject = /已完成|完成|结案|已结案|取消/.test(status);
+  const health = projectTimeHealth(project, new Date(at));
+  const costPressure = projectCostPressure(project);
+  if (inactiveProject) {
+    closeExecutionNotificationsForInactiveProject(db, project, user, at);
+  }
+
+  for (const notice of db.systemNotifications || []) {
+    const sameProject = notice.projectId === project.id || notice.projectName === project.name;
+    if (!sameProject || notice.status !== "待处理") continue;
+    if (notice.type === "project-progress-lag") {
+      const noLongerLag = inactiveProject || health.timeProgress < 20 || health.diff > -15;
+      if (!noLongerLag) continue;
+      notice.status = "已处理";
+      notice.handledAt = at;
+      notice.handledBy = user.id || "";
+      notice.handledByName = user.name || "";
+      notice.note = inactiveProject
+        ? "项目已结束，系统自动处理进度滞后待办。"
+        : `项目完成度已追到 ${health.completion}%，时间进度 ${health.timeProgress}%，系统自动处理进度滞后待办。`;
+      notice.updatedAt = at;
+    }
+    if (["project-cost-pressure", "project-cost-overrun"].includes(notice.type)) {
+      const noLongerPressure = inactiveProject || !costPressure.executionBudget || costPressure.rate < 0.8;
+      if (!noLongerPressure) continue;
+      notice.status = "已处理";
+      notice.handledAt = at;
+      notice.handledBy = user.id || "";
+      notice.handledByName = user.name || "";
+      notice.note = inactiveProject
+        ? "项目已结束，系统自动处理成本压力待办。"
+        : `项目成本使用率已降至 ${costPressure.percent || 0}%，系统自动处理成本压力待办。`;
+      notice.updatedAt = at;
+    }
+  }
+}
+
+function closeExecutionNotificationsForInactiveProject(db, project = {}, user = {}, at = new Date().toISOString()) {
+  const executionTypes = new Set([
+    "project-assignment",
+    "project-progress-lag",
+    "project-cost-pressure",
+    "project-cost-overrun",
+    "verification-sheet-missing",
+    "supplier-settlement-pending",
+    "feishu-pending-file"
+  ]);
+  for (const notice of db.systemNotifications || []) {
+    const sameProject = notice.projectId === project.id || notice.projectName === project.name;
+    if (!sameProject || notice.status !== "待处理" || !executionTypes.has(notice.type)) continue;
+    notice.status = "已处理";
+    notice.handledAt = at;
+    notice.handledBy = user.id || "";
+    notice.handledByName = user.name || "";
+    notice.note = "项目已结案，系统自动处理执行类待办；回款类提醒会继续保留。";
+    notice.updatedAt = at;
+  }
+}
+
+function syncFeishuPendingNotificationAfterAction(db, pending = {}, user = {}, action = "confirm") {
+  db.systemNotifications = db.systemNotifications || [];
+  if (!pending.id) return;
+  const at = new Date().toISOString();
+  for (const notice of db.systemNotifications || []) {
+    const sameSource = notice.type === "feishu-pending-file" && notice.sourceId === pending.id;
+    if (!sameSource || notice.status !== "待处理") continue;
+    notice.status = "已处理";
+    notice.handledAt = at;
+    notice.handledBy = user.id || "";
+    notice.handledByName = user.name || "";
+    notice.note = action === "reject"
+      ? "飞书文件已驳回，不会写入项目，系统自动处理待办。"
+      : "飞书文件已确认入库，系统自动处理待办。";
+    notice.updatedAt = at;
+  }
+}
+
+function syncCompanyCashRunwayNotificationAfterSave(db, finance = {}, user = {}) {
+  db.systemNotifications = db.systemNotifications || [];
+  const at = new Date().toISOString();
+  const runwayMonths = Number(finance.runwayMonths || 0);
+  const monthlyFixedCost = Number(finance.monthlyFixedCost || 0);
+  const needsReminder = monthlyFixedCost > 0 && runwayMonths < 6;
+  const notices = db.systemNotifications.filter((item) => item.type === "company-cash-runway");
+
+  if (!needsReminder) {
+    for (const notice of notices) {
+      if (notice.status !== "待处理") continue;
+      notice.status = "已处理";
+      notice.handledAt = at;
+      notice.handledBy = user.id || "";
+      notice.handledByName = user.name || "";
+      notice.note = monthlyFixedCost
+        ? `现金流已达到 ${runwayMonths.toFixed(1)} 个月，超过 6 个月安全线，系统自动处理现金流待办。`
+        : "现金流参数待完善，系统自动处理旧现金流待办。";
+      notice.updatedAt = at;
+    }
+    return;
+  }
+
+  const text = `当前现金可撑 ${runwayMonths.toFixed(1)} 个月，月固定支出 ${monthlyFixedCost.toLocaleString("zh-CN")} 元，6个月安全线缺口 ${Number(finance.gap || 0).toLocaleString("zh-CN")} 元。`;
+  const active = notices.find((item) => item.status === "待处理");
+  if (active) {
+    active.title = runwayMonths < 3 ? "危险！你快倒闭啦！需要收缩现金流" : "公司现金流低于 6 个月安全线";
+    active.text = text;
+    active.severity = runwayMonths < 3 ? "高" : "中";
+    active.updatedAt = at;
+    return;
+  }
+  const reopen = notices.find((item) => ["已处理", "已忽略"].includes(item.status));
+  if (reopen) {
+    reopen.status = "待处理";
+    reopen.reopenedAt = at;
+    reopen.reopenedBy = user.id || "";
+    reopen.reopenedByName = user.name || "";
+    reopen.reopenReason = "现金流设置更新后低于 6 个月安全线。";
+    reopen.title = runwayMonths < 3 ? "危险！你快倒闭啦！需要收缩现金流" : "公司现金流低于 6 个月安全线";
+    reopen.text = text;
+    reopen.severity = runwayMonths < 3 ? "高" : "中";
+    reopen.updatedAt = at;
+    return;
+  }
+  upsertSystemNotification(db, {
+    type: "company-cash-runway",
+    title: runwayMonths < 3 ? "危险！你快倒闭啦！需要收缩现金流" : "公司现金流低于 6 个月安全线",
+    text,
+    severity: runwayMonths < 3 ? "高" : "中",
+    role: "finance",
+    recipients: notificationRecipientsForRole("finance"),
+    source: "finance-settings",
+    sourceId: "company-cash-runway",
+    actionLabel: "看现金流",
+    actionView: "management:cash"
+  });
+}
+
+export function recordProjectPayment(db, body, user) {
+  return recordProjectPaymentCore(db, body, user, { inferRisk, projectRiskAlerts });
+}
+
+export function voidProjectPayment(db, body, user) {
+  return voidProjectPaymentCore(db, body, user, { inferRisk, projectRiskAlerts });
+}
+
+export function upsertProjectTask(db, body, user) {
+  return upsertProjectTaskCore(db, body, user, { projectRiskAlerts, syncProjectHealthNotificationsAfterUpdate });
+}
+
+export function archiveProjectTask(db, body, user) {
+  return archiveProjectTaskCore(db, body, user, { projectRiskAlerts, syncProjectHealthNotificationsAfterUpdate });
+}
+
+export function deleteProject(db, body, user) {
+  return deleteProjectCore(db, body, user);
 }
 
 function syncProjectProfit(project, executionBudget = 0) {
-  const current = project.extractedFields?.profitBreakdown || {};
-  const parsed = {
-    ...project.extractedFields,
-    ...current,
-    executionBudget: executionBudget || current.executionBudget || project.extractedFields?.executionBudget || 0
-  };
-  const breakdown = calculateProfitBreakdown(project.contract, parsed);
-  const hasExistingCost = breakdown.totalDeduction || parseMoney(project.costUsed) || (project.costs || []).length;
-  if (!hasExistingCost) {
-    const emptyBreakdown = {
-      ...breakdown,
-      totalDeduction: 0,
-      profit: Number(project.contract || 0),
-      margin: profitMargin(project.contract, Number(project.contract || 0))
-    };
-    project.costs = [];
-    project.extractedFields = { ...(project.extractedFields || {}), profitBreakdown: emptyBreakdown, profit: emptyBreakdown.profit };
-    return emptyBreakdown;
-  }
-  project.costs = breakdown.costs;
-  project.extractedFields = { ...(project.extractedFields || {}), profitBreakdown: breakdown, profit: breakdown.profit };
-  return breakdown;
-}
-
-function hasContractLikeFile(files = [], parsed = {}) {
-  if (parseMoney(parsed.contract) || parsed.partyA || parsed.partyB) return true;
-  return files.some((file) => {
-    const source = `${file.name || ""}\n${file.text || ""}`;
-    return /(合同|协议|甲方|乙方|委托方|受托方|合同金额|服务费用|付款方式)/.test(source)
-      && !/(成本表|利润测算|执行支出|人力|公摊|月度成本|供应商结算)/.test(file.name || "");
-  });
+  return syncProjectProfitCore(project, executionBudget, { calculateProfitBreakdown, profitMargin });
 }
 
 function isPotentialQuoteSheetFile(file = {}) {
@@ -190,121 +686,23 @@ function looksLikeQuoteSheetFile(file = {}) {
   });
 }
 
-export function createParseJob(project, files, parsed = {}, sourceValues = {}) {
-  const now = new Date().toISOString();
-  const finished = files.length && (parsed.summary || parsed.contract || parsed.client);
-  return {
-    id: `J-${Date.now()}`,
-    projectId: project.id,
-    projectName: project.name,
-    status: finished ? "已完成" : files.length ? "解析中" : "等待文件",
-    progress: finished ? 100 : files.length ? 25 : 0,
-    steps: [
-      { name: "文件接收", status: files.length ? "完成" : "等待" },
-      { name: "字段识别", status: finished ? "完成" : files.length ? "进行中" : "等待" },
-      { name: "人工确认", status: finished ? "完成" : "等待" },
-      { name: "写入项目", status: finished ? "完成" : "等待" }
-    ],
-    files,
-    sourceValues,
-    extractedFields: parsed,
-    createdAt: now,
-    updatedAt: now
-  };
-}
-
-function assertUniqueProject(db, values = {}, files = [], contract = 0, ignoreProjectId = "") {
-  const incomingName = normalizeProjectText(values["项目名称"] || files.map((file) => file.name).join(" "));
-  const incomingClient = normalizeProjectText(values["客户 / 品牌"] || "");
-  const incomingFiles = normalizeProjectText(files.map((file) => file.name).join(" "));
-  const incomingAmount = Math.round(Number(contract || 0));
-
-  for (const project of db.projects || []) {
-    if (ignoreProjectId && project.id === ignoreProjectId) continue;
-    const existingName = normalizeProjectText(project.name || "");
-    const existingClient = normalizeProjectText(project.client || "");
-    const existingFiles = normalizeProjectText((project.files || []).map((file) => file.name).join(" "));
-    const existingAmount = Math.round(Number(project.contract || 0));
-    const sameAmount = incomingAmount && existingAmount && Math.abs(incomingAmount - existingAmount) <= Math.max(100, incomingAmount * 0.01);
-    const sameClient = incomingClient && existingClient && (incomingClient.includes(existingClient) || existingClient.includes(incomingClient));
-    const similarName = incomingName && existingName && similarity(incomingName, existingName) >= 0.82;
-    const sameFile = incomingFiles && existingFiles && (incomingFiles.includes(existingFiles) || existingFiles.includes(incomingFiles));
-
-    if ((sameClient && sameAmount) || (similarName && (sameClient || sameAmount)) || (sameFile && (sameClient || sameAmount))) {
-      throw new Error(`疑似重复项目：${project.name}。请在项目台账中确认后再上传，避免重复归档。`);
-    }
-  }
-}
-
-function projectToValues(project) {
-  return {
-    "项目名称": project.name || "",
-    "客户 / 品牌": project.client || "",
-    "合同金额": project.contract || 0
-  };
-}
-
-function removeCreatedProject(db, projectId, parseJobId) {
-  db.projects = (db.projects || []).filter((item) => item.id !== projectId);
-  db.parseJobs = (db.parseJobs || []).filter((item) => item.id !== parseJobId && item.projectId !== projectId);
-  db.files = (db.files || []).filter((item) => item.projectId !== projectId);
-  db.suppliers = (db.suppliers || []).filter((item) => item.projectId !== projectId);
-  db.auditLogs = (db.auditLogs || []).filter((item) => !(item.type === "project" && item.action === "create"));
-}
-
-function findMatchingProjectForCostSheet(db, parsed = {}, files = []) {
-  const incomingName = normalizeProjectText(parsed.projectName || parsed.name || files.map((file) => file.name).join(" "));
-  const incomingClient = normalizeProjectText(parsed.client || parsed.partyA || "");
-  const incomingText = normalizeProjectText([
-    parsed.projectName,
-    parsed.client,
-    parsed.partyA,
-    files.map((file) => `${file.name || ""} ${file.text || ""}`).join(" ")
-  ].join(" "));
-  const incomingContract = parseMoney(parsed.contract);
-
-  const scored = (db.projects || []).map((project) => {
-    const existingName = normalizeProjectText(project.name || "");
-    const existingClient = normalizeProjectText(project.client || "");
-    const existingContract = parseMoney(project.contract);
-    let score = 0;
-
-    if (incomingName && existingName) score += similarity(incomingName, existingName) * 55;
-    if (incomingClient && existingClient && (incomingClient.includes(existingClient) || existingClient.includes(incomingClient))) score += 35;
-    if (incomingText && existingName && (incomingText.includes(existingName) || existingName.includes(incomingName))) score += 30;
-    if (incomingText && existingClient && incomingText.includes(existingClient)) score += 25;
-    if (incomingContract && existingContract && Math.abs(incomingContract - existingContract) <= Math.max(100, existingContract * 0.05)) score += 25;
-
-    return { project, score };
-  }).sort((a, b) => b.score - a.score);
-
-  return scored[0]?.score >= 45 ? scored[0].project : null;
-}
-
-function normalizeProjectText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/\.[a-z0-9]+$/i, "")
-    .replace(/[^\p{Script=Han}a-z0-9]+/gu, "");
-}
-
-function similarity(a, b) {
-  if (!a || !b) return 0;
-  const short = a.length <= b.length ? a : b;
-  const long = a.length > b.length ? a : b;
-  if (long.includes(short)) return short.length / long.length;
-  const setA = new Set(a);
-  const setB = new Set(b);
-  const intersection = [...setA].filter((char) => setB.has(char)).length;
-  const union = new Set([...setA, ...setB]).size || 1;
-  return intersection / union;
-}
-
 export async function advanceParseJob(db, idOrProjectId) {
   const job = db.parseJobs.find((item) => item.id === idOrProjectId || item.projectId === idOrProjectId);
   if (!job) throw new Error("解析任务不存在");
 
   if (job.status === "已完成" && job.extractedFields?.summary) return job;
+
+  if (/失败/.test(String(job.status || ""))) {
+    job.status = "重新解析中";
+    job.progress = Math.max(25, Number(job.progress || 0));
+    job.error = "";
+    job.steps = [
+      { name: "文件接收", status: "完成" },
+      { name: "字段识别", status: "进行中" },
+      { name: "人工确认", status: "等待" },
+      { name: "写入项目", status: "等待" }
+    ];
+  }
 
   job.progress = Math.min(100, job.progress + 25);
   job.status = job.progress >= 100 ? "已完成" : "解析中";
@@ -317,7 +715,16 @@ export async function advanceParseJob(db, idOrProjectId) {
 
   if (job.progress >= 75 && !job.extractedFields?.summary) {
     const project = db.projects.find((item) => item.id === job.projectId);
-    if (project) await analyzeAndApplyProjectFiles(db, project, job);
+    if (project) {
+      try {
+        await analyzeAndApplyProjectFiles(db, project, job);
+      } catch (error) {
+        markParseJobFailed(job, error);
+        project.status = project.status === "AI解析中" ? "解析失败" : project.status;
+        project.aiSummary = `AI 解析失败：${error.message}`;
+        project.updatedAt = new Date().toISOString();
+      }
+    }
   }
 
   return job;
@@ -352,7 +759,14 @@ export async function reparseProject(db, body, user) {
   project.status = "AI解析中";
   project.aiSummary = "已使用服务端共享 AI 配置重新解析原始文件，请稍候查看最新结果。";
   project.updatedAt = now;
-  await analyzeAndApplyProjectFiles(db, project, job);
+  try {
+    await analyzeAndApplyProjectFiles(db, project, job);
+  } catch (error) {
+    markParseJobFailed(job, error);
+    project.status = "解析失败";
+    project.aiSummary = `AI 解析失败：${error.message}`;
+    project.updatedAt = new Date().toISOString();
+  }
   db.auditLogs.unshift({ type: "project", target: project.name, action: "reparse", user: user.name, at: now });
   return { project, parseJob: job };
 }
@@ -361,7 +775,7 @@ export async function uploadProjectCostSheet(db, body, user) {
   const project = (db.projects || []).find((item) => item.id === body?.id);
   if (!project) throw new Error("项目不存在");
   const now = new Date().toISOString();
-  const files = await normalizeUploadedFiles(body.files || [], "execution-cost", user, now);
+  const files = await normalizeUploadedFiles(body.files || [], "execution-cost", user, now, db.settings?.storage || {});
   files.forEach((file) => {
     file.coveredMonths = Array.isArray(file.coveredMonths) && file.coveredMonths.length
       ? file.coveredMonths
@@ -407,7 +821,7 @@ export async function uploadProjectQuoteSheet(db, body, user) {
   const project = (db.projects || []).find((item) => item.id === body?.id);
   if (!project) throw new Error("项目不存在");
   const now = new Date().toISOString();
-  const files = await normalizeUploadedFiles(body.files || [], "quote-sheet", user, now);
+  const files = await normalizeUploadedFiles(body.files || [], "quote-sheet", user, now, db.settings?.storage || {});
   if (!files.length) throw new Error("请先上传合同报价表");
   const rules = extractQuoteRules(files);
   if (!rules.length) throw new Error("未识别到可核销的报价项，请检查报价表是否包含服务内容、数量、单位、单价、小计等字段。");
@@ -422,7 +836,7 @@ async function applyInitialQuoteSheets(db, project, files = [], user, now = new 
   const candidateFiles = files.filter(isPotentialQuoteSheetFile);
   if (!candidateFiles.length) return null;
 
-  const quoteFiles = (await normalizeUploadedFiles(candidateFiles, "quote-sheet", user, now))
+  const quoteFiles = (await normalizeUploadedFiles(candidateFiles, "quote-sheet", user, now, db.settings?.storage || {}))
     .filter(looksLikeQuoteSheetFile);
   const rules = extractQuoteRules(quoteFiles);
   if (!rules.length) return null;
@@ -454,15 +868,11 @@ function syncQuoteRulesToProject(project, files, rules, now) {
   project.updatedAt = now;
 }
 
-function uploadedFileKey(file = {}) {
-  return `${file.name || ""}:${file.size || 0}:${file.type || ""}`;
-}
-
 export async function uploadProjectVerificationSheet(db, body, user) {
   const project = (db.projects || []).find((item) => item.id === body?.id);
   if (!project) throw new Error("项目不存在");
   const now = new Date().toISOString();
-  const files = await normalizeUploadedFiles(body.files || [], "verification-sheet", user, now);
+  const files = await normalizeUploadedFiles(body.files || [], "verification-sheet", user, now, db.settings?.storage || {});
   if (!files.length) throw new Error("请先上传月度核销表");
   learnParserSkills(db, files, "verification-sheet", user, now);
   const revenue = project.extractedFields?.revenueRecognition || {};
@@ -512,297 +922,148 @@ export async function uploadProjectVerificationSheet(db, body, user) {
   project.updatedAt = now;
   db.files.unshift({ files, projectId: project.id, projectName: project.name, type: "verification-sheet", user: user.name, at: now });
   db.auditLogs.unshift({ type: "upload", target: project.name, action: "verification-sheet", amount: recognizedRevenue, user: user.name, at: now });
+  syncVerificationNotificationAfterUpload(db, project, record, user);
   return { project, record, files };
 }
 
-function fileReference(file = {}) {
+function parseServiceDeps() {
   return {
-    name: file.name,
-    size: file.size,
-    type: file.type,
-    category: file.category,
-    text: file.text,
-    tableRows: file.tableRows,
-    extractionStatus: file.extractionStatus,
-    uploadedAt: file.uploadedAt,
-    uploadedBy: file.uploadedBy,
-    uploadedByName: file.uploadedByName,
-    dataUrl: file.dataUrl,
-    base64: file.base64
+    analyzeProjectFiles,
+    calculateProfitBreakdown,
+    extractFileContent,
+    inferRisk,
+    nextFileId,
+    persistLocalUploadFile,
+    profitMargin,
+    projectRiskAlerts,
+    shouldUseOcrForPdf
   };
 }
 
-async function normalizeUploadedFiles(files, category, user, now) {
-  return Promise.all((Array.isArray(files) ? files : []).map(async (file) => {
-    const shouldExtract = file.base64 && (/\.(xlsx|xls|xlsm)$/i.test(file.name || "") || String(file.type || "").includes("spreadsheet"));
-    const extracted = shouldExtract || !file.text ? await extractFileContent(file) : file;
-    const tableRows = extracted.tableRows || file.tableRows || [];
-    const tableText = tableRowsToText(tableRows);
-    const extractedText = extracted.extractionStatus === "仅记录文件信息" ? "" : extracted.text;
-    return {
-      ...file,
-      text: extractedText || file.text || tableText || extracted.text || "",
-      tableRows,
-      extractionStatus: extracted.extractionStatus || file.extractionStatus || "",
-      category,
-      uploadedAt: file.uploadedAt || now,
-      uploadedBy: file.uploadedBy || user.id,
-      uploadedByName: user.name
-    };
-  }));
-}
-
-function tableRowsToText(tableRows = []) {
-  if (!Array.isArray(tableRows) || !tableRows.length) return "";
-  return tableRows
-    .map((row) => {
-      const cells = Array.isArray(row.cells) ? row.cells : [];
-      return `${row.sheetName ? `工作表：${row.sheetName}\n` : ""}${cells.map((cell) => String(cell ?? "").replace(/\r?\n/g, " ")).join("\t")}`;
-    })
-    .join("\n");
-}
-
-function setStepStatus(steps, name, status) {
-  return steps.map((step) => step.name === name ? { ...step, status } : step);
+async function normalizeUploadedFiles(files, category, user, now, storageSettings = {}) {
+  return normalizeUploadedFilesCore(files, category, user, now, storageSettings, parseServiceDeps());
 }
 
 async function analyzeAndApplyProjectFiles(db, project, job) {
-  job.status = "解析中";
-  job.progress = Math.max(job.progress || 0, 50);
-  job.steps = setStepStatus(job.steps, "字段识别", "进行中");
-  job.updatedAt = new Date().toISOString();
-
-  const parsed = await analyzeProjectFiles(db.settings?.aiService, job.sourceValues || {}, job.files || [], db.settings?.interestRate);
-  applyParsedFields(db, project, job, parsed);
+  return analyzeAndApplyProjectFilesCore(db, project, job, parseServiceDeps());
 }
 
 function applyParsedFields(db, project, job, parsed) {
-  const existingExtractedFields = project.extractedFields || {};
-  const existingRevenueRecognition = existingExtractedFields.revenueRecognition || {};
-  const parsedContract = parseMoney(parsed.contract);
-  const existingContract = parseMoney(project.contract);
-  const hasCostSheet = Boolean(parsed.hasCostSheet);
-  const contract = hasCostSheet ? (existingContract || parsedContract) : (parsedContract || existingContract);
-  const profitBreakdown = hasCostSheet ? calculateProfitBreakdown(contract, parsed) : null;
-  const costBudget = hasCostSheet ? (profitBreakdown.executionBudget || parseMoney(project.costBudget)) : parseMoney(project.costBudget);
-  const costUsed = hasCostSheet ? profitBreakdown.totalDeduction : parseMoney(project.costUsed);
-  const parsedPaid = parseMoney(parsed.paid);
-  const existingPaid = parseMoney(project.paid);
-  const paid = hasCostSheet ? Math.max(existingPaid, parsedPaid) : parsedPaid;
-  const receivable = parseMoney(parsed.receivable) || Math.max(contract - paid, 0);
-  const oldName = project.name;
-  const parsedProjectName = parsed.projectName || parsed.name || "";
-  const shouldUseParsedName = (!project.name || project.name.startsWith("待解析合同-")) && parsedProjectName;
-
-  Object.assign(project, {
-    name: shouldUseParsedName ? parsedProjectName : project.name,
-    client: project.client || parsed.client || "",
-    contract,
-    costBudget,
-    costUsed,
-    paid,
-    receivable,
-    status: "解析完成",
-    risk: inferRisk({ contract, costBudget, costUsed, receivable }),
-    aiSummary: parsed.summary || "文件已解析，结构化字段已同步到项目台账。",
-    nextMilestone: parsed.nextMilestone || parsed.servicePeriod || parsed.deliveryDate || "",
-    paymentDue: parsed.paymentDue || "",
-    margin: contract ? profitMargin(contract, contract - costUsed) : 0,
-    tasks: parsed.tasks || [],
-    costs: hasCostSheet ? profitBreakdown.costs : (project.costs || []),
-    extractedFields: mergeProjectExtractedFields(existingExtractedFields, parsed, {
-      hasCostSheet,
-      profitBreakdown,
-      profit: contract - costUsed,
-      revenueRecognition: existingRevenueRecognition
-    })
-  });
-  if (Array.isArray(parsed.extractedFiles) && parsed.extractedFiles.length) {
-    project.files = parsed.extractedFiles;
-    job.files = parsed.extractedFiles;
-  }
-  project.alerts = projectRiskAlerts(project);
-
-  job.projectName = project.name;
-  job.status = "已完成";
-  job.progress = 100;
-  job.extractedFields = parsed;
-  job.updatedAt = new Date().toISOString();
-  job.steps = job.steps.map((step) => ({ ...step, status: "完成" }));
-
-  for (const supplier of hasCostSheet ? (parsed.suppliers || []) : []) {
-    db.suppliers.unshift({
-      supplier: supplier.supplier || supplier.name || "未命名供应商",
-      project: project.name,
-      type: supplier.type || "项目费用",
-      amount: Number(supplier.amount || 0),
-      status: supplier.status || "待结算"
-    });
-  }
-
-  for (const supplier of db.suppliers || []) {
-    if (supplier.project === oldName) supplier.project = project.name;
-  }
-}
-
-function mergeProjectExtractedFields(existing = {}, parsed = {}, options = {}) {
-  const revenueRecognition = {
-    ...(existing.revenueRecognition || {}),
-    ...(parsed.revenueRecognition || {}),
-    ...(options.revenueRecognition || {})
-  };
-  const merged = options.hasCostSheet
-    ? { ...existing, ...parsed, profitBreakdown: options.profitBreakdown, profit: options.profit }
-    : { ...existing, ...parsed };
-  if (Object.keys(revenueRecognition).length) merged.revenueRecognition = revenueRecognition;
-  return merged;
+  return applyParsedFieldsCore(db, project, job, parsed, parseServiceDeps());
 }
 
 export function validateAiSettings(values) {
-  const normalized = normalizeAiSettings(values);
-  if (!normalized["API Key"]) throw new Error("请先填写 API Key");
-  if (!normalized["Base URL"]) throw new Error("请先填写 Base URL");
-  if (!normalized["模型名称"]) throw new Error("请先选择服务商，系统会自动匹配模型名称");
-  try {
-    new URL(normalized["Base URL"]);
-  } catch {
-    throw new Error("Base URL 格式不正确");
-  }
-  return normalized;
+  return validateAiSettingsCore(values, { normalizeAiSettings });
 }
 
 export async function testAiSettings(values) {
-  const normalized = validateAiSettings(values);
-  const baseUrl = normalized["Base URL"].replace(/\/$/, "");
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-
-  try {
-    const res = await fetch(`${baseUrl}/models`, {
-      headers: { authorization: `Bearer ${normalized["API Key"]}` },
-      signal: controller.signal
-    });
-    if (!res.ok) {
-      throw new Error(`AI 服务返回 ${res.status}`);
-    }
-    return {
-      provider: normalized["服务商"] || "OpenAI 兼容接口",
-      model: normalized["模型名称"] || "",
-      checkedAt: new Date().toISOString()
-    };
-  } catch (error) {
-    if (error.name === "AbortError") throw new Error("AI 服务连接超时，请检查 Base URL 或网络");
-    throw new Error(`AI 配置校验失败：${error.message}`);
-  } finally {
-    clearTimeout(timer);
-  }
+  return testAiSettingsCore(values, { normalizeAiSettings });
 }
 
 export async function saveSetting(db, type, values, user) {
-  const current = db.settings?.[type] || {};
-  const candidate = type === "aiService" ? { ...current, ...values } : values;
-  const checked = type === "aiService" ? await testAiSettings(candidate) : null;
-  const normalized = type === "aiService" ? validateAiSettings(candidate) : values;
-  const saved = { ...current, ...normalized, connection: checked, savedAt: new Date().toISOString(), savedBy: user.id };
-  db.settings[type] = saved;
-  db.auditLogs.unshift({ type: "settings", target: type, user: user.name, at: saved.savedAt });
-  return saved;
+  return saveSettingCore(db, type, values, user, { normalizeAiSettings, syncCompanyCashRunwayNotificationAfterSave });
+}
+
+export function saveCompanyFinance(db, values = {}, user = {}) {
+  return saveCompanyFinanceCore(db, values, user, { syncCompanyCashRunwayNotificationAfterSave });
 }
 
 export async function refreshInterestRate(db, user) {
-  const current = db.settings?.interestRate || {};
-  const fetched = await fetchLatestLprRate().catch((error) => ({
-    ok: false,
-    error: error.message,
-    annualRate: Number(current.annualRate || current.fallbackRate || 3.45)
-  }));
-  const saved = {
-    source: "latest_lpr",
-    term: "1Y",
-    annualRate: fetched.annualRate,
-    spread: Number(current.spread || 0),
-    fallbackRate: Number(current.fallbackRate || 3.45),
-    updatedAt: new Date().toISOString(),
-    checkedAt: new Date().toISOString(),
-    status: fetched.ok ? "已刷新" : "使用兜底利率",
-    note: fetched.ok
-      ? `已从中国货币网匹配 1 年期 LPR：${fetched.annualRate}%`
-      : `联网刷新失败，继续使用兜底利率：${fetched.error || "未知错误"}`
-  };
-  Object.assign(saved, {
-    "利率来源": saved.source,
-    "年化利率": saved.annualRate,
-    "公司加点": saved.spread,
-    "兜底利率": saved.fallbackRate
+  return refreshInterestRateCore(db, user);
+}
+
+export async function recordFiles(db, body, user) {
+  return recordFilesCore(db, body, user, { normalizeUploadedFiles });
+}
+
+export async function testObjectStorage(db, values = {}, user = {}) {
+  return testObjectStorageCore(db, values, user, { normalizeUploadedFiles });
+}
+
+export function scanSystemNotifications(db, user = { id: "system", name: "系统扫描" }) {
+  return scanSystemNotificationsCore(db, user, {
+    currentApprovalStep,
+    monthKey,
+    monthlyTargetSummaryFromRules,
+    normalizeProjectTask,
+    pendingSupplierRowsForProject,
+    taskDueInfo
   });
-  db.settings.interestRate = saved;
-  db.auditLogs.unshift({ type: "settings", target: "interestRate", user: user.name, at: saved.updatedAt });
-  return saved;
 }
 
-async function fetchLatestLprRate() {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-  try {
-    const res = await fetch("https://www.chinamoney.com.cn/chinese/bklpr/", {
-      headers: { "user-agent": "ad-project-hub/1.0" },
-      signal: controller.signal
-    });
-    if (!res.ok) throw new Error(`中国货币网返回 ${res.status}`);
-    const html = await res.text();
-    const annualRate = parseLprRate(html);
-    if (!annualRate) throw new Error("未识别到 1 年期 LPR");
-    return { ok: true, annualRate };
-  } finally {
-    clearTimeout(timer);
-  }
+export function updateSystemNotification(db, body, user) {
+  return updateSystemNotificationCore(db, body, user);
 }
 
-function parseLprRate(text) {
-  const compact = String(text || "").replace(/\s+/g, " ");
-  const oneYearMatch = compact.match(/1\s*年期[^%]{0,80}?(\d+(?:\.\d+)?)\s*%/i)
-    || compact.match(/一年期[^%]{0,80}?(\d+(?:\.\d+)?)\s*%/i);
-  if (oneYearMatch) return Number(oneYearMatch[1]);
-  const rates = [...compact.matchAll(/(\d+(?:\.\d+)?)\s*%/g)]
-    .map((match) => Number(match[1]))
-    .filter((value) => value > 0 && value < 20);
-  return rates[0] || 0;
+export async function sendSystemNotificationToFeishu(db, body, user) {
+  return sendSystemNotificationToFeishuCore(db, body, user, { getFeishuTenantAccessToken });
 }
 
-export function recordFiles(db, body, user) {
-  const now = new Date().toISOString();
-  const files = (Array.isArray(body.files) ? body.files : []).map((file) => ({
-    ...file,
-    uploadedAt: file.uploadedAt || now,
-    uploadedBy: file.uploadedBy || user.id
-  }));
-  const upload = { files, projectName: body.projectName || "", user: user.name, at: now };
-  db.files.unshift(upload);
-  db.auditLogs.unshift({ type: "upload", target: upload.projectName || "未命名项目", count: files.length, user: user.name, at: now });
-  return upload;
+export async function sendSystemNotificationToWechat(db, body, user) {
+  return sendSystemNotificationToWechatCore(db, body, user);
 }
 
-export function updateAlert(db, body, user) {
-  const at = new Date().toISOString();
-  const update = { ...body, user: user.name, at };
-  db.alertUpdates.unshift(update);
-  db.auditLogs.unshift({ type: "alert", target: body.project, action: body.action, user: user.name, at });
-  return update;
+export async function dispatchNewHighSeverityNotifications(db, notices, user) {
+  return dispatchNewHighSeverityNotificationsCore(db, notices, user, { getFeishuTenantAccessToken });
 }
 
-export function addComment(db, body, user) {
-  const at = new Date().toISOString();
-  const comment = { ...body, user: user.name, at };
-  db.comments.unshift(comment);
-  db.auditLogs.unshift({ type: "comment", target: body.project, user: user.name, at });
-  return comment;
+function assistantServiceDeps() {
+  return {
+    createApproval,
+    postAi,
+    resolveAiSettings,
+    upsertProjectTask
+  };
 }
 
-export function supplierCsv(db) {
-  const header = "供应商,归属项目,费用类型,应结金额,状态\n";
-  const rows = db.suppliers.map((item) => [item.supplier, item.project, item.type, item.amount, item.status]
-    .map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(","));
-  return header + rows.join("\n");
+export async function answerAiAssistant(db, body, user, scopedDb) {
+  return answerAiAssistantCore(db, body, user, scopedDb, assistantServiceDeps());
+}
+
+function approvalServiceDeps() {
+  return {
+    supplierLibrary,
+    syncApprovalNotificationAfterAction,
+    syncProjectHealthNotificationsAfterUpdate,
+    syncSupplierSettlementNotificationAfterUpdate
+  };
+}
+
+export function createApproval(db, body, user) {
+  return createApprovalCore(db, body, user);
+}
+
+export function actOnApproval(db, body, user) {
+  return actOnApprovalCore(db, body, user, approvalServiceDeps());
+}
+
+export function withdrawApproval(db, body, user) {
+  return withdrawApprovalCore(db, body, user, approvalServiceDeps());
+}
+
+export function updateSupplierSettlement(db, body, user) {
+  return updateSupplierSettlementCore(db, body, user, approvalServiceDeps());
+}
+
+export { feishuPendingFiles, feishuProjectBindings, getFeishuTenantAccessToken, saveFeishuProjectBinding };
+
+function feishuServiceDeps() {
+  return {
+    createProject,
+    projectRiskAlerts,
+    syncFeishuPendingNotificationAfterAction,
+    uploadProjectCostSheet,
+    uploadProjectQuoteSheet,
+    uploadProjectVerificationSheet
+  };
+}
+
+export async function handleFeishuEvent(db, payload, user = { id: "system", name: "飞书机器人", role: "system" }) {
+  return handleFeishuEventCore(db, payload, user, feishuServiceDeps());
+}
+
+export async function handleFeishuPendingFile(db, body, user) {
+  return handleFeishuPendingFileCore(db, body, user, feishuServiceDeps());
 }
 
 export function normalizeAiSettings(values = {}) {
@@ -828,109 +1089,19 @@ export function normalizeAiSettings(values = {}) {
   return normalized;
 }
 
-function parseMoney(value) {
-  if (value === null || value === undefined || value === "") return 0;
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-
-  const text = String(value).trim();
-  if (!text) return 0;
-
-  const chineseAmount = parseChineseMoney(text);
-  if (chineseAmount) return chineseAmount;
-
-  const match = text.replaceAll(",", "").match(/-?\d+(?:\.\d+)?/);
-  if (!match) return 0;
-  const number = Number(match[0]);
-  if (!Number.isFinite(number)) return 0;
-
-  if (/万|w/i.test(text)) return number * 10000;
-  return number;
-}
-
-function parseChineseMoney(text) {
-  const source = String(text);
-  const chineseMatch = source.match(/[壹贰叁肆伍陆柒捌玖拾佰仟万亿零一二三四五六七八九十百千万两]+(?:元|圆|整|正|人民币|RMB|¥|￥)*/);
-  if (!chineseMatch && !/[壹贰叁肆伍陆柒捌玖拾佰仟万亿]/.test(source)) return 0;
-
-  const normalized = (chineseMatch?.[0] || source)
-    .replace(/[圆元整正]/g, "")
-    .replace(/零/g, "")
-    .replace(/两/g, "二")
-    .replace(/[壹一]/g, "1")
-    .replace(/[贰二]/g, "2")
-    .replace(/[叁三]/g, "3")
-    .replace(/[肆四]/g, "4")
-    .replace(/[伍五]/g, "5")
-    .replace(/[陆六]/g, "6")
-    .replace(/[柒七]/g, "7")
-    .replace(/[捌八]/g, "8")
-    .replace(/[玖九]/g, "9")
-    .replace(/拾/g, "十")
-    .replace(/佰/g, "百")
-    .replace(/仟/g, "千");
-
-  const han = normalized.match(/[1-9十百千万亿]+/);
-  const hasChineseDigits = /[壹贰叁肆伍陆柒捌玖拾佰仟零一二三四五六七八九十百两]/.test(source);
-  if (hasChineseDigits && han && /[十百千万亿]/.test(han[0])) return parseChineseNumber(han[0]);
-
-  const direct = normalized.match(/([1-9]\d*(?:\.\d+)?)\s*(亿|千万|百万|十万|万)/);
-  if (direct) return Number(direct[1]) * chineseUnitValue(direct[2]);
-
-  return 0;
-}
-
-function chineseUnitValue(unit) {
-  return {
-    十万: 100000,
-    百万: 1000000,
-    千万: 10000000,
-    万: 10000,
-    亿: 100000000
-  }[unit] || 1;
-}
-
-function parseChineseNumber(value) {
-  const digits = { "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9 };
-  const smallUnits = { 十: 10, 百: 100, 千: 1000 };
-  let total = 0;
-  let section = 0;
-  let number = 0;
-
-  for (const char of value) {
-    if (digits[char]) {
-      number = digits[char];
-      continue;
-    }
-
-    if (smallUnits[char]) {
-      section += (number || 1) * smallUnits[char];
-      number = 0;
-      continue;
-    }
-
-    if (char === "万" || char === "亿") {
-      section += number;
-      total += section * chineseUnitValue(char);
-      section = 0;
-      number = 0;
-    }
-  }
-
-  return total + section + number;
-}
-
 async function analyzeProjectFiles(aiSettings, values, files, interestRateSettings) {
-  const extractedFiles = await Promise.all(files.map(extractFileContent));
+  const extractedFiles = await Promise.all(files.map((file) => extractFileContent(file, { shouldUseOcrForPdf })));
   const text = extractedFiles
     .map((file) => `文件：${file.name}\n类型：${file.type || "unknown"}\n提取状态：${file.extractionStatus}\n${file.text || ""}`)
     .join("\n\n")
     .slice(0, 50000);
   const fallback = inferFieldsFromText(values, text, extractedFiles, interestRateSettings);
+  const effectiveAiSettings = resolveAiSettings(aiSettings);
 
-  if (!text.trim() || !aiSettings?.["API Key"]) return { ...fallback, extractedFiles };
+  if (!text.trim() || !effectiveAiSettings?.["API Key"]) return { ...fallback, extractedFiles };
 
   try {
-    const ai = normalizeAiSettings(aiSettings);
+    const ai = normalizeAiSettings(effectiveAiSettings);
     const data = await requestAiJson(ai, values, text);
     const content = data.choices?.[0]?.message?.content || "{}";
     return {
@@ -946,6 +1117,20 @@ async function analyzeProjectFiles(aiSettings, values, files, interestRateSettin
   }
 }
 
+function resolveAiSettings(settings = {}) {
+  const envSettings = {
+    "服务商": process.env.AI_PROVIDER || process.env.OPENAI_PROVIDER || "",
+    "API Key": process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "",
+    "Base URL": process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "",
+    "模型名称": process.env.AI_MODEL || process.env.OPENAI_MODEL || ""
+  };
+  const merged = { ...(settings || {}) };
+  for (const [key, value] of Object.entries(envSettings)) {
+    if (!merged[key] && value) merged[key] = value;
+  }
+  return normalizeAiSettings(merged);
+}
+
 function mergeParsedFields(fallback, aiParsed) {
   const merged = { ...fallback };
   for (const [key, value] of Object.entries(aiParsed || {})) {
@@ -954,6 +1139,8 @@ function mergeParsedFields(fallback, aiParsed) {
     if (Array.isArray(value) && !value.length) continue;
     merged[key] = value;
   }
+  const fallbackContract = parseMoney(fallback.contract);
+  if (fallbackContract) merged.contract = fallbackContract;
   return merged;
 }
 
@@ -1009,106 +1196,6 @@ async function readAiError(res) {
     return text.slice(0, 300);
   } catch {
     return "";
-  }
-}
-
-async function extractFileContent(file) {
-  const name = file.name || "未命名文件";
-  const type = file.type || "";
-  const lowerName = name.toLowerCase();
-  const fallback = {
-    ...file,
-    text: file.text || `文件名：${name}\n文件类型：${type || "unknown"}\n文件大小：${file.size || 0} bytes`,
-    extractionStatus: "仅记录文件信息"
-  };
-
-  try {
-    if (file.text && !file.base64) return { ...file, extractionStatus: "浏览器已读取文本" };
-    if (!file.base64) return fallback;
-
-    const buffer = Buffer.from(file.base64, "base64");
-    if (lowerName.endsWith(".pdf") || type === "application/pdf") {
-      const pdfParse = (await import("pdf-parse")).default;
-      const parsed = await pdfParse(buffer);
-      const text = (parsed.text || "").trim();
-      if (shouldUseOcrForPdf(text) && tencentOcrConfigured()) {
-        const reason = text ? "PDF 文本缺少可解析金额/日期" : "PDF 未提取到文本";
-        console.log(`[OCR] ${name}: ${reason}; calling Tencent OCR`);
-        try {
-          const ocr = await recognizeFileWithTencentOcrDetailed(file, { isPdf: true, pageCount: parsed.numpages });
-          console.log(`[OCR] ${name}: Tencent OCR returned ${ocr.text.length} characters`);
-          return {
-            ...file,
-            text: ocr.text,
-            tableRows: ocr.tableRows || [],
-            pageCount: parsed.numpages,
-            extractionStatus: ocr.text.trim() ? `${reason}，已使用腾讯云 OCR 识别` : "腾讯云 OCR 未识别到文本"
-          };
-        } catch (error) {
-          console.error(`[OCR] ${name}: Tencent OCR failed: ${error.message}`);
-          return {
-            ...file,
-            text,
-            extractionStatus: `${reason}，但腾讯云 OCR 调用失败：${error.message}`
-          };
-        }
-      }
-      if (shouldUseOcrForPdf(text) && !tencentOcrConfigured()) {
-        console.warn(`[OCR] ${name}: Tencent OCR is not configured`);
-      }
-      return {
-        ...file,
-        text,
-        extractionStatus: text
-          ? "PDF 文本提取成功"
-          : "PDF 未提取到可解析文本，可能是扫描件或图片合同；需要接入 OCR/视觉模型后才能精准识别"
-      };
-    }
-
-    if (type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(lowerName)) {
-      if (!tencentOcrConfigured()) return fallback;
-      try {
-        console.log(`[OCR] ${name}: calling Tencent OCR for image`);
-        const ocrText = await recognizeFileWithTencentOcr(file, { isPdf: false });
-        console.log(`[OCR] ${name}: Tencent OCR returned ${ocrText.length} characters`);
-        return {
-          ...file,
-          text: ocrText,
-          extractionStatus: ocrText.trim() ? "图片合同已使用腾讯云 OCR 识别" : "腾讯云 OCR 未识别到文本"
-        };
-      } catch (error) {
-        console.error(`[OCR] ${name}: Tencent OCR failed: ${error.message}`);
-        return { ...fallback, extractionStatus: `图片合同腾讯云 OCR 调用失败：${error.message}` };
-      }
-    }
-
-    if (lowerName.endsWith(".docx") || type.includes("wordprocessingml")) {
-      const mammoth = await import("mammoth");
-      const parsed = await mammoth.extractRawText({ buffer });
-      return { ...file, text: parsed.value || "", extractionStatus: parsed.value ? "Word 文本提取成功" : "Word 未提取到文本" };
-    }
-
-    if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsm") || type.includes("spreadsheet")) {
-      const XLSX = await import("xlsx");
-      const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
-      const tableRows = [];
-      const text = workbook.SheetNames.map((sheetName) => {
-        const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-        rows.forEach((row) => tableRows.push({ sheetName, cells: row.map((cell) => String(cell ?? "").replace(/\r?\n/g, " ")) }));
-        const tsv = rows.map((row) => row.map((cell) => String(cell ?? "").replace(/\r?\n/g, " ")).join("\t")).join("\n");
-        return `工作表：${sheetName}\n${tsv}`;
-      }).join("\n\n");
-      return { ...file, text, tableRows, extractionStatus: text ? "Excel 表格提取成功" : "Excel 未提取到表格内容" };
-    }
-
-    if (lowerName.endsWith(".csv") || lowerName.endsWith(".txt") || lowerName.endsWith(".md") || lowerName.endsWith(".tsv") || type.startsWith("text/")) {
-      return { ...file, text: buffer.toString("utf8"), extractionStatus: "文本文件读取成功" };
-    }
-
-    return fallback;
-  } catch (error) {
-    return { ...fallback, extractionStatus: `文件内容提取失败：${error.message}` };
   }
 }
 
@@ -2076,6 +2163,7 @@ function pickTableMetric(metrics, key, fallback = 0) {
 function isCostSheet(files = [], text = "") {
   const fileNames = files.map((file) => file.name || "").join(" ");
   const source = `${fileNames}\n${text}`.slice(0, 12000);
+  if (isReimbursementSheet(files, text)) return true;
   const hasCostKeyword = /(成本表|成本明细|费用明细|供应商结算|结算表|月度成本|成本台账|成本归集|利润测算|项目利润|垫款|垫款利息|执行预算|内部人力|人力成本|公摊费用|水电|办公室租金|应结金额|实付金额|供应商费用)/.test(source);
   const hasTableCostColumns = /(供应商|费用类型|成本科目|应结|已结算|待结算|结算状态|垫款|利息|执行预算|内部人力|公摊|租金|水电)/.test(source)
     && /(金额|费用|成本|付款|结算)/.test(source);
@@ -2087,7 +2175,7 @@ function isCostSheet(files = [], text = "") {
 
 function extractAmounts(text) {
   const values = [];
-  const pattern = /(?:人民币|RMB|￥|¥)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(亿元|亿|万元|万|元)?/g;
+  const pattern = /(?:人民币|RMB|￥|¥)?\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*(亿元|亿|万元|万|元)?/g;
   for (const match of text.matchAll(pattern)) {
     const rawText = match[0];
     if (looksLikeDateOrIdentifier(text, match.index || 0, rawText)) continue;
@@ -2102,6 +2190,9 @@ function extractAmounts(text) {
 
 function extractContractAmount(text) {
   const labels = [
+    "项目最终优惠总价",
+    "最终优惠总价",
+    "含税总价",
     "合同金额",
     "合同总金额",
     "合同总价",
@@ -2124,7 +2215,7 @@ function extractContractAmount(text) {
   for (const label of labels) {
     for (const match of text.matchAll(new RegExp(label, "g"))) {
       const start = Math.max(0, match.index - 20);
-      const snippet = text.slice(start, match.index + 180);
+      const snippet = text.slice(start, match.index + 220);
       for (const amount of extractAmountCandidates(snippet)) {
         candidates.push({ ...amount, score: amount.score + labelScore(label) });
       }
@@ -2138,12 +2229,17 @@ function extractContractAmount(text) {
   }
 
   candidates.sort((a, b) => b.score - a.score || b.value - a.value);
+  const best = candidates[0];
+  if (best && best.value < 1000) {
+    const plausible = candidates.find((item) => item.value >= 10000 && item.score >= best.score - 80);
+    if (plausible) return plausible.value;
+  }
   return candidates[0]?.value || 0;
 }
 
 function extractAmountCandidates(text) {
   const candidates = [];
-  const pattern = /(?:人民币|RMB|￥|¥)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?|[壹贰叁肆伍陆柒捌玖拾佰仟万亿零一二三四五六七八九十百千万两]+)\s*(亿元|亿|万元|万|元|圆)?/g;
+  const pattern = /(?:人民币|RMB|￥|¥)?\s*([0-9][0-9,]*(?:\.[0-9]+)?|[壹贰叁肆伍陆柒捌玖拾佰仟万亿零一二三四五六七八九十百千万两]+)\s*(亿元|亿|万元|万|元|圆)?/g;
   for (const match of text.matchAll(pattern)) {
     const raw = match[0].trim();
     if (!raw || looksLikeDateOrIdentifier(text, match.index || 0, raw)) continue;
@@ -2153,22 +2249,33 @@ function extractAmountCandidates(text) {
     const unit = match[2] || "";
     const context = text.slice(Math.max(0, (match.index || 0) - 30), (match.index || 0) + raw.length + 30);
     const hasMoneyUnit = Boolean(unit || /人民币|RMB|￥|¥|元|圆|万|亿/.test(raw));
-    const hasContractContext = /(合同|价款|总价|总额|金额|费用|服务费|付款|回款|含税|不含税)/.test(context);
-    const noUnitLongNumber = /^\d{7,}$/.test(raw.replace(/[^\d]/g, "")) && !hasMoneyUnit;
+    const hasContractContext = /(合同|价款|总价|总额|金额|费用|服务费|付款|回款|含税|不含税|优惠总价|合计)/.test(context);
+    const hasStrongContractContext = /合同总金额|合同金额|合同总价|合同价款|合同价|含税总价|项目最终优惠总价|最终优惠总价/.test(context);
+    const hasWeakContractContext = /服务费用总额|项目总价|项目金额|总金额|总价|合计\/月|合计/.test(context);
+    const isDistractor = /首付款|预付款|尾款|余款|分期|阶段款|保证金|押金|税额|税金|增值税|不含税|单价|小计|预算|执行预算|预估预算|付款比例|质保金|违约金/.test(context);
+    const hasTotalLabelContext = /合计|总价|总金额|优惠总价|合同价|合同金额/.test(context);
+    const noUnitLongNumber = /^\d{7,}$/.test(raw.replace(/[^\d]/g, "")) && !hasMoneyUnit && !hasTotalLabelContext;
     if (noUnitLongNumber && !hasContractContext) continue;
+    if (isDistractor && !hasStrongContractContext) continue;
 
     candidates.push({
       value,
       raw,
-      score: (hasContractContext ? 60 : 0) + (hasMoneyUnit ? 80 : 0) + (value >= 10000 ? 20 : 0) - (noUnitLongNumber ? 120 : 0)
+      score: (hasStrongContractContext ? 160 : hasWeakContractContext ? 95 : hasContractContext ? 45 : 0)
+        + (hasMoneyUnit ? 80 : 0)
+        + (value >= 10000 ? 30 : 0)
+        + (value >= 1000000 ? 25 : 0)
+        - (value < 1000 && !hasMoneyUnit ? 70 : 0)
+        - (isDistractor ? 90 : 0)
+        - (noUnitLongNumber ? 120 : 0)
     });
   }
   return candidates;
 }
 
 function labelScore(label) {
-  if (/合同总金额|合同金额|合同价款|合同总价/.test(label)) return 100;
-  if (/项目金额|项目总价|服务费总额|总金额|总价/.test(label)) return 80;
+  if (/合同总金额|合同金额|合同价款|合同总价|含税总价|项目最终优惠总价|最终优惠总价/.test(label)) return 120;
+  if (/项目金额|项目总价|服务费总额|总金额|总价|合计/.test(label)) return 80;
   return 60;
 }
 
@@ -2294,6 +2401,54 @@ function extractSuppliers(text) {
     });
   }
   return rows.slice(0, 10);
+}
+
+function isReimbursementSheet(files = [], text = "") {
+  const fileNames = files.map((file) => file.name || "").join(" ");
+  const source = `${fileNames}\n${text}`.slice(0, 12000);
+  const hasReimbursementTitle = /(项目报销|报销表|报销费用|报销明细|项目报表明细|费用明细)/.test(source);
+  const hasEmployeeColumns = /(姓名|员工|申请人|报销人)/.test(source) && /(具体事项|事项|用途|费用明细|金额|备注)/.test(source);
+  const hasInternalItems = /(打车|加油|高速|餐费|住宿|道具|物料|场地|快递|办公)/.test(source);
+  const hasSupplierSettlement = /(供应商结算|应结|待结算|已结算|供应商付款|服务商结算)/.test(source);
+  return (hasReimbursementTitle || hasEmployeeColumns) && hasInternalItems && !hasSupplierSettlement;
+}
+
+function extractReimbursementItems(files = []) {
+  const rows = parseTableLines(files);
+  const items = [];
+  let header = null;
+  for (const row of rows) {
+    const cells = (row.cells || []).map((cell) => String(cell || "").trim());
+    if (!cells.some(Boolean)) continue;
+    const joined = cells.join(" ");
+    const headerIndexes = buildReimbursementColumnMap(cells);
+    if (headerIndexes.item >= 0 && headerIndexes.amount >= 0) {
+      header = headerIndexes;
+      continue;
+    }
+    if (!header) continue;
+    if (/合计|总计|项目成本费用合计/.test(joined)) continue;
+    const item = cells[header.item] || "";
+    const amount = parseMoney(cells[header.amount]);
+    if (!item || !amount) continue;
+    const person = header.person >= 0 ? cells[header.person] : "";
+    const note = header.note >= 0 ? cells[header.note] : "";
+    const category = inferExpenseCategory({ reason: `${item} ${note}`, payee: person }).category;
+    items.push({ person, item, amount, note, category });
+  }
+  return items.slice(0, 80);
+}
+
+function buildReimbursementColumnMap(cells = []) {
+  const map = { person: -1, item: -1, amount: -1, note: -1 };
+  cells.forEach((cell, index) => {
+    const text = normalizeHeaderText(cell);
+    if (map.person < 0 && /姓名|员工|申请人|报销人/.test(text)) map.person = index;
+    if (map.item < 0 && /具体事项|事项|用途|费用明细|费用项目|项目详情/.test(text)) map.item = index;
+    if (map.amount < 0 && /金额|费用|报销金额/.test(text)) map.amount = index;
+    if (map.note < 0 && /备注|说明/.test(text)) map.note = index;
+  });
+  return map;
 }
 
 function parseProjectDate(text) {

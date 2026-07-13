@@ -6,7 +6,16 @@ const mime = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8"
+  ".json": "application/json; charset=utf-8",
+  ".pdf": "application/pdf",
+  ".csv": "text/csv; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".xls": "application/vnd.ms-excel",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg"
 };
 
 export async function handleStatic(req, res) {
@@ -15,16 +24,22 @@ export async function handleStatic(req, res) {
     ? "/dist/index.html"
     : url.pathname.startsWith("/assets/")
       ? `/dist${url.pathname}`
+      : url.pathname.startsWith("/uploads/")
+        ? url.pathname
       : url.pathname;
-  const filePath = join(rootDir, pathname.replace(/^\/+/, ""));
+  const filePath = join(rootDir, decodeURIComponent(pathname).replace(/^\/+/, ""));
   try {
     const content = await readFile(filePath);
-    res.writeHead(200, { "content-type": mime[extname(filePath)] || "application/octet-stream" });
+    const isEntry = url.pathname === "/" || url.pathname.endsWith(".html");
+    res.writeHead(200, {
+      "content-type": mime[extname(filePath)] || "application/octet-stream",
+      "cache-control": isEntry ? "no-store" : "public, max-age=31536000, immutable"
+    });
     res.end(content);
   } catch {
     if (url.pathname === "/") {
       const fallback = await readFile(join(rootDir, "standalone.html"));
-      res.writeHead(200, { "content-type": mime[".html"] });
+      res.writeHead(200, { "content-type": mime[".html"], "cache-control": "no-store" });
       res.end(fallback);
       return;
     }

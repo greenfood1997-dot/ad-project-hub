@@ -1,0 +1,11 @@
+广告项目经营 OA 发布版本
+
+2026-07-13-production-readiness-pass
+
+Render 部署完成后，打开：
+https://ad-project-hub-oa-test.onrender.com/api/health
+
+确认 JSON 中的 version 为：
+2026-07-13-production-readiness-pass
+
+若仍显示 2026-07-08-ai-task-command-pass，说明 Render 还在运行旧包；请在 Render 执行 Manual Deploy 或 Clear build cache & deploy。
