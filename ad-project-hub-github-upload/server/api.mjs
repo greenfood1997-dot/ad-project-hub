@@ -1,6 +1,6 @@
 import { readDb, mutateDb, dbMode } from "./db.mjs";
 import { getCurrentUser, readBody, requireRole, sendJson } from "./http-utils.mjs";
-import { issueAuthToken } from "./auth.mjs";
+import { clearLoginFailures, hashPin, isLoginLimited, issueAuthToken, loginLimitKey, recordLoginFailure, verifyPin } from "./auth.mjs";
 import { getSchedulerStatus, reloadSystemScheduler } from "./scheduler.mjs";
 import {
   addComment,
@@ -116,7 +116,7 @@ function deployHealthPayload() {
 
 function publicUser(user) {
   if (!user) return null;
-  const { pin, ...safeUser } = user;
+  const { pin, pinHash, ...safeUser } = user;
   return safeUser;
 }
 
@@ -174,7 +174,8 @@ function saveMember(db, body, actor) {
     feishuUserId: String(body.feishuUserId || existing?.feishuUserId || "").trim(),
     feishuName: String(body.feishuName || existing?.feishuName || body.name || "").trim(),
     status: body.status || "active",
-    pin: body.pin || existing?.pin || "123456",
+    pinHash: body.pin ? hashPin(body.pin) : existing?.pinHash,
+    pin: body.pin ? undefined : existing?.pin,
     createdAt: existing?.createdAt || new Date().toISOString()
   };
 
@@ -683,10 +684,28 @@ export async function handleApi(req, res) {
     const body = await readBody(req);
     const email = normalizeEmail(body.email);
     const pin = String(body.pin || "");
-    const account = snapshot.users.map(ensureMemberFields).find((item) => normalizeEmail(item.email) === email && item.pin === pin);
-    if (!account || account.status === "disabled") {
+    const limitKey = loginLimitKey(req, email);
+    if (isLoginLimited(limitKey)) {
+      sendJson(res, 429, { ok: false, error: "登录失败次数过多，请 15 分钟后重试" });
+      return;
+    }
+    const account = snapshot.users.map(ensureMemberFields).find((item) => normalizeEmail(item.email) === email);
+    const storedPin = account?.pinHash || account?.pin || "";
+    const validPin = account && pin && verifyPin(pin, storedPin);
+    if (!validPin || account.status === "disabled") {
+      recordLoginFailure(limitKey);
       sendJson(res, 401, { ok: false, error: "账号或 PIN 不正确，或账号已停用" });
       return;
+    }
+    clearLoginFailures(limitKey);
+    if (!account.pinHash) {
+      await mutateDb((db) => {
+        const current = db.users.find((item) => item.id === account.id);
+        if (current) {
+          current.pinHash = hashPin(pin);
+          delete current.pin;
+        }
+      });
     }
     sendJson(res, 200, { ok: true, data: { ...publicUser(account), token: issueAuthToken(account) } });
     return;
