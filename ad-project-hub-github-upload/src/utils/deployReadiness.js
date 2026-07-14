@@ -35,6 +35,13 @@ export function deployReadinessActions(health = {}, items = [], buildVersion = "
       text: "JSON 存储适合测试，正式长期使用建议在 Render 接 DATABASE_URL，降低数据被覆盖或丢失的风险。"
     });
   }
+  if (health.nodeEnv === "production" && health.productionPersistenceReady === false) {
+    actions.push({
+      tone: "danger",
+      title: "生产数据尚未持久化",
+      text: "当前服务仍使用本地 JSON。请配置 Render PostgreSQL 的 DATABASE_URL，并完成备份恢复后再承载正式业务。"
+    });
+  }
   if (health.scheduler && !health.scheduler.enabled) {
     actions.push({
       tone: "info",

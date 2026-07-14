@@ -20,6 +20,7 @@ assert(api.includes("AI_API_KEY") && api.includes("AI_BASE_URL") && api.includes
 assert(api.includes("TENCENT_SECRET_ID") && api.includes("TENCENT_SECRET_KEY") && api.includes("TENCENT_OCR_REGION"), "health payload should expose Tencent OCR env presence");
 assert(api.includes('databaseUrl: envConfigured("DATABASE_URL")'), "health payload should expose whether DATABASE_URL is configured without leaking the value");
 assert(api.includes("storageMode: dbMode"), "health payload should expose storage mode for deployment diagnosis");
+assert(api.includes("productionPersistenceReady: dbMode === \"postgres\" && envConfigured(\"DATABASE_URL\")"), "health payload should expose an explicit production persistence readiness flag");
 assert(api.includes("scheduler: getSchedulerStatus()"), "health payload should expose background scheduler status");
 assert(server.includes("startSystemScheduler()"), "server startup should start the system scheduler");
 assert(scheduler.includes("setInterval(runScheduledScan") && scheduler.includes("scanSystemNotifications"), "scheduler should run system scans on an interval");

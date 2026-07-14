@@ -100,6 +100,7 @@ function deployHealthPayload() {
     nodeEnv: process.env.NODE_ENV || "development",
     storageMode: dbMode,
     databaseUrl: envConfigured("DATABASE_URL"),
+    productionPersistenceReady: dbMode === "postgres" && envConfigured("DATABASE_URL"),
     scheduler: getSchedulerStatus(),
     aiEnv: {
       apiKey: envConfigured("AI_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY", "MOONSHOT_API_KEY"),

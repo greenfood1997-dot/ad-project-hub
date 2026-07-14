@@ -30,6 +30,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import "./styles.css";
+import { deployReadinessActions } from "./utils/deployReadiness.js";
 
 const SESSION_KEY = "ad-project-hub-session";
 const BUILD_VERSION = "2026-07-08-ai-task-command-pass";
@@ -6861,60 +6862,6 @@ function UploadErrorHint({ error }) {
   );
 }
 
-function deployReadinessActions(health = {}, items = []) {
-  const actions = [];
-  if (health.version && health.version !== BUILD_VERSION) {
-    actions.push({
-      tone: "danger",
-      title: "先重新部署最新代码",
-      text: `页面版本 ${BUILD_VERSION}，服务端版本 ${health.version}。这通常说明 GitHub 没覆盖成功、Render 没重新部署，或线上还在用旧构建。`
-    });
-  }
-  if (!health.renderBuildCommand || !health.noPrestartBuild || !health.startOpensPortOnly) {
-    actions.push({
-      tone: "danger",
-      title: "检查 Render 构建/启动命令",
-      text: "Build Command 应为 npm install && npm run build，Start Command 应为 npm start，启动阶段不要二次构建。"
-    });
-  }
-  if (!health.aiEnv?.apiKey) {
-    actions.push({
-      tone: "warn",
-      title: "补 AI 环境变量或后台 Key",
-      text: "合同/报价/成本智能解析依赖 AI Key。建议 Render 配置 AI_API_KEY、AI_BASE_URL、AI_MODEL，避免覆盖 data/db.json 后丢失。"
-    });
-  }
-  if (!health.ocrEnv?.secretId || !health.ocrEnv?.secretKey) {
-    actions.push({
-      tone: "warn",
-      title: "扫描件上传前先配 OCR",
-      text: "未配置 TENCENT_SECRET_ID / TENCENT_SECRET_KEY 时，扫描版 PDF 和图片合同可能只能得到有限结果。"
-    });
-  }
-  if (!health.databaseUrl && (health.storageMode === "json" || health.nodeEnv === "production")) {
-    actions.push({
-      tone: "warn",
-      title: "生产环境建议接 PostgreSQL",
-      text: "JSON 存储适合测试，正式长期使用建议在 Render 接 DATABASE_URL，降低数据被覆盖或丢失的风险。"
-    });
-  }
-  if (health.scheduler && !health.scheduler.enabled) {
-    actions.push({
-      tone: "info",
-      title: "需要主动提醒就开启后台巡检",
-      text: "自动扫描项目分派、进度、审批、现金流和文件待办依赖后台定时巡检。"
-    });
-  }
-  if (!actions.length && items.length && items.every((item) => item.ok)) {
-    actions.push({
-      tone: "ok",
-      title: "可以进行真实上传测试",
-      text: "版本、构建、启动和关键环境都已就绪。建议用一份合同和一份成本表做完整上传、预览、确认入库测试。"
-    });
-  }
-  return actions.slice(0, 4);
-}
-
 function UploadPreview({ preview }) {
   const fieldEntries = Object.entries(preview.fields || {}).filter(([, value]) => value !== "" && value !== undefined && value !== null);
   return (
@@ -7500,9 +7447,9 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     },
     {
       title: "数据存储",
-      ok: Boolean(deployHealth?.storageMode),
+      ok: deployHealth?.productionPersistenceReady === true,
       status: deployHealth?.storageMode ? `当前：${deployHealth.storageMode}` : "未读取到存储模式",
-      next: "Render 上长期使用建议接 PostgreSQL；本地 JSON 适合测试。"
+      next: deployHealth?.productionPersistenceReady ? "生产数据库已启用 PostgreSQL。" : "Render 上长期使用必须接 PostgreSQL；本地 JSON 只适合测试。"
     },
     {
       title: "后台定时巡检",

@@ -479,9 +479,9 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
     },
     {
       title: "数据存储",
-      ok: Boolean(deployHealth?.storageMode),
+      ok: deployHealth?.productionPersistenceReady === true,
       status: deployHealth?.storageMode ? `当前：${deployHealth.storageMode}` : "未读取到存储模式",
-      next: "Render 上长期使用建议接 PostgreSQL；本地 JSON 适合测试。"
+      next: deployHealth?.productionPersistenceReady ? "生产数据库已启用 PostgreSQL。" : "Render 上长期使用必须接 PostgreSQL；本地 JSON 只适合测试。"
     },
     {
       title: "后台定时巡检",

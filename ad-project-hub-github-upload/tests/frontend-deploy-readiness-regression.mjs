@@ -49,7 +49,8 @@ assert.equal(ready[0].title, "可以进行真实上传测试");
 
 const mainSource = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
 const adminShellSource = await readFile(new URL("../src/AdminShell.jsx", import.meta.url), "utf8");
-assert(mainSource.includes('buildVersion={BUILD_VERSION}'), "app shell should pass the current build version into admin shell");
+assert(mainSource.includes("productionPersistenceReady") && mainSource.includes("Render 上长期使用必须接 PostgreSQL"), "main health checklist should require production persistence readiness");
+assert(adminShellSource.includes("productionPersistenceReady") && adminShellSource.includes("生产数据库已启用 PostgreSQL"), "admin health checklist should require production persistence readiness");
 assert(adminShellSource.includes('import { deployReadinessActions } from "./utils/deployReadiness.js";'), "admin shell should import shared deploy readiness helper");
 assert(adminShellSource.includes("deployReadinessActions(deployHealth || {}, deployCheckItems, buildVersion)"), "admin shell should pass current build version into deploy readiness helper");
 assert(!mainSource.includes("function deployReadinessActions(") && !adminShellSource.includes("function deployReadinessActions("), "frontend should not redefine deployReadinessActions");
