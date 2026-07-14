@@ -3,6 +3,7 @@ export async function apiRequest(path, session, options = {}) {
     ...options,
     headers: {
       "content-type": "application/json",
+      authorization: `Bearer ${session.token || ""}`,
       "x-user-id": session.id,
       ...(options.headers || {}),
     },
@@ -19,6 +20,7 @@ export async function apiRequest(path, session, options = {}) {
 export async function downloadFile(path, session, filename) {
   const res = await fetch(path, {
     headers: {
+      authorization: `Bearer ${session.token || ""}`,
       "x-user-id": session.id,
     },
   });

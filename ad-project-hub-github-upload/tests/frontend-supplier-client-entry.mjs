@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
 const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const supplierSource = await readFile(new URL("../src/SupplierLibrary.jsx", import.meta.url), "utf8");
+const clientSource = await readFile(new URL("../src/ClientLibrary.jsx", import.meta.url), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -9,13 +11,13 @@ function assert(condition, message) {
 
 assert(source.includes('label: "供应商库"'), "navigation should expose supplier library");
 assert(source.includes('label: "客户偏好"'), "navigation should expose client preference library");
-assert(source.includes("function SupplierLibrary"), "frontend should render supplier library");
-assert(source.includes("function ClientLibrary"), "frontend should render client library");
+assert(source.includes("SupplierLibrary") && supplierSource.includes("export default function SupplierLibrary"), "frontend should render supplier library");
+assert(source.includes("ClientLibrary") && clientSource.includes("export default function ClientLibrary"), "frontend should render client library");
 assert(source.includes("const [supplierFocusName") && source.includes('setActiveView("suppliers")'), "project supplier rows should be able to open the supplier library");
 assert(source.includes("onOpenSupplier={(supplier) =>") && source.includes("setSupplierFocusName(name)") && source.includes("已打开供应商画像："), "project detail should navigate to a focused supplier profile");
 assert(source.includes("onOpenSupplier?.(item)") && source.includes("查看供应商"), "project supplier settlement rows should expose a supplier profile action");
 assert(source.includes("focusSupplierName={supplierFocusName}") && source.includes("onFocusConsumed={() => setSupplierFocusName(\"\")}"), "supplier library should receive and consume focused supplier names");
-assert(source.includes("function SupplierLibrary({ suppliers = [], settlements = [], projects = [], session, focusSupplierName = \"\", onFocusConsumed, onUpload, onOpenProjects") && source.includes("setSelectedName(focusSupplierName)") && source.includes("setFocusedSupplier(focusSupplierName)"), "supplier library should select and highlight the focused supplier");
+assert(supplierSource.includes("focusSupplierName = \"\"") && supplierSource.includes("setSelectedName(focusSupplierName)") && supplierSource.includes("setFocusedSupplier(focusSupplierName)"), "supplier library should select and highlight the focused supplier");
 assert(source.includes("const [clientFocusName") && source.includes('setActiveView("clients")'), "project client handoff should be able to open the client library");
 assert(source.includes("onOpenClient={(client) =>") && source.includes("setClientFocusName(name)") && source.includes("已打开客户档案："), "project detail should navigate to a focused client profile");
 assert(source.includes("onOpenClient?.(clientProfile)") && source.includes("查看客户档案"), "project client handoff should expose a client profile action");
@@ -35,7 +37,7 @@ assert(source.includes("供应商结算记录") && source.includes("付款备注
 assert(source.includes("供应商结算和导出 CSV 已刷新"), "supplier settlement update should notify users that data and export refreshed");
 assert(source.includes("暂无结算流水") && source.includes("上传成本表或通过供应商付款审批后"), "supplier settlement empty state should expose real next steps");
 assert(source.includes('/api/suppliers/export'), "supplier library should expose supplier settlement export");
-assert(source.includes("function downloadFile") && source.includes('"x-user-id": session.id'), "supplier export should download with current user identity");
+assert(supplierSource.includes("downloadFile(\"/api/suppliers/export\"") && supplierSource.includes("session"), "supplier export should download with the current authenticated session");
 assert(!source.includes('window.open("/api/suppliers/export"'), "supplier export should not use anonymous window.open");
 assert(source.includes("导出结算 CSV"), "supplier library should show export button");
 assert(source.includes("const [exporting") && source.includes("setExporting(true)") && source.includes("setExporting(false)"), "supplier export should expose exporting state");
