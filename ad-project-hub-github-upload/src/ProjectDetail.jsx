@@ -177,7 +177,11 @@ export default function ProjectDetail({ project, isManagement, session, files, p
   }
 
   function openMaterialUpload(item) {
-    if (!item?.uploadType || item.uploadType === "create-project") return;
+    if (!item?.uploadType) return;
+    if (item.uploadType === "create-project") {
+      goProjectSection("files", `${item.label}已归档，已打开文件与 AI 解析区查看。`);
+      return;
+    }
     setQuickUploadType(item.uploadType);
     onNotice(`已为「${project.name}」准备上传${uploadTypeNames[item.uploadType] || item.label}，会先 AI 预览，确认后才写入项目。`);
   }

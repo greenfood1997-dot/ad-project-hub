@@ -377,6 +377,21 @@
   padding: 16px;
 }
 
+.project-command-center .section-head > div {
+  min-width: 0;
+}
+
+.project-command-center .section-head h2 {
+  margin-bottom: 4px;
+}
+
+.project-dynamic-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
 .project-command-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -438,6 +453,19 @@
   border-radius: 8px;
   background: #fff;
   padding: 11px 12px;
+}
+
+button.material-card {
+  display: block;
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.material-card:hover {
+  border-color: rgba(102, 84, 241, 0.35);
+  box-shadow: 0 8px 20px rgba(42, 50, 86, 0.08);
 }
 
 .material-card.parsed {
@@ -508,14 +536,16 @@
   white-space: nowrap;
 }
 
-.material-card button {
+.material-card em {
+  display: inline-block;
   margin-top: 10px;
-  min-height: 30px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: #fff;
   color: var(--text);
-  padding: 0 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-style: normal;
 }
 
 .action-list {

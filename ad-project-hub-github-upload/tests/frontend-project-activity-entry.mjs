@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
 const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const commandPanelSource = await readFile(new URL("../src/ProjectCommandPanel.jsx", import.meta.url), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -49,6 +50,9 @@ assert(source.includes("activity-action-empty") && source.includes("暂无项目
 assert(source.includes("const [localFocusTarget, setLocalFocusTarget]"), "project detail should keep local focus for post-action navigation");
 assert(source.includes("const target = localFocusTarget || focusTarget"), "project detail should combine notification deep-link focus with local workflow focus");
 assert(source.includes("function openMaterialUpload(item)"), "project material cards should open the correct upload workflow");
+assert(commandPanelSource.includes("项目推进") && !commandPanelSource.includes("项目推进清单") && !commandPanelSource.includes("project-command-grid"), "project detail should merge duplicate command and material sections into one project progression module");
+assert(commandPanelSource.includes("材料状态就是操作入口") && commandPanelSource.includes("查看 / 补充") && commandPanelSource.includes("记录动态"), "project progression cards should combine material status, next actions, and a compact activity action");
+assert(commandPanelSource.includes("nonMaterialActions") && commandPanelSource.includes("补齐.*(合同|报价|成本|核销)"), "project progression should suppress material-gap alerts already represented by material cards");
 assert(source.includes("已为「${project.name}」准备上传${uploadTypeNames[item.uploadType] || item.label}，会先 AI 预览，确认后才写入项目。"), "material upload action should explain the selected upload type and preview-before-write behavior");
 assert(source.includes("onClick={() => openMaterialUpload(item)}"), "material cards should use the guided material upload handler");
 assert(source.includes("material-intake-strip") && source.includes("材料入库检查"), "project file section should show a material intake checklist");
