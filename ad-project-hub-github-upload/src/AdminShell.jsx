@@ -484,6 +484,12 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
       next: deployHealth?.productionPersistenceReady ? "生产数据库已启用 PostgreSQL。" : "Render 上长期使用必须接 PostgreSQL；本地 JSON 只适合测试。"
     },
     {
+      title: "原始文件存储",
+      ok: deployHealth?.filePersistenceReady === true,
+      status: deployHealth?.objectStorageConfigured ? "已配置对象存储" : "未配置对象存储",
+      next: deployHealth?.filePersistenceReady ? "合同、发票和票据具备长期保存条件。" : "生产环境请配置 S3、R2 或 MinIO Bucket，Render 本地文件只适合测试。"
+    },
+    {
       title: "后台定时巡检",
       ok: Boolean(deployHealth?.scheduler?.enabled),
       status: deployHealth?.scheduler?.enabled ? `每 ${Math.round((deployHealth.scheduler.intervalMs || 0) / 60000)} 分钟 · 已跑 ${deployHealth.scheduler.runCount || 0} 次` : "未启用",

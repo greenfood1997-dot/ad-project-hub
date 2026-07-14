@@ -42,6 +42,13 @@ export function deployReadinessActions(health = {}, items = [], buildVersion = "
       text: "当前服务仍使用本地 JSON。请配置 Render PostgreSQL 的 DATABASE_URL，并完成备份恢复后再承载正式业务。"
     });
   }
+  if (health.nodeEnv === "production" && health.filePersistenceReady === false) {
+    actions.push({
+      tone: "danger",
+      title: "原始文件尚未持久化",
+      text: "合同、发票和票据当前没有真实对象存储。请配置 S3/R2/MinIO Bucket，避免 Render 重建后文件丢失。"
+    });
+  }
   if (health.scheduler && !health.scheduler.enabled) {
     actions.push({
       tone: "info",

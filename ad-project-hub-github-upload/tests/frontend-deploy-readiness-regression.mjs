@@ -51,6 +51,7 @@ const mainSource = await readFile(new URL("../src/main.jsx", import.meta.url), "
 const adminShellSource = await readFile(new URL("../src/AdminShell.jsx", import.meta.url), "utf8");
 assert(mainSource.includes("productionPersistenceReady") && mainSource.includes("Render 上长期使用必须接 PostgreSQL"), "main health checklist should require production persistence readiness");
 assert(adminShellSource.includes("productionPersistenceReady") && adminShellSource.includes("生产数据库已启用 PostgreSQL"), "admin health checklist should require production persistence readiness");
+assert(adminShellSource.includes("filePersistenceReady") && adminShellSource.includes("原始文件存储"), "admin health checklist should require original file persistence readiness");
 assert(adminShellSource.includes('import { deployReadinessActions } from "./utils/deployReadiness.js";'), "admin shell should import shared deploy readiness helper");
 assert(adminShellSource.includes("deployReadinessActions(deployHealth || {}, deployCheckItems, buildVersion)"), "admin shell should pass current build version into deploy readiness helper");
 assert(!mainSource.includes("function deployReadinessActions(") && !adminShellSource.includes("function deployReadinessActions("), "frontend should not redefine deployReadinessActions");

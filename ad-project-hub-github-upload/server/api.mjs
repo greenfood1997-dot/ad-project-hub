@@ -85,7 +85,10 @@ function envConfigured(...names) {
   return names.some((name) => Boolean(String(process.env[name] || "").trim()));
 }
 
-function deployHealthPayload() {
+async function deployHealthPayload() {
+  const db = await readDb();
+  const storage = db.settings?.storage || {};
+  const objectStorageConfigured = Boolean(storage.bucket && storage.accessKeyId && storage.secretAccessKey && (storage.endpoint || String(storage.provider || "").match(/s3|r2|minio/i)));
   return {
     app: "ad-project-hub",
     version: BUILD_VERSION,
@@ -101,6 +104,8 @@ function deployHealthPayload() {
     storageMode: dbMode,
     databaseUrl: envConfigured("DATABASE_URL"),
     productionPersistenceReady: dbMode === "postgres" && envConfigured("DATABASE_URL"),
+    objectStorageConfigured,
+    filePersistenceReady: process.env.NODE_ENV !== "production" || objectStorageConfigured,
     scheduler: getSchedulerStatus(),
     aiEnv: {
       apiKey: envConfigured("AI_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY", "MOONSHOT_API_KEY"),
@@ -674,7 +679,7 @@ export async function handleApi(req, res) {
   if (req.method === "GET" && url.pathname === "/api/health") {
     sendJson(res, 200, {
       ok: true,
-      data: deployHealthPayload()
+      data: await deployHealthPayload()
     });
     return;
   }
