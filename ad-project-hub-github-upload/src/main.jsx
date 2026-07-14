@@ -6455,6 +6455,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [confirmed, setConfirmed] = useState(false);
+  const previewRef = useRef(null);
   const [progress, setProgress] = useState(() => initialFiles.length
     ? { step: "ready", percent: 12, text: `已选择 ${initialFiles.length} 个文件，下一步点击 AI 预览识别` }
     : { step: "idle", percent: 0, text: "等待选择文件" });
@@ -6484,6 +6485,15 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
       setConfirmed(false);
     }
   }, [type, canUseCreateProject, hasProjects]);
+
+  useEffect(() => {
+    if (!preview || loading) return;
+    window.requestAnimationFrame(() => previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }, [preview, loading]);
+
+  function showPreview() {
+    previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   async function appendPickedFiles(picked = []) {
     setMessage("");
@@ -6715,6 +6725,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
             )}
           </div>
           <div className="modal-head-actions">
+            {preview && <button type="button" className="ghost" onClick={showPreview}>查看识别结果</button>}
             {hasProgress && <button type="button" className="ghost" onClick={onMinimize}><Minimize2 size={15} />缩到后台继续</button>}
             {canCloseUpload
               ? <button type="button" className="ghost" onClick={onClose}>关闭</button>
@@ -6722,7 +6733,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
           </div>
         </div>
 
-        <div className="upload-modal-body">
+        <div className="upload-modal-body" tabIndex="0" aria-label="上传内容与 AI 识别结果，可上下滚动">
           <label>
             <span>上传类型</span>
             <select value={type} onChange={(event) => {
@@ -6797,7 +6808,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
             </div>
           )}
 
-          {preview && <UploadPreview preview={preview} />}
+          {preview && <div ref={previewRef} className="upload-preview-anchor"><UploadPreview preview={preview} /></div>}
 
           {message && <p className="form-message">{message}</p>}
           {uploadError && <UploadErrorHint error={uploadError} />}
@@ -6807,6 +6818,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
             ? <button type="button" className="ghost" onClick={onClose}>取消</button>
             : <button type="button" className="ghost" onClick={onMinimize}>处理中，缩到后台</button>}
           {hasProgress && <button type="button" className="ghost" onClick={onMinimize}>缩到后台继续</button>}
+          {preview && <button type="button" className="ghost" onClick={showPreview}>查看识别结果</button>}
           {preview && !confirmed && <button type="button" className="ghost" onClick={requestPreview} disabled={loading}>重新预览</button>}
           <button type="submit" className="primary" disabled={loading || (preview && !preview.canConfirm)}>{loading ? "处理中" : preview ? "确认入库" : "AI 预览识别"}</button>
         </div>

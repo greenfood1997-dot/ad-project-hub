@@ -4443,6 +4443,19 @@ main.dashboard-main {
   padding-right: 4px;
   overscroll-behavior: contain;
   contain: inline-size;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 96px;
+}
+
+.upload-modal-body:focus {
+  outline: none;
+}
+
+.upload-preview-anchor {
+  min-width: 0;
+  scroll-margin-top: 12px;
+  scroll-margin-bottom: 96px;
 }
 
 .modal-head,
