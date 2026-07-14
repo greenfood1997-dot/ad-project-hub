@@ -125,6 +125,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
       ...options,
       headers: {
         "content-type": "application/json",
+        authorization: `Bearer ${session.token || ""}`,
         "x-user-id": session.id,
         ...(options.headers || {}),
       },
@@ -147,7 +148,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
   }
 
   async function loadSettings() {
-    const res = await fetch("/api/state", { headers: { "x-user-id": session.id } });
+    const res = await fetch("/api/state", { headers: { authorization: `Bearer ${session.token || ""}`, "x-user-id": session.id } });
     const payload = await res.json();
     if (!payload.ok) throw new Error(payload.error || "读取设置失败");
     const settings = payload.data?.settings || {};
@@ -572,7 +573,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
 
   async function loadFeishuBindings() {
     setFeishuBindings(await api("/api/integrations/feishu/bindings"));
-    const res = await fetch("/api/state", { headers: { "x-user-id": session.id } });
+    const res = await fetch("/api/state", { headers: { authorization: `Bearer ${session.token || ""}`, "x-user-id": session.id } });
     const payload = await res.json();
     if (payload.ok) {
       setFeishuEvents(payload.data?.feishuEvents || []);
