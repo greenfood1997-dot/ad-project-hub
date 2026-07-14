@@ -92,6 +92,7 @@ async function deployHealthPayload() {
   return {
     app: "ad-project-hub",
     version: BUILD_VERSION,
+    deployedCommit: process.env.RENDER_GIT_COMMIT || process.env.RENDER_GIT_COMMIT_SHA || process.env.RENDER_GIT_COMMIT_ID || "",
     uploadProgress: true,
     renderBuildCommand: true,
     startOpensPortOnly: true,

@@ -7412,8 +7412,8 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     {
       title: "前后端版本",
       ok: deployHealth?.version === BUILD_VERSION,
-      status: deployHealth?.version ? `页面 ${BUILD_VERSION} / 服务端 ${deployHealth.version}` : "正在读取版本",
-      next: deployHealth?.version === BUILD_VERSION ? "版本一致，说明这次包已经被服务端加载。" : "如果这里不一致，通常是 GitHub 没覆盖成功、Render 没重新部署，或上传了旧压缩包。"
+      status: deployHealth?.version ? `页面 ${BUILD_VERSION} / 服务端 ${deployHealth.version}${deployHealth.deployedCommit ? ` · 提交 ${deployHealth.deployedCommit.slice(0, 8)}` : ""}` : "正在读取版本",
+      next: deployHealth?.deployedCommit ? `Render 实际部署提交：${deployHealth.deployedCommit}` : "Render 未返回提交号，请检查部署日志。"
     },
     {
       title: "Render 构建命令",

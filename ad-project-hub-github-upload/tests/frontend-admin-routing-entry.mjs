@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
 const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const readinessSource = await readFile(new URL("../src/utils/deployReadiness.js", import.meta.url), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -32,7 +33,7 @@ assert(source.includes("const [deployHealth") && source.includes("loadDeployHeal
 assert(source.includes("const deployCheckItems = [") && source.includes("前后端版本") && source.includes("Render 构建命令") && source.includes("腾讯 OCR"), "deploy health checklist should cover version, Render build, and OCR status");
 assert(source.includes("页面 ${BUILD_VERSION} / 服务端 ${deployHealth.version}") && source.includes("Render Root Directory"), "deploy health should explain version match and Render root directory");
 assert(source.includes("AI_API_KEY、AI_BASE_URL、AI_MODEL") && source.includes("TENCENT_SECRET_ID / TENCENT_SECRET_KEY"), "deploy health should guide AI and OCR environment fallback");
-assert(source.includes("function deployReadinessActions") && source.includes("先重新部署最新代码") && source.includes("生产环境建议接 PostgreSQL"), "deploy health should turn raw checks into actionable go-live steps");
+assert(source.includes("deployReadinessActions") && readinessSource.includes("先重新部署最新代码") && readinessSource.includes("生产环境建议接 PostgreSQL"), "deploy health should turn raw checks into actionable go-live steps");
 assert(source.includes("deployReadinessSteps") && source.includes("上线下一步") && source.includes("deploy-readiness-actions"), "deploy health panel should render prioritized next actions");
 assert(source.includes('checking ? "检查中" : "刷新检查"'), "deploy health panel should expose a refresh action");
 assert(source.includes("setView(\"admin:product\")") && source.includes("className={`deploy-health ${health?.version === BUILD_VERSION ? \"ok\" : \"warn\"}`"), "sidebar deploy status should take admins to product settings");
