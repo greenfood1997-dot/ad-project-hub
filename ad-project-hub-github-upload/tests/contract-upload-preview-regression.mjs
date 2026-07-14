@@ -68,3 +68,32 @@ assert.equal(splitFilePreview.fields["待回款"], 1870700, "双文件未回款�
 assert.deepEqual(splitFilePreview.sections.find((section) => section.title === "AI 文件归类")?.rows.map((row) => row.status), ["项目合同", "合同报价表"], "双文件预览应显示逐文件归类");
 
 console.log("split contract and quote preview regression passed");
+
+const inconsistentAiDb = {
+  ...db,
+  settings: {
+    aiService: {
+      "API Key": "test-key",
+      "Base URL": "https://ai.example.test/v1",
+      "模型名称": "test-model"
+    }
+  }
+};
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async () => ({
+  ok: true,
+  json: async () => ({ choices: [{ message: { content: JSON.stringify({ contract: 2000000, paid: 0, receivable: 1870700 }) } }] })
+});
+try {
+  const inconsistentPreview = await previewProjectUpload(inconsistentAiDb, {
+    type: "create-project",
+    values: { "负责人": "中台管理员" },
+    files: [{ name: "冲突合同.txt", type: "text/plain", size: 20, text: "合同金额 2000000 元" }]
+  }, user);
+  assert.equal(inconsistentPreview.fields["待回款"], 2000000, "AI 待回款与合同金额冲突时必须由系统按合同减已回款重算");
+  assert(inconsistentPreview.warnings.some((warning) => warning.includes("与合同金额、已回款不一致")), `金额冲突必须在确认预览中显式提示：${JSON.stringify(inconsistentPreview.warnings)}`);
+} finally {
+  globalThis.fetch = originalFetch;
+}
+
+console.log("contract financial invariant regression passed");

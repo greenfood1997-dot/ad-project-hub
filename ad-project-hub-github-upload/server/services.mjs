@@ -238,7 +238,12 @@ export async function previewProjectUpload(db, body, user) {
 
   const contract = parseMoney(parsed.contract) || parseMoney(values["合同金额"]);
   const paid = parseMoney(parsed.paid);
+  const derivedReceivable = Math.max(contract - paid, 0);
+  const aiReceivable = parseMoney(parsed.aiReportedReceivable ?? parsed.receivable);
   if (contract) warnings.push(`已识别合同金额 ${contract.toLocaleString("zh-CN")} 元，请确认是否为最终含税成交价/最终优惠总价。`);
+  if (aiReceivable && Math.abs(aiReceivable - derivedReceivable) > 0.01) {
+    warnings.push(`AI 返回的待回款 ${aiReceivable.toLocaleString("zh-CN")} 元与合同金额、已回款不一致，系统已按财务规则重算为 ${derivedReceivable.toLocaleString("zh-CN")} 元。`);
+  }
   const fileClassifications = files.map((file) => ({
     name: file.name || "未命名文件",
     status: classifyProjectFile(file),
@@ -250,7 +255,7 @@ export async function previewProjectUpload(db, body, user) {
     "负责人": values["负责人"] || user.name,
     "合同金额": contract,
     "已回款": paid,
-    "待回款": parseMoney(parsed.receivable) || Math.max(contract - paid, 0),
+    "待回款": derivedReceivable,
     "服务周期": parsed.servicePeriod || "",
     "下一节点": parsed.nextMilestone || parsed.deliveryDate || ""
   };
@@ -1549,7 +1554,7 @@ function applyParsedFields(db, project, job, parsed) {
   const parsedPaid = parseMoney(parsed.paid);
   const existingPaid = parseMoney(project.paid);
   const paid = hasCostSheet ? Math.max(existingPaid, parsedPaid) : parsedPaid;
-  const receivable = parseMoney(parsed.receivable) || Math.max(contract - paid, 0);
+  const receivable = Math.max(contract - paid, 0);
   const oldName = project.name;
   const parsedProjectName = parsed.projectName || parsed.name || "";
   const shouldUseParsedName = (!project.name || project.name.startsWith("待解析合同-")) && parsedProjectName;
@@ -4880,8 +4885,12 @@ async function analyzeProjectFiles(aiSettings, values, files, interestRateSettin
     const ai = normalizeAiSettings(effectiveAiSettings);
     const data = await requestAiJson(ai, values, text);
     const content = data.choices?.[0]?.message?.content || "{}";
+    const aiParsed = parseJsonObject(content);
     return {
-      ...normalizeParsedFields(mergeParsedFields(fallback, parseJsonObject(content)), values, files, interestRateSettings),
+      ...normalizeParsedFields({
+        ...mergeParsedFields(fallback, aiParsed),
+        aiReportedReceivable: parseMoney(aiParsed.receivable)
+      }, values, files, interestRateSettings),
       extractedFiles
     };
   } catch (error) {
@@ -5174,6 +5183,8 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
 function normalizeParsedFields(parsed, values, files, interestRateSettings) {
   const contract = parseMoney(parsed.contract) || parseMoney(values["合同金额"]);
   const paid = parseMoney(parsed.paid);
+  const receivable = Math.max(contract - paid, 0);
+  const aiReportedReceivable = parseMoney(parsed.aiReportedReceivable ?? parsed.receivable);
   const hasCostSheet = Boolean(parsed.hasCostSheet) || isCostSheet(files, files.map((file) => file.text || "").join("\n"));
   const profitBreakdown = hasCostSheet ? calculateProfitBreakdown(contract, parsed, interestRateSettings) : null;
   const costUsed = profitBreakdown?.totalDeduction || 0;
@@ -5183,7 +5194,8 @@ function normalizeParsedFields(parsed, values, files, interestRateSettings) {
     client: parsed.client || values["客户 / 品牌"] || "",
     contract,
     paid,
-    receivable: parseMoney(parsed.receivable) || Math.max(contract - paid, 0),
+    receivable,
+    aiReportedReceivable,
     costBudget: hasCostSheet ? (parseMoney(parsed.costBudget) || costUsed || 0) : 0,
     costUsed,
     hasCostSheet,
@@ -5196,7 +5208,7 @@ function normalizeParsedFields(parsed, values, files, interestRateSettings) {
     projectRevenue: parseMoney(parsed.projectRevenue),
     profit: hasCostSheet ? contract - costUsed : 0,
     profitBreakdown,
-    risk: parsed.risk || inferRisk({ contract, costBudget: hasCostSheet ? parsed.costBudget : 0, costUsed, receivable: parsed.receivable }),
+    risk: parsed.risk || inferRisk({ contract, costBudget: hasCostSheet ? parsed.costBudget : 0, costUsed, receivable }),
     summary: parsed.summary || `已完成 ${files.length} 个文件的结构化解析。`,
     costs: hasCostSheet ? profitBreakdown.costs : [],
     suppliers: hasCostSheet && Array.isArray(parsed.suppliers) ? parsed.suppliers : [],
