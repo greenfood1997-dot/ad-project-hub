@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
 const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const uploadDialogSource = await readFile(new URL("../src/UploadDialog.jsx", import.meta.url), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -11,6 +12,7 @@ assert(source.includes("function UploadProgressPanel"), "upload dialog should re
 assert(source.includes('const BUILD_VERSION = "2026-07-08-ai-task-command-pass"'), "build version should identify the latest AI task command package");
 assert(source.includes("UploadProgressPanel"), "upload dialog should mount UploadProgressPanel");
 assert(source.includes("upload-modal-body"), "upload dialog should separate the scrollable body from the fixed action bar");
+assert(uploadDialogSource.includes("previewRef.current?.scrollIntoView") && uploadDialogSource.includes("查看识别结果"), "upload dialog should auto-scroll to recognition results and provide an explicit preview jump action");
 assert(source.includes("读取文件") && source.includes("AI/OCR识别") && source.includes("预览确认") && source.includes("写入项目"), "upload progress should show all recognition steps");
 assert(source.includes("appendPickedFiles"), "file picker and drag-drop should share append logic");
 assert(source.includes("const [uploadInitialFiles, setUploadInitialFiles]") && source.includes("initialFiles={uploadInitialFiles}"), "project dashboard should pass AI-dropped files into the upload dialog");
