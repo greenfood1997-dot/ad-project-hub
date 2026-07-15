@@ -130,6 +130,12 @@ function publicUser(user) {
   return safeUser;
 }
 
+function applyIdempotencyKey(req, body = {}) {
+  const header = String(req.headers["idempotency-key"] || "").trim();
+  if (!body.idempotencyKey && header) body.idempotencyKey = header.slice(0, 160);
+  return body;
+}
+
 function assignmentUser(user) {
   const safe = publicUser(ensureMemberFields(user));
   return {
@@ -1102,7 +1108,7 @@ export async function handleApi(req, res) {
 
   if (req.method === "POST" && url.pathname === "/api/projects/cost-sheet") {
     if (!requireRole(user, PROJECT_UPLOAD_ROLES, res)) return;
-    const body = await readBody(req);
+    const body = applyIdempotencyKey(req, await readBody(req));
     if (!canAccessProject(snapshot, user, body.id)) {
       sendJson(res, 403, { ok: false, error: "无权限向该项目上传执行成本表" });
       return;
@@ -1138,7 +1144,7 @@ export async function handleApi(req, res) {
 
   if (req.method === "POST" && url.pathname === "/api/payments") {
     if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance"], res)) return;
-    const body = await readBody(req);
+    const body = applyIdempotencyKey(req, await readBody(req));
     if (!canAccessProject(snapshot, user, body.projectId || body.id)) {
       sendJson(res, 403, { ok: false, error: "无权限为该项目记录回款" });
       return;
@@ -1293,7 +1299,7 @@ export async function handleApi(req, res) {
 
   if (req.method === "POST" && url.pathname === "/api/approvals") {
     if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance", "member"], res)) return;
-    const body = await readBody(req);
+    const body = applyIdempotencyKey(req, await readBody(req));
     if (!canAccessProject(snapshot, user, body.projectId)) {
       sendJson(res, 403, { ok: false, error: "无权限为该项目提交审批" });
       return;

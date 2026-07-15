@@ -764,6 +764,9 @@ export function recordProjectPayment(db, body, user) {
   const contract = parseMoney(project.contract);
   const currentPaid = parseMoney(project.paid);
   if (contract && currentPaid + amount > contract * 1.05) throw new Error("回款金额超过合同金额过多，请核对后再记录");
+  const idempotencyKey = String(body.idempotencyKey || body.requestId || "").trim();
+  const existingPayment = idempotencyKey && (db.payments || []).find((item) => item.idempotencyKey === idempotencyKey);
+  if (existingPayment) return { payment: existingPayment, project, duplicate: true };
 
   const at = new Date().toISOString();
   const payment = {
@@ -778,7 +781,8 @@ export function recordProjectPayment(db, body, user) {
     receivedAt: body.receivedAt || at,
     recordedBy: user.id,
     recordedByName: user.name,
-    createdAt: at
+    createdAt: at,
+    idempotencyKey: idempotencyKey || undefined
   };
 
   db.payments = db.payments || [];
@@ -1297,6 +1301,18 @@ export async function reparseProject(db, body, user) {
 export async function uploadProjectCostSheet(db, body, user) {
   const project = (db.projects || []).find((item) => item.id === body?.id);
   if (!project) throw new Error("项目不存在");
+  const idempotencyKey = String(body.idempotencyKey || body.requestId || "").trim();
+  const inputFileIds = (body.files || []).map((file) => String(file.id || "").trim()).filter(Boolean).sort();
+  const duplicateUpload = (db.files || []).find((upload) => {
+    if (upload.projectId !== project.id || upload.type !== "execution-cost") return false;
+    if (idempotencyKey && upload.idempotencyKey === idempotencyKey) return true;
+    const storedIds = (upload.files || []).map((file) => String(file.id || "").trim()).filter(Boolean).sort();
+    return inputFileIds.length > 0 && inputFileIds.length === storedIds.length && inputFileIds.every((id, index) => id === storedIds[index]);
+  });
+  if (duplicateUpload) {
+    const parseJob = (db.parseJobs || []).find((job) => job.id === duplicateUpload.parseJobId || job.projectId === project.id);
+    return { project, parseJob: parseJob || null, files: duplicateUpload.files || [], duplicate: true };
+  }
   const now = new Date().toISOString();
   const files = await normalizeUploadedFiles(body.files || [], "execution-cost", user, now, db.settings?.storage || {});
   files.forEach((file) => {
@@ -1335,7 +1351,7 @@ export async function uploadProjectCostSheet(db, body, user) {
     project.status = "AI解析中";
     project.aiSummary = "月度执行成本表已上传，等待 AI 解析并归并到项目成本。";
   }
-  db.files.unshift({ files, projectId: project.id, projectName: project.name, type: "execution-cost", user: user.name, at: now });
+  db.files.unshift({ files, projectId: project.id, projectName: project.name, type: "execution-cost", user: user.name, at: now, idempotencyKey: idempotencyKey || undefined, parseJobId: parseJob.id });
   db.auditLogs.unshift({ type: "upload", target: project.name, action: "execution-cost", count: files.length, user: user.name, at: now });
   return { project, parseJob, files };
 }
@@ -3315,6 +3331,9 @@ export function createApproval(db, body, user) {
   if (!APPROVAL_LABELS[type]) throw new Error("不支持的审批类型");
   const amount = Number(body.amount || 0);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error("请填写正确的审批金额");
+  const idempotencyKey = String(body.idempotencyKey || body.requestId || "").trim();
+  const existingApproval = idempotencyKey && (db.approvals || []).find((item) => item.idempotencyKey === idempotencyKey);
+  if (existingApproval) return existingApproval;
   const at = new Date().toISOString();
   const rules = db.settings?.approvalRules || {};
   const steps = approvalSteps(type, amount, rules);
@@ -3340,6 +3359,7 @@ export function createApproval(db, body, user) {
     applicantRole: user.role,
     createdAt: at,
     updatedAt: at,
+    idempotencyKey: idempotencyKey || undefined,
     steps,
     ruleSnapshot: {
       pettyCashDirectorLimit: approvalRuleNumber(rules, "pettyCashDirectorLimit", 3000),

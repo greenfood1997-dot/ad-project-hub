@@ -223,6 +223,8 @@ alter table payments add column if not exists voided_at timestamptz;
 alter table payments add column if not exists voided_by text references users(id);
 alter table payments add column if not exists voided_by_name text;
 alter table payments add column if not exists void_reason text;
+alter table payments add column if not exists idempotency_key text;
+create unique index if not exists payments_idempotency_key_unique on payments (idempotency_key) where idempotency_key is not null;
 
 create table if not exists collection_scripts (
   id text primary key,
@@ -388,6 +390,9 @@ create table if not exists audit_logs (
   meta jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+
+alter table approvals add column if not exists idempotency_key text;
+create unique index if not exists approvals_idempotency_key_unique on approvals (idempotency_key) where idempotency_key is not null;
 
 insert into users (id, name, email, role, department, status, pin, must_change_pin)
 values

@@ -19,7 +19,7 @@ export function sendCorsPreflight(res) {
   res.writeHead(204, {
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type,authorization",
+    "access-control-allow-headers": "content-type,authorization,idempotency-key",
     "access-control-max-age": "86400"
   });
   res.end();

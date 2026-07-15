@@ -17,6 +17,7 @@ assert(schema.includes("file_id text"), "Postgres project_files table should kee
 assert(schema.includes("local_storage_url text") && schema.includes("storage_remote_error text"), "Postgres project_files table should keep local backup and remote storage failure details");
 assert(schema.includes("uploaded_by_name text") && schema.includes("archive_reason text"), "Postgres project_files table should keep uploader and archive metadata");
 assert(schema.includes("voided_at timestamptz") && schema.includes("void_reason text"), "Postgres payments table should keep voided payment state");
+assert(schema.includes("payments_idempotency_key_unique") && schema.includes("approvals_idempotency_key_unique"), "financial writes should keep unique idempotency keys in Postgres");
 assert(schema.includes("supplier_id text") && schema.includes("payment_note text"), "Postgres suppliers table should keep supplier settlement state");
 assert(schema.includes("approval_id text") && schema.includes("paid_at timestamptz"), "Postgres suppliers table should keep supplier payment approval and paid time");
 assert(schema.includes("cost_applied_at timestamptz") && schema.includes("cost_rolled_back_at timestamptz"), "Postgres suppliers table should keep supplier settlement cost sync state");
@@ -39,6 +40,7 @@ assert(postgres.includes("collectProjectFilesForPostgres(snapshot)") && postgres
 assert(postgres.includes("fileIdentity(merged, project.id, project.name)") && postgres.includes("if (seen.has(key)) return"), "Postgres file persistence should dedupe project files and upload ledger files");
 assert(postgres.includes('voided_at as "voidedAt"') && postgres.includes('void_reason as "voidReason"'), "Postgres read should restore voided payment metadata");
 assert(postgres.includes("insert into payments (") && postgres.includes("voided_by_name") && postgres.includes("void_reason"), "Postgres write should persist voided payment metadata");
+assert(postgres.includes('idempotency_key as "idempotencyKey"') && postgres.includes("item.idempotencyKey || null"), "Postgres should round-trip financial idempotency keys");
 assert(postgres.includes('approval_id as "approvalId"') && postgres.includes('payment_note as "paymentNote"'), "Postgres read should restore supplier settlement metadata");
 assert(postgres.includes("insert into suppliers (") && postgres.includes("approval_id") && postgres.includes("payment_note"), "Postgres write should persist supplier settlement metadata");
 assert(postgres.includes('cost_applied_at as "costAppliedAt"') && postgres.includes('cost_rolled_back_at as "costRolledBackAt"'), "Postgres read should restore supplier settlement cost sync metadata");
