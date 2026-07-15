@@ -4,6 +4,12 @@ import { handleApi } from "./server/api.mjs";
 import { handleStatic } from "./server/static.mjs";
 import { sendCorsPreflight, sendJson } from "./server/http-utils.mjs";
 import { startSystemScheduler } from "./server/scheduler.mjs";
+import { bootstrapPostgresAdminFromEnv } from "./server/bootstrap-admin.mjs";
+
+const bootstrap = await bootstrapPostgresAdminFromEnv();
+if (bootstrap.applied) {
+  console.log("PostgreSQL 管理员首次登录凭据已安全初始化；登录改密后请删除 OA_BOOTSTRAP_ADMIN_PIN。");
+}
 
 const server = createServer(async (req, res) => {
   try {

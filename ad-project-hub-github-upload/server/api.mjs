@@ -88,6 +88,7 @@ function envConfigured(...names) {
 
 async function deployHealthPayload() {
   const db = await readDb();
+  const storageMode = dbMode();
   const storage = resolveStorageSettings(db.settings?.storage || {});
   const objectStorageConfigured = objectStorageReady(storage);
   return {
@@ -103,9 +104,10 @@ async function deployHealthPayload() {
     startCommand: "npm start",
     checkedAt: new Date().toISOString(),
     nodeEnv: process.env.NODE_ENV || "development",
-    storageMode: dbMode,
+    storageMode,
     databaseUrl: envConfigured("DATABASE_URL"),
-    productionPersistenceReady: dbMode === "postgres" && envConfigured("DATABASE_URL"),
+    bootstrapAdminPinConfigured: envConfigured("OA_BOOTSTRAP_ADMIN_PIN"),
+    productionPersistenceReady: storageMode === "postgres" && envConfigured("DATABASE_URL"),
     objectStorageConfigured,
     filePersistenceReady: process.env.NODE_ENV !== "production" || objectStorageConfigured,
     scheduler: getSchedulerStatus(),

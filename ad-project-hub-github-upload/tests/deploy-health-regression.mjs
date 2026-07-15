@@ -20,8 +20,8 @@ assert(api.includes("AI_API_KEY") && api.includes("AI_BASE_URL") && api.includes
 assert(api.includes("TENCENT_SECRET_ID") && api.includes("TENCENT_SECRET_KEY") && api.includes("TENCENT_OCR_REGION"), "health payload should expose Tencent OCR env presence");
 assert(api.includes('databaseUrl: envConfigured("DATABASE_URL")'), "health payload should expose whether DATABASE_URL is configured without leaking the value");
 assert(api.includes("deployedCommit: process.env.RENDER_GIT_COMMIT"), "health payload should expose the Render deployed commit when available");
-assert(api.includes("storageMode: dbMode"), "health payload should expose storage mode for deployment diagnosis");
-assert(api.includes("productionPersistenceReady: dbMode === \"postgres\" && envConfigured(\"DATABASE_URL\")"), "health payload should expose an explicit production persistence readiness flag");
+assert(api.includes("const storageMode = dbMode()") && api.includes("storageMode,"), "health payload should expose the resolved storage mode for deployment diagnosis");
+assert(api.includes("productionPersistenceReady: storageMode === \"postgres\" && envConfigured(\"DATABASE_URL\")"), "health payload should expose an explicit production persistence readiness flag");
 assert(api.includes("objectStorageConfigured") && api.includes("filePersistenceReady"), "health payload should expose original file persistence readiness");
 assert(api.includes("scheduler: getSchedulerStatus()"), "health payload should expose background scheduler status");
 assert(server.includes("startSystemScheduler()"), "server startup should start the system scheduler");
