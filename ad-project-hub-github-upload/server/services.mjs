@@ -764,7 +764,7 @@ export function recordProjectPayment(db, body, user) {
   const contract = parseMoney(project.contract);
   const currentPaid = parseMoney(project.paid);
   if (contract && currentPaid + amount > contract * 1.05) throw new Error("回款金额超过合同金额过多，请核对后再记录");
-  const idempotencyKey = String(body.idempotencyKey || body.requestId || "").trim();
+  const idempotencyKey = scopedIdempotencyKey("payment", user, project, body.idempotencyKey || body.requestId);
   const existingPayment = idempotencyKey && (db.payments || []).find((item) => item.idempotencyKey === idempotencyKey);
   if (existingPayment) return { payment: existingPayment, project, duplicate: true };
 
@@ -809,6 +809,11 @@ export function recordProjectPayment(db, body, user) {
     at
   });
   return { payment, project };
+}
+
+function scopedIdempotencyKey(kind, user = {}, project = {}, rawKey = "") {
+  const key = String(rawKey || "").trim().slice(0, 160);
+  return key ? `${kind}:${user.id || "anonymous"}:${project.id || "unknown"}:${key}` : "";
 }
 
 export function voidProjectPayment(db, body, user) {
@@ -1301,7 +1306,7 @@ export async function reparseProject(db, body, user) {
 export async function uploadProjectCostSheet(db, body, user) {
   const project = (db.projects || []).find((item) => item.id === body?.id);
   if (!project) throw new Error("项目不存在");
-  const idempotencyKey = String(body.idempotencyKey || body.requestId || "").trim();
+  const idempotencyKey = scopedIdempotencyKey("cost-sheet", user, project, body.idempotencyKey || body.requestId);
   const inputFileIds = (body.files || []).map((file) => String(file.id || "").trim()).filter(Boolean).sort();
   const duplicateUpload = (db.files || []).find((upload) => {
     if (upload.projectId !== project.id || upload.type !== "execution-cost") return false;
@@ -3331,7 +3336,7 @@ export function createApproval(db, body, user) {
   if (!APPROVAL_LABELS[type]) throw new Error("不支持的审批类型");
   const amount = Number(body.amount || 0);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error("请填写正确的审批金额");
-  const idempotencyKey = String(body.idempotencyKey || body.requestId || "").trim();
+  const idempotencyKey = scopedIdempotencyKey("approval", user, project, body.idempotencyKey || body.requestId);
   const existingApproval = idempotencyKey && (db.approvals || []).find((item) => item.idempotencyKey === idempotencyKey);
   if (existingApproval) return existingApproval;
   const at = new Date().toISOString();
