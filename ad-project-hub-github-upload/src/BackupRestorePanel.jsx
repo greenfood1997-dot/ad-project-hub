@@ -38,7 +38,7 @@ export default function BackupRestorePanel({
       </div>
       <div className="settings-block backup-validate-block">
         <h3>备份校验 / 安全恢复</h3>
-        <p className="settings-next-step">先校验备份 JSON。真正恢复会覆盖当前业务数据，但不会凭空恢复已脱敏的 PIN、API Key、Webhook 或 Secret，会保留当前环境已有密钥。</p>
+        <p className="settings-next-step">先校验备份 JSON。恢复会覆盖当前业务数据，但会保留当前账号和环境密钥；原始合同/发票不写入备份，需由对象存储长期保存。备份中新成员会先停用，管理员设置临时 PIN 后才能启用。</p>
         <textarea rows={5} value={backupText} onChange={(event) => onBackupTextChange(event.target.value)} placeholder="粘贴 ad-project-hub-backup-YYYY-MM-DD.json 的内容" />
         <div className="button-row compact">
           <button type="button" className="ghost" onClick={onValidate} disabled={validatingBackup}>{validatingBackup ? "校验中" : "校验备份 JSON"}</button>

@@ -51,6 +51,10 @@ for (const [label, exportSnapshot, restoreSnapshot] of [
   assert.equal(backup.data.parseJobs[0].tableRows[0][1], 100);
   assert.equal(backup.data.settings.ai.apiKey, "[已脱敏]");
   assert.equal(backup.data.settings.storage.secretAccessKey, "[已脱敏]");
+  assert.equal(backup.filePayloadPolicy, "metadata-and-storage-references-only");
+
+  backup.data.files[0].base64 = "legacy-restored-secret";
+  backup.data.projects[0].files[0].dataUrl = "data:application/pdf;base64,legacy-secret";
 
   backup.data.users = [
     { id: "u-admin", name: "恢复管理员", role: "admin", status: "active", pin: "123456", pinHash: "backup-hash" },
@@ -69,6 +73,8 @@ for (const [label, exportSnapshot, restoreSnapshot] of [
   assert.equal(restored.mustChangePin, true);
   assert.equal(restored.pin, undefined);
   assert.equal(restored.pinHash, undefined);
+  assert(!JSON.stringify(db).includes("legacy-restored-secret"), `${label}: restore must discard legacy Base64 payloads`);
+  assert(!JSON.stringify(db).includes("data:application/pdf"), `${label}: restore must discard legacy data URLs`);
 }
 
 console.log("backup safety regression passed");

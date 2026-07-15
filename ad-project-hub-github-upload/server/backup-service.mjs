@@ -55,6 +55,12 @@ function sanitizeBackupData(value) {
   return safe;
 }
 
+function hasBackupFilePayload(value) {
+  if (Array.isArray(value)) return value.some(hasBackupFilePayload);
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value).some(([key, item]) => BACKUP_FILE_PAYLOAD_KEYS.has(key) || hasBackupFilePayload(item));
+}
+
 export function exportBackupSnapshot(db, user) {
   const safeUsers = (db.users || []).map((item) => {
     const { pin, pinHash, ...rest } = item;
@@ -65,6 +71,7 @@ export function exportBackupSnapshot(db, user) {
     exportedBy: { id: user.id, name: user.name, role: user.role },
     app: "ad-project-hub",
     format: "safe-backup-v1",
+    filePayloadPolicy: "metadata-and-storage-references-only",
     counts: {
       users: safeUsers.length,
       projects: (db.projects || []).length,
@@ -191,6 +198,11 @@ export function validateBackupSnapshot(db, body = {}, user = {}) {
 
   const warnings = ["本次只是校验/恢复预演，不会写入、覆盖或恢复任何 OA 数据。"];
   const data = backup?.data && typeof backup.data === "object" ? backup.data : {};
+  if (hasBackupFilePayload(data)) {
+    warnings.push("备份包含旧版 Base64/Data URL 文件载荷；正式恢复时会自动丢弃这些载荷，仅保留业务数据和对象存储引用。");
+  }
+  warnings.push("安全备份不包含合同、发票等原始文件内容；恢复后需依赖对象存储中的原文件。");
+  warnings.push("备份中新增的成员会以停用状态恢复，管理员需重新设置临时 PIN 后再启用。");
   const counts = {};
   const currentCounts = {};
   for (const key of BACKUP_COLLECTIONS) {
@@ -295,10 +307,10 @@ export function restoreBackupSnapshot(db, body = {}, user = {}) {
 
   db.users = mergeRestoredUsers(db.users || [], data.users || []);
   for (const key of BACKUP_COLLECTIONS.filter((item) => item !== "users" && item !== "auditLogs")) {
-    db[key] = Array.isArray(data[key]) ? data[key] : [];
+    db[key] = Array.isArray(data[key]) ? sanitizeBackupData(data[key]) : [];
   }
   db.settings = mergeRestoredSettings(db.settings || {}, data.settings || {});
-  db.auditLogs = Array.isArray(data.auditLogs) ? data.auditLogs : [];
+  db.auditLogs = Array.isArray(data.auditLogs) ? sanitizeBackupData(data.auditLogs) : [];
 
   const at = new Date().toISOString();
   db.auditLogs.unshift({
