@@ -5,6 +5,7 @@ const checks = [
   ["财务写入幂等", "tests/financial-idempotency-regression.mjs"],
   ["前端财务幂等", "tests/frontend-financial-idempotency-entry.mjs"],
   ["Postgres 首次管理员引导", "tests/postgres-bootstrap-admin-regression.mjs"],
+  ["默认账号风险", "tests/default-account-risk-regression.mjs"],
   ["备份恢复安全", "tests/backup-safety-regression.mjs"],
   ["备份安全前端提示", "tests/frontend-backup-safety-entry.mjs"],
   ["前端共享 API Token", "tests/frontend-shared-api-auth-regression.mjs"],

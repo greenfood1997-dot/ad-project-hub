@@ -91,6 +91,7 @@ async function deployHealthPayload() {
   const storageMode = dbMode();
   const storage = resolveStorageSettings(db.settings?.storage || {});
   const objectStorageConfigured = objectStorageReady(storage);
+  const insecureDefaultAccountCount = (db.users || []).filter((item) => item.status !== "disabled" && item.pin === "123456").length;
   return {
     app: "ad-project-hub",
     version: BUILD_VERSION,
@@ -107,6 +108,8 @@ async function deployHealthPayload() {
     storageMode,
     databaseUrl: envConfigured("DATABASE_URL"),
     bootstrapAdminPinConfigured: envConfigured("OA_BOOTSTRAP_ADMIN_PIN"),
+    insecureDefaultAccountCount,
+    authenticationReady: insecureDefaultAccountCount === 0,
     productionPersistenceReady: storageMode === "postgres" && envConfigured("DATABASE_URL"),
     objectStorageConfigured,
     filePersistenceReady: process.env.NODE_ENV !== "production" || objectStorageConfigured,

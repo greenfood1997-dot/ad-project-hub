@@ -14,6 +14,13 @@ export function deployReadinessActions(health = {}, items = [], buildVersion = "
       text: "Build Command 应为 npm install && npm run build，Start Command 应为 npm start，启动阶段不要二次构建。"
     });
   }
+  if (Number(health.insecureDefaultAccountCount || 0) > 0) {
+    actions.push({
+      tone: "danger",
+      title: "先移除默认 123456 账号",
+      text: `当前仍有 ${health.insecureDefaultAccountCount} 个启用账号使用默认 PIN。请在 Render 临时配置 OA_BOOTSTRAP_ADMIN_PIN，部署后用管理员完成首次改密，再删除该环境变量。`
+    });
+  }
   if (!health.aiEnv?.apiKey) {
     actions.push({
       tone: "warn",
