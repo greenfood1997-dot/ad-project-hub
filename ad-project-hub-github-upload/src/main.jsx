@@ -223,12 +223,31 @@ function uploadedFileKey(file = {}) {
   return `${file.name || ""}:${file.size || 0}:${file.type || ""}`;
 }
 
+const IDEMPOTENT_PATHS = new Set(["/api/payments", "/api/approvals", "/api/projects/cost-sheet"]);
+const idempotencyKeys = new Map();
+
+function financialIdempotencyKey(path, session, options = {}) {
+  if (String(options.method || "GET").toUpperCase() !== "POST" || !IDEMPOTENT_PATHS.has(path)) return "";
+  const fingerprint = `${session.id || "anonymous"}:${path}:${String(options.body || "")}`;
+  const now = Date.now();
+  const existing = idempotencyKeys.get(fingerprint);
+  if (existing && now - existing.createdAt < 30000) return existing.key;
+  const key = globalThis.crypto?.randomUUID?.() || `${now}-${Math.random().toString(36).slice(2)}`;
+  idempotencyKeys.set(fingerprint, { key, createdAt: now });
+  if (idempotencyKeys.size > 100) {
+    for (const [item, value] of idempotencyKeys) if (now - value.createdAt >= 30000) idempotencyKeys.delete(item);
+  }
+  return key;
+}
+
 async function apiRequest(path, session, options = {}) {
+  const idempotencyKey = financialIdempotencyKey(path, session, options);
   const res = await fetch(path, {
     ...options,
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${session.token || ""}`,
+      ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
       ...(options.headers || {}),
     },
   });
