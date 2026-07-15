@@ -8,6 +8,9 @@ function assert(condition, message) {
 }
 
 assert(schema.includes("comment_id text"), "Postgres comments table should keep stable frontend comment ids");
+assert(schema.includes("pin_hash text") && schema.includes("must_change_pin boolean"), "Postgres users should persist hashed PIN and first-login state");
+assert(schema.includes("alter column pin drop not null") && schema.includes("alter column pin drop default"), "Postgres migration should remove the insecure default PIN constraint");
+assert(!schema.includes("default '123456'") && !schema.includes("'active', '123456'"), "Postgres schema must not create default active PIN accounts");
 assert(schema.includes("archived_at timestamptz") && schema.includes("archive_reason text"), "Postgres comments table should keep archive fields");
 assert(schema.includes("archived_by_name text"), "Postgres comments table should keep archive actor names");
 assert(schema.includes("file_id text"), "Postgres project_files table should keep stable frontend file ids");
@@ -23,6 +26,10 @@ assert(schema.includes("progress numeric") && schema.includes("petty_cash_budget
 assert(schema.includes("service_period text") && schema.includes("start_date text") && schema.includes("end_date text"), "Postgres projects table should keep timeline fields");
 assert(postgres.includes("select id, name, client, owner, pm, sales, department") && postgres.includes('petty_cash_budget::float as "pettyCashBudget"'), "Postgres read should restore project assignment and petty cash fields");
 assert(postgres.includes("insert into projects (") && postgres.includes("pm, sales, department, progress") && postgres.includes("petty_cash_budget, petty_cash_used"), "Postgres write should persist project assignment and progress fields");
+assert(postgres.includes("const db = await pool.connect()") && postgres.includes("db.release()"), "Postgres snapshot writes must stay on one transaction connection and release it");
+assert(postgres.includes('pin_hash as "pinHash"') && postgres.includes('must_change_pin as "mustChangePin"'), "Postgres read should restore secure authentication fields");
+assert(postgres.includes("pin, pin_hash, must_change_pin") && postgres.includes("user.pinHash || null") && postgres.includes("Boolean(user.mustChangePin)"), "Postgres write should persist secure authentication fields");
+assert(!postgres.includes('user.pin || "123456"'), "Postgres write must not regenerate the default PIN");
 assert(postgres.includes("project.pm || project.extractedFields?.pm") && postgres.includes("project.pettyCashBudget ?? project.extractedFields?.pettyCashBudget"), "Postgres write should fallback to extracted project assignment and petty cash fields");
 assert(postgres.includes('file_id as id') && postgres.includes('local_storage_url as "localStorageUrl"'), "Postgres read should restore file ids and local backup urls");
 assert(postgres.includes('storage_remote_error as "storageRemoteError"') && postgres.includes('archived_at as "archivedAt"'), "Postgres read should restore file remote errors and archive state");

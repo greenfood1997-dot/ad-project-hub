@@ -5,13 +5,19 @@ create table if not exists users (
   role text not null,
   department text,
   status text not null default 'active',
-  pin text not null default '123456',
+  pin text,
+  pin_hash text,
+  must_change_pin boolean not null default false,
   created_at timestamptz not null default now()
 );
 
 alter table users add column if not exists email text;
 alter table users add column if not exists status text not null default 'active';
-alter table users add column if not exists pin text not null default '123456';
+alter table users add column if not exists pin text;
+alter table users alter column pin drop not null;
+alter table users alter column pin drop default;
+alter table users add column if not exists pin_hash text;
+alter table users add column if not exists must_change_pin boolean not null default false;
 alter table users add column if not exists feishu_open_id text;
 alter table users add column if not exists feishu_user_id text;
 alter table users add column if not exists feishu_name text;
@@ -383,13 +389,13 @@ create table if not exists audit_logs (
   created_at timestamptz not null default now()
 );
 
-insert into users (id, name, email, role, department, status, pin)
+insert into users (id, name, email, role, department, status, pin, must_change_pin)
 values
-  ('u-shareholder', '公司股东', 'owner@company.local', 'shareholder', '管理层', 'active', '123456'),
-  ('u-admin', '中台管理员', 'admin@company.local', 'admin', '中台', 'active', '123456'),
-  ('u-director', '项目总监', 'director@company.local', 'director', '项目部', 'active', '123456'),
-  ('u-pm', '项目经理', 'pm@company.local', 'pm', '项目部', 'active', '123456'),
-  ('u-sales', '销售成员', 'sales@company.local', 'sales', '销售部', 'active', '123456'),
-  ('u-finance', '财务成员', 'finance@company.local', 'finance', '财务部', 'active', '123456'),
-  ('u-member', '普通员工', 'member@company.local', 'member', '执行部', 'active', '123456')
+  ('u-shareholder', '公司股东', 'owner@company.local', 'shareholder', '管理层', 'disabled', null, true),
+  ('u-admin', '中台管理员', 'admin@company.local', 'admin', '中台', 'disabled', null, true),
+  ('u-director', '项目总监', 'director@company.local', 'director', '项目部', 'disabled', null, true),
+  ('u-pm', '项目经理', 'pm@company.local', 'pm', '项目部', 'disabled', null, true),
+  ('u-sales', '销售成员', 'sales@company.local', 'sales', '销售部', 'disabled', null, true),
+  ('u-finance', '财务成员', 'finance@company.local', 'finance', '财务部', 'disabled', null, true),
+  ('u-member', '普通员工', 'member@company.local', 'member', '执行部', 'disabled', null, true)
 on conflict (id) do nothing;

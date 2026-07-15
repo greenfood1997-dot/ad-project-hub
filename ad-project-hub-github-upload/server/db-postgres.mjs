@@ -43,6 +43,7 @@ export async function readPostgresDb() {
     auditLogs
   ] = await Promise.all([
     db.query(`select id, name, email, role, department, status, pin,
+      pin_hash as "pinHash", must_change_pin as "mustChangePin",
       feishu_open_id as "feishuOpenId", feishu_user_id as "feishuUserId",
       feishu_name as "feishuName", created_at as "createdAt"
       from users order by created_at asc`),
@@ -285,8 +286,10 @@ async function insertProjectFile(db, project, file = {}) {
 
 export async function writePostgresDbFromSnapshot(snapshot) {
   await migratePostgres();
-  const db = await getPool();
+  const pool = await getPool();
+  const db = await pool.connect();
   const filesByProject = collectProjectFilesForPostgres(snapshot);
+  try {
     await db.query("begin");
     try {
       await db.query("delete from audit_logs");
@@ -311,9 +314,9 @@ export async function writePostgresDbFromSnapshot(snapshot) {
     for (const user of snapshot.users || defaultDb.users) {
       await db.query(
         `insert into users (
-          id, name, email, role, department, status, pin,
+          id, name, email, role, department, status, pin, pin_hash, must_change_pin,
           feishu_open_id, feishu_user_id, feishu_name, created_at
-        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [
           user.id,
           user.name,
@@ -321,7 +324,9 @@ export async function writePostgresDbFromSnapshot(snapshot) {
           user.role,
           user.department || "",
           user.status || "active",
-          user.pin || "123456",
+          user.pin || null,
+          user.pinHash || null,
+          Boolean(user.mustChangePin),
           user.feishuOpenId || "",
           user.feishuUserId || "",
           user.feishuName || user.name || "",
@@ -712,5 +717,8 @@ export async function writePostgresDbFromSnapshot(snapshot) {
   } catch (error) {
     await db.query("rollback");
     throw error;
+  }
+  } finally {
+    db.release();
   }
 }

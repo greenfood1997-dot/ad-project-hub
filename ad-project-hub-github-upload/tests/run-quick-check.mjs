@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 
 const checks = [
+  ["多人写入串行化", "tests/db-mutation-serialization-regression.mjs"],
   ["备份恢复安全", "tests/backup-safety-regression.mjs"],
   ["备份安全前端提示", "tests/frontend-backup-safety-entry.mjs"],
   ["前端共享 API Token", "tests/frontend-shared-api-auth-regression.mjs"],
