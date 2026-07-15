@@ -5,6 +5,7 @@ const checks = [
   ["API 覆盖", "tests/api-route-coverage.mjs"],
   ["部署检查覆盖", "tests/post-deploy-check-coverage.mjs"],
   ["Postgres 持久化覆盖", "tests/postgres-persistence-coverage.mjs"],
+  ["对象存储环境兜底", "tests/storage-env-fallback-regression.mjs"],
   ["上线健康", "tests/deploy-health-regression.mjs"],
   ["前端性能入口", "tests/frontend-performance-entry.mjs"],
   ["上传进度入口", "tests/frontend-upload-progress-entry.mjs"],

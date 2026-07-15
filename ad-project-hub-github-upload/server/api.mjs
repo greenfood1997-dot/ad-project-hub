@@ -2,6 +2,7 @@ import { readDb, mutateDb, dbMode } from "./db.mjs";
 import { getCurrentUser, readBody, requireRole, sendJson } from "./http-utils.mjs";
 import { clearLoginFailures, hashPin, isLoginLimited, issueAuthToken, issuePasswordChangeToken, loginLimitKey, recordLoginFailure, verifyPasswordChangeToken, verifyPin } from "./auth.mjs";
 import { getSchedulerStatus, reloadSystemScheduler } from "./scheduler.mjs";
+import { objectStorageReady, resolveStorageSettings } from "./storage-settings.mjs";
 import {
   addComment,
   actOnApproval,
@@ -87,8 +88,8 @@ function envConfigured(...names) {
 
 async function deployHealthPayload() {
   const db = await readDb();
-  const storage = db.settings?.storage || {};
-  const objectStorageConfigured = Boolean(storage.bucket && storage.accessKeyId && storage.secretAccessKey && (storage.endpoint || String(storage.provider || "").match(/s3|r2|minio/i)));
+  const storage = resolveStorageSettings(db.settings?.storage || {});
+  const objectStorageConfigured = objectStorageReady(storage);
   return {
     app: "ad-project-hub",
     version: BUILD_VERSION,

@@ -82,6 +82,21 @@ npm run serve
 db/schema.postgres.sql
 ```
 
+## 对象存储环境变量
+
+生产环境建议把合同、发票和票据保存到 S3/R2/MinIO，而不是 Render 本地目录。可在 Render Environment 配置：
+
+```env
+OBJECT_STORAGE_PROVIDER=r2
+OBJECT_STORAGE_BUCKET=你的 Bucket
+OBJECT_STORAGE_ENDPOINT=https://你的账户.r2.cloudflarestorage.com
+OBJECT_STORAGE_ACCESS_KEY_ID=你的 Access Key
+OBJECT_STORAGE_SECRET_ACCESS_KEY=你的 Secret Key
+OBJECT_STORAGE_PUBLIC_BASE_URL=https://你的文件访问域名
+```
+
+后台已保存的非空配置优先，环境变量会补齐缺失字段。配置后 `/api/health` 的 `objectStorageConfigured` 和 `filePersistenceReady` 应为 `true`。
+
 ## 腾讯云 OCR
 
 扫描版 PDF 或图片合同无法直接用 `pdf-parse` 读取正文。配置腾讯云 OCR 后，系统会在 PDF 无文本时自动调用 OCR，再把识别出的文字交给合同解析逻辑。

@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { recognizeFileWithTencentOcr, recognizeFileWithTencentOcrDetailed, tencentOcrConfigured } from "./tencent-ocr.mjs";
 import { rootDir } from "./config.mjs";
+import { resolveStorageSettings } from "./storage-settings.mjs";
 
 export async function createProject(db, values, files, user) {
   if (!values?.["项目名称"] && !files.length) throw new Error("请填写项目名称或先上传合同/执行表");
@@ -1470,6 +1471,7 @@ function fileReference(file = {}) {
 }
 
 async function normalizeUploadedFiles(files, category, user, now, storageSettings = {}) {
+  storageSettings = resolveStorageSettings(storageSettings);
   return Promise.all((Array.isArray(files) ? files : []).map(async (file) => {
     const withId = { ...file, id: file.id || nextFileId() };
     const stored = await persistLocalUploadFile(withId, category, now, storageSettings);
