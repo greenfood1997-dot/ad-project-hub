@@ -1,5 +1,5 @@
 import React from "react";
-import { BellRing, Bot, FileSpreadsheet, Filter, Plus, Search, UserCog } from "lucide-react";
+import { AlertTriangle, BellRing, Bot, FileSpreadsheet, Filter, Plus, Search, UserCog } from "lucide-react";
 
 export default function DashboardTopbar({
   canCreateProject,
@@ -26,6 +26,8 @@ export default function DashboardTopbar({
   setSearchText,
   systemNotificationCount = 0,
   aiConfigured = false
+  ,productionHealth = null
+  ,onOpenProductionSettings
 }) {
   return (
     <>
@@ -49,6 +51,13 @@ export default function DashboardTopbar({
           {canCreateProject && <button type="button" className="primary" onClick={onCreateProject}><Plus size={16} />新建项目</button>}
         </div>
       </header>
+
+      {isAdmin && productionHealth?.nodeEnv === "production" && (!productionHealth.productionPersistenceReady || !productionHealth.filePersistenceReady) && (
+        <div className="production-risk-bar">
+          <span><AlertTriangle size={16} />当前仍是测试级存储：{!productionHealth.productionPersistenceReady ? "业务数据未接 PostgreSQL" : ""}{!productionHealth.productionPersistenceReady && !productionHealth.filePersistenceReady ? "；" : ""}{!productionHealth.filePersistenceReady ? "合同/票据未接对象存储" : ""}</span>
+          <button type="button" onClick={onOpenProductionSettings}>去完成生产配置</button>
+        </div>
+      )}
 
       {notice && <div className="notice-bar"><span>{notice}</span><button type="button" onClick={onClearNotice}>知道了</button></div>}
 

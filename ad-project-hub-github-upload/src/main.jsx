@@ -2016,6 +2016,12 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             {canCreateProject && <button type="button" className="primary" onClick={() => openUpload("create-project")}><Plus size={16} />新建项目</button>}
           </div>
         </header>
+        {isAdmin && health?.nodeEnv === "production" && (!health.productionPersistenceReady || !health.filePersistenceReady) && (
+          <div className="production-risk-bar">
+            <span><AlertTriangle size={16} />当前仍是测试级存储：{!health.productionPersistenceReady ? "业务数据未接 PostgreSQL" : ""}{!health.productionPersistenceReady && !health.filePersistenceReady ? "；" : ""}{!health.filePersistenceReady ? "合同/票据未接对象存储" : ""}</span>
+            <button type="button" onClick={() => setView("admin:product")}>去完成生产配置</button>
+          </div>
+        )}
         {notice && <div className="notice-bar"><span>{notice}</span><button type="button" onClick={() => setNotice("")}>知道了</button></div>}
         {notificationsOpen && <NotificationDrawer
           items={systemNotifications}

@@ -1015,6 +1015,36 @@ label span {
   font-size: 13px;
 }
 
+.production-risk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  border: 1px solid #f2b8a0;
+  border-radius: 8px;
+  background: #fff7f2;
+  color: #9a3412;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.production-risk-bar span,
+.production-risk-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.production-risk-bar button {
+  flex: 0 0 auto;
+  border: 1px solid #f2b8a0;
+  border-radius: 8px;
+  background: #fff;
+  color: #9a3412;
+  padding: 7px 10px;
+}
+
 .notice-bar button,
 .filter-panel button {
   border: 1px solid var(--line);
