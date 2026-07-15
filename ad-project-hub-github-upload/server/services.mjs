@@ -1816,7 +1816,8 @@ export async function testObjectStorage(db, values = {}, user = {}) {
     size: Buffer.byteLength(content),
     base64: Buffer.from(content, "utf8").toString("base64")
   }], "storage-test", user, now, settings);
-  const ok = Boolean(file.storageUrl || file.localStorageUrl) && !file.storageRemoteError;
+  const remoteStored = file.storageProvider !== "local" && Boolean(file.storagePath) && !file.storageRemoteError && !file.storageMocked;
+  const ok = remoteStored;
   db.auditLogs.unshift({
     type: "settings",
     target: "storage",
@@ -1841,6 +1842,8 @@ export async function testObjectStorage(db, values = {}, user = {}) {
     storagePath: file.storagePath || "",
     localStoragePath: file.localStoragePath || "",
     storageRemoteError: file.storageRemoteError || "",
+    remoteStored,
+    warning: remoteStored ? "" : file.storageRemoteError || "未完成真实远程上传；Render 本地文件会在重建或重新部署后丢失。",
     fileName,
     testedAt: now
   };
@@ -1935,6 +1938,7 @@ async function uploadToS3CompatibleStorage(file = {}, buffer, category = "file",
   const publicUrl = s3PublicUrl(settings, objectKey);
   const mockUpload = settings.mockUpload === true || settings.mockUpload === "true";
   if (mockUpload) {
+    if (process.env.NODE_ENV === "production") throw new Error("生产环境禁止模拟对象存储上传");
     return { storageUrl: publicUrl || `s3://${settings.bucket}/${objectKey}`, storagePath: objectKey, storageProvider: settings.provider || "s3-compatible", storageStatus: "已上传对象存储", storageMocked: true };
   }
   const { url, headers } = s3SignedHeaders({ settings, objectKey, buffer, contentType: file.type || "application/octet-stream" });
@@ -1973,7 +1977,7 @@ async function persistLocalUploadFile(file = {}, category = "file", now = new Da
     const remote = await uploadToS3CompatibleStorage(localRecord, buffer, category, now, storageSettings);
     return { ...localRecord, ...remote, localStorageUrl: localRecord.storageUrl, localStoragePath: localRecord.storagePath };
   } catch (error) {
-    return { ...localRecord, storageRemoteError: error.message };
+    return { ...localRecord, storageStatus: "仅本地暂存，远程上传失败", storageRemoteError: error.message };
   }
 }
 

@@ -67,6 +67,7 @@ async function uploadToS3CompatibleStorage(file = {}, buffer, category = "file",
   const publicUrl = s3PublicUrl(settings, objectKey);
   const mockUpload = settings.mockUpload === true || settings.mockUpload === "true";
   if (mockUpload) {
+    if (process.env.NODE_ENV === "production") throw new Error("生产环境禁止模拟对象存储上传");
     return { storageUrl: publicUrl || `s3://${settings.bucket}/${objectKey}`, storagePath: objectKey, storageProvider: settings.provider || "s3-compatible", storageStatus: "已上传对象存储", storageMocked: true };
   }
   const { url, headers } = s3SignedHeaders({ settings, objectKey, buffer, contentType: file.type || "application/octet-stream" });
@@ -105,6 +106,6 @@ export async function persistLocalUploadFile(file = {}, category = "file", now =
     const remote = await uploadToS3CompatibleStorage(localRecord, buffer, category, now, storageSettings);
     return { ...localRecord, ...remote, localStorageUrl: localRecord.storageUrl, localStoragePath: localRecord.storagePath };
   } catch (error) {
-    return { ...localRecord, storageRemoteError: error.message };
+    return { ...localRecord, storageStatus: "仅本地暂存，远程上传失败", storageRemoteError: error.message };
   }
 }

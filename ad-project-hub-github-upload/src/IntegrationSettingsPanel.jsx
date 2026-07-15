@@ -103,6 +103,7 @@ export default function IntegrationSettingsPanel({
             {storageTestResult.storageUrl && <a href={storageTestResult.storageUrl} target="_blank" rel="noreferrer">打开存储地址</a>}
             {storageTestResult.localStorageUrl && <a href={storageTestResult.localStorageUrl} target="_blank" rel="noreferrer">打开本地备份</a>}
             {storageTestResult.storageRemoteError && <em>{storageTestResult.storageRemoteError}</em>}
+            {storageTestResult.warning && <em>{storageTestResult.warning}</em>}
           </div>
         )}
       </div>

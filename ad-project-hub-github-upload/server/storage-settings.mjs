@@ -22,5 +22,6 @@ export function resolveStorageSettings(saved = {}) {
 
 export function objectStorageReady(settings = {}) {
   const provider = String(settings.provider || "").toLowerCase();
-  return Boolean(settings.bucket && settings.accessKeyId && settings.secretAccessKey && (settings.endpoint || /s3|r2|minio/.test(provider)));
+  const mocked = settings.mockUpload === true || settings.mockUpload === "true";
+  return Boolean(!mocked && settings.bucket && settings.accessKeyId && settings.secretAccessKey && (settings.endpoint || /s3|r2|minio/.test(provider)));
 }

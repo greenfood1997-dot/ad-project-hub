@@ -10,6 +10,7 @@ const checks = [
   ["部署检查覆盖", "tests/post-deploy-check-coverage.mjs"],
   ["Postgres 持久化覆盖", "tests/postgres-persistence-coverage.mjs"],
   ["对象存储环境兜底", "tests/storage-env-fallback-regression.mjs"],
+  ["对象存储真实就绪", "tests/object-storage-truth-regression.mjs"],
   ["上线健康", "tests/deploy-health-regression.mjs"],
   ["生产风险入口", "tests/frontend-production-risk-entry.mjs"],
   ["前端性能入口", "tests/frontend-performance-entry.mjs"],
