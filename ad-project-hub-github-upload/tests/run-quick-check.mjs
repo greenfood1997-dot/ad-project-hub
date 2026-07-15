@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 
 const checks = [
+  ["备份恢复安全", "tests/backup-safety-regression.mjs"],
   ["前端共享 API Token", "tests/frontend-shared-api-auth-regression.mjs"],
   ["API 覆盖", "tests/api-route-coverage.mjs"],
   ["部署检查覆盖", "tests/post-deploy-check-coverage.mjs"],

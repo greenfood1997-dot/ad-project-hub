@@ -3477,9 +3477,29 @@ function redactSettingsForBackup(settings = {}) {
   return clone;
 }
 
+const BACKUP_FILE_PAYLOAD_KEYS = new Set([
+  "base64",
+  "dataUrl",
+  "buffer",
+  "binary",
+  "bytes",
+  "mockFileBase64"
+]);
+
+function sanitizeBackupData(value) {
+  if (Array.isArray(value)) return value.map(sanitizeBackupData);
+  if (!value || typeof value !== "object") return value;
+  const safe = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (BACKUP_FILE_PAYLOAD_KEYS.has(key)) continue;
+    safe[key] = sanitizeBackupData(item);
+  }
+  return safe;
+}
+
 export function exportBackupSnapshot(db, user) {
   const safeUsers = (db.users || []).map((item) => {
-    const { pin, ...rest } = item;
+    const { pin, pinHash, ...rest } = item;
     return rest;
   });
   return {
@@ -3499,22 +3519,22 @@ export function exportBackupSnapshot(db, user) {
     },
     data: {
       users: safeUsers,
-      projects: db.projects || [],
-      approvals: db.approvals || [],
-      payments: db.payments || [],
-      suppliers: db.suppliers || [],
-      supplierProfiles: db.supplierProfiles || [],
-      clientProfiles: db.clientProfiles || [],
-      collectionScripts: db.collectionScripts || [],
-      files: db.files || [],
-      parseJobs: db.parseJobs || [],
-      comments: db.comments || [],
-      alertUpdates: db.alertUpdates || [],
-      systemNotifications: db.systemNotifications || [],
-      feishuProjectBindings: db.feishuProjectBindings || [],
-      feishuEvents: db.feishuEvents || [],
-      feishuPendingFiles: db.feishuPendingFiles || [],
-      auditLogs: db.auditLogs || [],
+      projects: sanitizeBackupData(db.projects || []),
+      approvals: sanitizeBackupData(db.approvals || []),
+      payments: sanitizeBackupData(db.payments || []),
+      suppliers: sanitizeBackupData(db.suppliers || []),
+      supplierProfiles: sanitizeBackupData(db.supplierProfiles || []),
+      clientProfiles: sanitizeBackupData(db.clientProfiles || []),
+      collectionScripts: sanitizeBackupData(db.collectionScripts || []),
+      files: sanitizeBackupData(db.files || []),
+      parseJobs: sanitizeBackupData(db.parseJobs || []),
+      comments: sanitizeBackupData(db.comments || []),
+      alertUpdates: sanitizeBackupData(db.alertUpdates || []),
+      systemNotifications: sanitizeBackupData(db.systemNotifications || []),
+      feishuProjectBindings: sanitizeBackupData(db.feishuProjectBindings || []),
+      feishuEvents: sanitizeBackupData(db.feishuEvents || []),
+      feishuPendingFiles: sanitizeBackupData(db.feishuPendingFiles || []),
+      auditLogs: sanitizeBackupData(db.auditLogs || []),
       settings: redactSettingsForBackup(db.settings || {})
     }
   };
@@ -3663,14 +3683,28 @@ export function validateBackupSnapshot(db, body = {}, user = {}) {
 
 function mergeRestoredUsers(currentUsers = [], backupUsers = []) {
   const currentById = new Map((currentUsers || []).map((item) => [item.id, item]));
-  return (backupUsers || []).map((item) => {
-    const current = currentById.get(item.id) || {};
+  const restoredIds = new Set();
+  const restored = (backupUsers || []).map((item) => {
+    const { pin: ignoredPin, pinHash: ignoredPinHash, ...safeItem } = item || {};
+    const current = currentById.get(safeItem.id);
+    restoredIds.add(safeItem.id);
+    if (!current) {
+      return { ...safeItem, status: "disabled", mustChangePin: true };
+    }
+    const auth = {};
+    if (current.pinHash) auth.pinHash = current.pinHash;
+    else if (current.pin) auth.pin = current.pin;
     return {
-      ...item,
-      pin: current.pin || "123456",
-      status: item.status || current.status || "active"
+      ...safeItem,
+      ...auth,
+      status: current.status || safeItem.status || "active",
+      mustChangePin: Boolean(current.mustChangePin)
     };
   });
+  for (const current of currentUsers || []) {
+    if (!restoredIds.has(current.id)) restored.push({ ...current });
+  }
+  return restored;
 }
 
 function restoreSettingValue(currentValue, backupValue) {
