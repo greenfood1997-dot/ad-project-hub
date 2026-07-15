@@ -656,7 +656,7 @@ function scopedSettings(settings = {}, user) {
 }
 
 function publicState(db, user) {
-  return {
+  const state = {
     ...db,
     projects: (db.projects || []).map((project) => ({
       ...project,
@@ -675,6 +675,18 @@ function publicState(db, user) {
       ? (db.users || []).map((item) => publicUser(ensureMemberFields(item)))
       : []
   };
+  return stripPrivatePayloads(state);
+}
+
+function stripPrivatePayloads(value) {
+  if (Array.isArray(value)) return value.map(stripPrivatePayloads);
+  if (!value || typeof value !== "object") return value;
+  const safe = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (["pin", "pinHash", "base64", "dataUrl", "buffer", "binary", "bytes"].includes(key)) continue;
+    safe[key] = stripPrivatePayloads(item);
+  }
+  return safe;
 }
 
 export async function handleApi(req, res) {

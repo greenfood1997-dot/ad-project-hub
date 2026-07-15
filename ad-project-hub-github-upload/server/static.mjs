@@ -24,9 +24,12 @@ export async function handleStatic(req, res) {
     ? "/dist/index.html"
     : url.pathname.startsWith("/assets/")
       ? `/dist${url.pathname}`
-      : url.pathname.startsWith("/uploads/")
-        ? url.pathname
       : url.pathname;
+  if (url.pathname.startsWith("/uploads/")) {
+    res.writeHead(404, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+    res.end("Local uploads are not publicly accessible");
+    return;
+  }
   const filePath = join(rootDir, decodeURIComponent(pathname).replace(/^\/+/, ""));
   try {
     const content = await readFile(filePath);

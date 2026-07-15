@@ -4017,7 +4017,9 @@ function ProjectDetail({ project, isManagement, session, files, parseJobs, appro
             <div key={`${file.name}-${index}`}>
               <strong>{file.name}</strong>
               <span>{file.source || file.category || "文件"} · {fileSize(file.size)} · {file.storageStatus || (file.storageUrl ? "已持久化" : "仅记录")} · {file.uploadedByName || file.uploadedBy || "未知上传人"} · {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString("zh-CN") : "时间待记录"}</span>
-              {file.storageUrl && <a className="ghost tiny file-link" href={file.storageUrl} target="_blank" rel="noreferrer">打开文件</a>}
+              {file.storageUrl && !String(file.storageUrl).startsWith("/uploads/")
+                ? <a className="ghost tiny file-link" href={file.storageUrl} target="_blank" rel="noreferrer">打开文件</a>
+                : file.storageProvider === "local" && <span className="muted">本地暂存不可公开访问，需配置对象存储</span>}
               <button type="button" className="ghost tiny" disabled={copyingFileKey === uploadedFileKey(file)} onClick={() => copyFileInfo(file)}>
                 {copyingFileKey === uploadedFileKey(file) ? "复制中" : "复制信息"}
               </button>
