@@ -47,7 +47,7 @@ export async function readPostgresDb() {
       feishu_open_id as "feishuOpenId", feishu_user_id as "feishuUserId",
       feishu_name as "feishuName", created_at as "createdAt"
       from users order by created_at asc`),
-    db.query("select type, values from settings"),
+    db.query('select type, config_values as "values" from settings'),
     db.query(`select id, name, client, owner, pm, sales, department,
       progress::float, petty_cash_budget::float as "pettyCashBudget",
       petty_cash_used::float as "pettyCashUsed", service_period as "servicePeriod",
@@ -338,7 +338,7 @@ export async function writePostgresDbFromSnapshot(snapshot) {
     for (const [type, values] of Object.entries(snapshot.settings || {})) {
       if (values) {
         await db.query(
-          "insert into settings (type, values, saved_by, saved_at) values ($1, $2, $3, $4)",
+          "insert into settings (type, config_values, saved_by, saved_at) values ($1, $2, $3, $4)",
           [type, values, values.savedBy || null, values.savedAt || new Date().toISOString()]
         );
       }

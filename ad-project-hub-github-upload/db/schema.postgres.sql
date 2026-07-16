@@ -25,7 +25,7 @@ create unique index if not exists users_email_unique on users (lower(email)) whe
 
 create table if not exists settings (
   type text primary key,
-  values jsonb not null,
+  config_values jsonb not null,
   saved_by text references users(id),
   saved_at timestamptz not null default now()
 );

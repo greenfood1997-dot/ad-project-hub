@@ -15,6 +15,7 @@ const checks = [
   ["API 覆盖", "tests/api-route-coverage.mjs"],
   ["部署检查覆盖", "tests/post-deploy-check-coverage.mjs"],
   ["Postgres 持久化覆盖", "tests/postgres-persistence-coverage.mjs"],
+  ["Postgres 建表语法", "tests/postgres-schema-syntax-regression.mjs"],
   ["对象存储环境兜底", "tests/storage-env-fallback-regression.mjs"],
   ["对象存储真实就绪", "tests/object-storage-truth-regression.mjs"],
   ["状态与文件载荷安全", "tests/state-file-payload-safety-regression.mjs"],
