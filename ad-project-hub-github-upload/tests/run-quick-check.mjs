@@ -7,6 +7,7 @@ const checks = [
   ["Postgres 首次管理员引导", "tests/postgres-bootstrap-admin-regression.mjs"],
   ["默认账号风险", "tests/default-account-risk-regression.mjs"],
   ["成员临时 PIN 安全", "tests/member-pin-safety-regression.mjs"],
+  ["个人 PIN 修改闭环", "tests/account-pin-change-regression.mjs"],
   ["备份恢复安全", "tests/backup-safety-regression.mjs"],
   ["备份安全前端提示", "tests/frontend-backup-safety-entry.mjs"],
   ["前端共享 API Token", "tests/frontend-shared-api-auth-regression.mjs"],

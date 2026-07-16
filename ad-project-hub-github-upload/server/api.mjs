@@ -773,6 +773,35 @@ export async function handleApi(req, res) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/auth/change-pin") {
+    const body = await readBody(req);
+    const currentPin = String(body.currentPin || "");
+    const newPin = String(body.newPin || "");
+    const account = snapshot.users.find((item) => item.id === user.id && item.status !== "disabled");
+    if (!account || !currentPin || !verifyPin(currentPin, account.pinHash || account.pin || "")) {
+      sendJson(res, 400, { ok: false, error: "当前 PIN 不正确" });
+      return;
+    }
+    if (!/^\d{6,12}$/.test(newPin) || newPin === "123456") {
+      sendJson(res, 400, { ok: false, error: "新 PIN 需为 6-12 位数字，且不能使用 123456" });
+      return;
+    }
+    if (currentPin === newPin) {
+      sendJson(res, 400, { ok: false, error: "新 PIN 不能与当前 PIN 相同" });
+      return;
+    }
+    await mutateDb((db) => {
+      const current = db.users.find((item) => item.id === user.id && item.status !== "disabled");
+      if (!current) throw new Error("账号不可用");
+      current.pinHash = hashPin(newPin);
+      delete current.pin;
+      current.mustChangePin = false;
+      db.auditLogs.unshift({ type: "account-security", target: current.email || current.name, action: "change-pin", user: current.name, at: new Date().toISOString() });
+    });
+    sendJson(res, 200, { ok: true, data: { changed: true } });
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/state") {
     await mutateDb((db) => scanSystemNotifications(db, { id: "system", name: "系统扫描" }));
     const fresh = await readDb();

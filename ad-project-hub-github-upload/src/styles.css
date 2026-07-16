@@ -4435,6 +4435,20 @@ main.dashboard-main {
   overflow: hidden;
 }
 
+.account-pin-dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 24px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.22);
+  display: grid;
+  gap: 16px;
+}
+
+.account-pin-dialog label { display: grid; gap: 7px; }
+.account-pin-dialog label span { font-size: 13px; font-weight: 700; color: #475569; }
+.account-pin-dialog input { min-height: 42px; padding: 0 12px; border: 1px solid #dbe2ea; border-radius: 10px; }
+
 .upload-modal {
   width: min(1120px, calc(100vw - 48px));
   inline-size: min(1120px, calc(100vw - 48px));

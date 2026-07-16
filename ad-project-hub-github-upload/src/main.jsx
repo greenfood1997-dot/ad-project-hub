@@ -1395,6 +1395,9 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [sendingWechatNotificationId, setSendingWechatNotificationId] = useState("");
   const [notificationLastAction, setNotificationLastAction] = useState(null);
   const [notice, setNotice] = useState("");
+  const [pinDialogOpen, setPinDialogOpen] = useState(false);
+  const [pinForm, setPinForm] = useState({ currentPin: "", newPin: "", confirmPin: "" });
+  const [changingPin, setChangingPin] = useState(false);
   const [exportingProjectLedger, setExportingProjectLedger] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [projectFilters, setProjectFilters] = useState({ risk: "全部风险", status: "全部状态", money: "全部资金", material: "全部材料" });
@@ -1431,6 +1434,22 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const hasProjectFilters = searchText.trim() || Object.values(projectFilters).some((value) => !String(value).startsWith("全部"));
   const selected = visibleProjects.find((project) => project.id === selectedId) || visibleProjects[0] || projects[0] || null;
   const systemNotifications = (state?.systemNotifications || []).filter((item) => item.status === "待处理");
+
+  async function changeOwnPin(event) {
+    event.preventDefault();
+    if (pinForm.newPin !== pinForm.confirmPin) { setNotice("两次输入的新 PIN 不一致。"); return; }
+    setChangingPin(true);
+    try {
+      await apiRequest(session, "/api/auth/change-pin", { method: "POST", body: JSON.stringify({ currentPin: pinForm.currentPin, newPin: pinForm.newPin }) });
+      setPinForm({ currentPin: "", newPin: "", confirmPin: "" });
+      setPinDialogOpen(false);
+      setNotice("PIN 已修改。下次登录请使用新 PIN。");
+    } catch (error) {
+      setNotice(error.message || "修改 PIN 失败");
+    } finally {
+      setChangingPin(false);
+    }
+  }
 
   function loadState() {
     return fetch("/api/state", { headers: { authorization: `Bearer ${session.token || ""}` } })
@@ -2010,6 +2029,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             }
             setNotice(wechatConfigured ? "企业微信已配置，可用于通知和协同提醒。" : "企业微信未配置，请联系管理员接入。");
           }}><MessageSquareText size={16} />企业微信</button>
+          <button type="button" onClick={() => setPinDialogOpen(true)}><LockKeyhole size={16} />修改 PIN</button>
           <button type="button" onClick={onLogout}><LogOut size={16} />退出登录</button>
         </div>
       </aside>
@@ -2042,6 +2062,15 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           </div>
         )}
         {notice && <div className="notice-bar"><span>{notice}</span><button type="button" onClick={() => setNotice("")}>知道了</button></div>}
+        {pinDialogOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setPinDialogOpen(false)}>
+          <form className="account-pin-dialog" onSubmit={changeOwnPin}>
+            <div className="section-head"><div><h2>修改登录 PIN</h2><span>修改后下次登录立即使用新 PIN</span></div></div>
+            <label><span>当前 PIN</span><input type="password" inputMode="numeric" autoComplete="current-password" value={pinForm.currentPin} onChange={(event) => setPinForm({ ...pinForm, currentPin: event.target.value })} /></label>
+            <label><span>新 PIN</span><input type="password" inputMode="numeric" autoComplete="new-password" placeholder="6-12 位数字，不能使用 123456" value={pinForm.newPin} onChange={(event) => setPinForm({ ...pinForm, newPin: event.target.value })} /></label>
+            <label><span>确认新 PIN</span><input type="password" inputMode="numeric" autoComplete="new-password" value={pinForm.confirmPin} onChange={(event) => setPinForm({ ...pinForm, confirmPin: event.target.value })} /></label>
+            <div className="modal-actions"><button type="button" className="ghost" onClick={() => setPinDialogOpen(false)}>取消</button><button type="submit" className="primary" disabled={changingPin}>{changingPin ? "保存中" : "保存新 PIN"}</button></div>
+          </form>
+        </div>}
         {notificationsOpen && <NotificationDrawer
           items={systemNotifications}
           onClose={() => setNotificationsOpen(false)}
