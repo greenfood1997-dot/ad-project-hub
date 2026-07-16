@@ -33,7 +33,7 @@ export default function AdminMemberPanel({
         <label><span>飞书 Open ID</span><input value={form.feishuOpenId} onChange={(event) => onUpdateForm({ ...form, feishuOpenId: event.target.value })} placeholder="用于机器人私聊通知" /></label>
         <label><span>飞书 User ID（可选）</span><input value={form.feishuUserId} onChange={(event) => onUpdateForm({ ...form, feishuUserId: event.target.value })} /></label>
         <label><span>飞书姓名（可选）</span><input value={form.feishuName} onChange={(event) => onUpdateForm({ ...form, feishuName: event.target.value })} /></label>
-        <label><span>临时 PIN</span><input value={form.pin} placeholder="留空则保持不变" onChange={(event) => onUpdateForm({ ...form, pin: event.target.value })} /></label>
+        <label><span>临时 PIN</span><input value={form.pin} type="password" inputMode="numeric" placeholder={editingId ? "留空则保持不变" : "填写 6-12 位数字，不能使用 123456"} onChange={(event) => onUpdateForm({ ...form, pin: event.target.value })} /></label>
         {message && <p className="form-message">{message}</p>}
         <button type="submit" className="primary" disabled={savingMember}>{savingMember ? "保存中" : "保存成员"}</button>
       </form>

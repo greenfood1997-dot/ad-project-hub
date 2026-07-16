@@ -113,7 +113,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
     feishuUserId: "",
     feishuName: "",
     status: "active",
-    pin: "123456",
+    pin: "",
   });
   const aiReady = Boolean(aiSettings["API Key"]);
   const activeMembers = members.filter((member) => member.status !== "disabled");
@@ -215,7 +215,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
 
   function resetForm() {
     setEditingId("");
-    setForm({ name: "", email: "", role: "member", department: "", feishuOpenId: "", feishuUserId: "", feishuName: "", status: "active", pin: "123456" });
+    setForm({ name: "", email: "", role: "member", department: "", feishuOpenId: "", feishuUserId: "", feishuName: "", status: "active", pin: "" });
   }
 
   async function save(event) {

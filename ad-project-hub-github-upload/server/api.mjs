@@ -178,7 +178,11 @@ function saveMember(db, body, actor) {
   if (!email) throw new Error("请填写成员邮箱");
   if (!body.name?.trim()) throw new Error("请填写成员姓名");
   const existing = db.users.find((item) => item.id === body.id);
-  if (!existing && !String(body.pin || "").trim()) throw new Error("新成员必须设置临时 PIN");
+  const temporaryPin = String(body.pin || "").trim();
+  if (!existing && !temporaryPin) throw new Error("新成员必须设置临时 PIN");
+  if (temporaryPin && (!/^\d{6,12}$/.test(temporaryPin) || temporaryPin === "123456")) {
+    throw new Error("临时 PIN 需为 6-12 位数字，且不能使用 123456");
+  }
   const duplicate = db.users.find((item) => normalizeEmail(item.email) === email && item.id !== body.id);
   if (duplicate) throw new Error("该邮箱已经存在");
 
@@ -192,9 +196,9 @@ function saveMember(db, body, actor) {
     feishuUserId: String(body.feishuUserId || existing?.feishuUserId || "").trim(),
     feishuName: String(body.feishuName || existing?.feishuName || body.name || "").trim(),
     status: body.status || "active",
-    pinHash: body.pin ? hashPin(body.pin) : existing?.pinHash,
-    pin: body.pin ? undefined : existing?.pin,
-    mustChangePin: body.pin ? true : Boolean(existing?.mustChangePin),
+    pinHash: temporaryPin ? hashPin(temporaryPin) : existing?.pinHash,
+    pin: temporaryPin ? undefined : existing?.pin,
+    mustChangePin: temporaryPin ? true : Boolean(existing?.mustChangePin),
     createdAt: existing?.createdAt || new Date().toISOString()
   };
 

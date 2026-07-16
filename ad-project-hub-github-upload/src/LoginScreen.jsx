@@ -3,8 +3,8 @@ import { LockKeyhole, Mail } from "lucide-react";
 import "./login.css";
 
 export default function LoginScreen({ onLogin, sessionKey }) {
-  const [email, setEmail] = useState("admin@company.local");
-  const [pin, setPin] = useState("123456");
+  const [email, setEmail] = useState("");
+  const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -51,7 +51,7 @@ export default function LoginScreen({ onLogin, sessionKey }) {
           {error && <p className="form-error">{error}</p>}
           <button type="submit" className="primary" disabled={loading}>{loading ? "登录中" : "进入系统"}</button>
         </form>
-        <p className="login-hint">默认管理员：admin@company.local / 123456。上线后请在成员管理里修改 PIN。</p>
+        <p className="login-hint">请使用管理员分配的内部账号登录。</p>
       </section>
     </main>
   );
