@@ -81,6 +81,7 @@ const DEFAULT_EMAILS = {
   "u-finance": "finance@company.local",
   "u-member": "member@company.local"
 };
+const DEFAULT_ACCOUNT_IDS = new Set(Object.keys(DEFAULT_EMAILS));
 
 function envConfigured(...names) {
   return names.some((name) => Boolean(String(process.env[name] || "").trim()));
@@ -228,6 +229,30 @@ function setMemberStatus(db, body, actor) {
     at: new Date().toISOString()
   });
   return publicUser(member);
+}
+
+function disableInsecureDefaultAccounts(db, actor) {
+  const current = db.users.find((item) => item.id === actor.id);
+  if (!current || current.pin === "123456" || !current.pinHash) {
+    throw new Error("请先在员工端修改自己的 PIN，再清理默认账号");
+  }
+  const disabled = [];
+  for (const account of db.users || []) {
+    if (account.id === actor.id || !DEFAULT_ACCOUNT_IDS.has(account.id) || account.pin !== "123456") continue;
+    account.status = "disabled";
+    delete account.pin;
+    delete account.pinHash;
+    account.mustChangePin = true;
+    disabled.push(publicUser(account));
+  }
+  db.auditLogs.unshift({
+    type: "account-security",
+    target: disabled.map((item) => item.email || item.name).join("、") || "none",
+    action: "disable-insecure-default-accounts",
+    user: actor.name,
+    at: new Date().toISOString()
+  });
+  return { disabled, disabledCount: disabled.length };
 }
 
 function normalizeFeishuContactUser(raw = {}, departmentName = "") {
@@ -903,6 +928,13 @@ export async function handleApi(req, res) {
     if (!requireRole(user, ADMIN_ROLES, res)) return;
     const body = await readBody(req);
     const data = await mutateDb((db) => setMemberStatus(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/members/disable-insecure-defaults") {
+    if (!requireRole(user, ADMIN_ROLES, res)) return;
+    const data = await mutateDb((db) => disableInsecureDefaultAccounts(db, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }

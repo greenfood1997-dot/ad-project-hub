@@ -7087,6 +7087,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
   const [message, setMessage] = useState("");
   const [savingMember, setSavingMember] = useState(false);
   const [togglingMemberId, setTogglingMemberId] = useState("");
+  const [cleaningDefaultAccounts, setCleaningDefaultAccounts] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState("");
   const [testingAi, setTestingAi] = useState(false);
   const [savingAi, setSavingAi] = useState(false);
@@ -7295,6 +7296,20 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
       setMessage(err.message);
     } finally {
       setTogglingMemberId("");
+    }
+  }
+
+  async function cleanDefaultAccounts() {
+    if (!window.confirm("将停用其余仍使用默认 PIN 的内置账号。确认继续？")) return;
+    setCleaningDefaultAccounts(true);
+    try {
+      const result = await api("/api/members/disable-insecure-defaults", { method: "POST", body: "{}" });
+      await Promise.all([loadMembers(), loadDeployHealth({ silent: true })]);
+      setMessage(`已停用 ${result.disabledCount || 0} 个默认账号。需要使用的员工请逐个设置临时 PIN 后再启用。`);
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setCleaningDefaultAccounts(false);
     }
   }
 
@@ -7641,6 +7656,11 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
 
           <div className="member-table">
             <div className="section-head"><h2>成员列表</h2><span>{members.length} 人</span></div>
+            {Number(deployHealth?.insecureDefaultAccountCount || 0) > 0 && <div className="member-sync-status warn account-risk-card">
+              <strong>账号安全风险：{deployHealth.insecureDefaultAccountCount} 个启用账号仍使用默认 PIN</strong>
+              <span>请先返回员工端修改你自己的 PIN，再停用其余内置默认账号。真实员工账号可随后逐个设置临时 PIN并启用。</span>
+              <button type="button" className="ghost" disabled={cleaningDefaultAccounts} onClick={cleanDefaultAccounts}>{cleaningDefaultAccounts ? "处理中" : "停用其余默认账号"}</button>
+            </div>}
             <div className={`member-sync-status ${feishuMissingMembers.length ? "warn" : "ok"}`}>
               <strong>飞书私聊绑定：{feishuBoundCount}/{activeMembers.length || 0}</strong>
               <span>{feishuMissingMembers.length ? `还差 ${feishuMissingMembers.slice(0, 5).map((member) => member.name || member.email).join("、")}${feishuMissingMembers.length > 5 ? `等 ${feishuMissingMembers.length} 人` : ""}，这些成员暂时收不到 OA 私聊提醒。` : "启用中的成员都已绑定飞书，可以接收 OA 私聊提醒。"}</span>

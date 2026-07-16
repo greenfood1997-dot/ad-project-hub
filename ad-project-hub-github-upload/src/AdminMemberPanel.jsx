@@ -10,11 +10,14 @@ export default function AdminMemberPanel({
   message,
   savingMember,
   togglingMemberId,
+  insecureDefaultAccountCount = 0,
+  cleaningDefaultAccounts = false,
   roleOptions = [],
   roleLabel,
   onSave,
   onEdit,
   onToggle,
+  onCleanDefaultAccounts,
   onUpdateForm,
 }) {
   return (
@@ -40,6 +43,11 @@ export default function AdminMemberPanel({
 
       <div className="member-table">
         <div className="section-head"><h2>成员列表</h2><span>{members.length} 人</span></div>
+        {insecureDefaultAccountCount > 0 && <div className="member-sync-status warn account-risk-card">
+          <strong>账号安全风险：{insecureDefaultAccountCount} 个启用账号仍使用默认 PIN</strong>
+          <span>请先在员工端修改你自己的 PIN，再停用其余内置默认账号。真实员工账号可随后逐个设置临时 PIN 并启用。</span>
+          <button type="button" className="ghost" disabled={cleaningDefaultAccounts} onClick={onCleanDefaultAccounts}>{cleaningDefaultAccounts ? "处理中" : "停用其余默认账号"}</button>
+        </div>}
         <div className={`member-sync-status ${feishuMissingMembers.length ? "warn" : "ok"}`}>
           <strong>飞书私聊绑定：{feishuBoundCount}/{activeMembers.length || 0}</strong>
           <span>{feishuMissingMembers.length ? `还差 ${feishuMissingMembers.slice(0, 5).map((member) => member.name || member.email).join("、")}${feishuMissingMembers.length > 5 ? `等 ${feishuMissingMembers.length} 人` : ""}，这些成员暂时收不到 OA 私聊提醒。` : "启用中的成员都已绑定飞书，可以接收 OA 私聊提醒。"}</span>

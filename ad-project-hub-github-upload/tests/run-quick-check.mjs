@@ -6,6 +6,7 @@ const checks = [
   ["前端财务幂等", "tests/frontend-financial-idempotency-entry.mjs"],
   ["Postgres 首次管理员引导", "tests/postgres-bootstrap-admin-regression.mjs"],
   ["默认账号风险", "tests/default-account-risk-regression.mjs"],
+  ["默认账号安全清理", "tests/default-account-cleanup-regression.mjs"],
   ["成员临时 PIN 安全", "tests/member-pin-safety-regression.mjs"],
   ["个人 PIN 修改闭环", "tests/account-pin-change-regression.mjs"],
   ["备份恢复安全", "tests/backup-safety-regression.mjs"],

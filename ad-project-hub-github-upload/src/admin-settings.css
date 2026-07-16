@@ -24,6 +24,11 @@
   line-height: 1.5;
 }
 
+.account-risk-card button {
+  justify-self: start;
+  margin-top: 4px;
+}
+
 .integration-status-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));

@@ -35,6 +35,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
   const [message, setMessage] = useState("");
   const [savingMember, setSavingMember] = useState(false);
   const [togglingMemberId, setTogglingMemberId] = useState("");
+  const [cleaningDefaultAccounts, setCleaningDefaultAccounts] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState("");
   const [testingAi, setTestingAi] = useState(false);
   const [savingAi, setSavingAi] = useState(false);
@@ -252,6 +253,20 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
       setMessage(err.message);
     } finally {
       setTogglingMemberId("");
+    }
+  }
+
+  async function cleanDefaultAccounts() {
+    if (!window.confirm("将停用其余仍使用默认 PIN 的内置账号。确认继续？")) return;
+    setCleaningDefaultAccounts(true);
+    try {
+      const result = await api("/api/members/disable-insecure-defaults", { method: "POST", body: "{}" });
+      await Promise.all([loadMembers(), loadDeployHealth({ silent: true })]);
+      setMessage(`已停用 ${result.disabledCount || 0} 个默认账号。需要使用的员工请逐个设置临时 PIN 后再启用。`);
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setCleaningDefaultAccounts(false);
     }
   }
 
@@ -644,11 +659,14 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
               message={message}
               savingMember={savingMember}
               togglingMemberId={togglingMemberId}
+              insecureDefaultAccountCount={Number(deployHealth?.insecureDefaultAccountCount || 0)}
+              cleaningDefaultAccounts={cleaningDefaultAccounts}
               roleOptions={roleOptions}
               roleLabel={roleLabel}
               onSave={save}
               onEdit={edit}
               onToggle={toggle}
+              onCleanDefaultAccounts={cleanDefaultAccounts}
               onUpdateForm={setForm}
             />
           </Suspense>
