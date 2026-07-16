@@ -368,7 +368,7 @@ create table if not exists approvals (
   payee text,
   category text,
   status text not null,
-  current_role text,
+  approval_role text,
   applicant_id text references users(id),
   applicant_name text,
   applicant_role text,

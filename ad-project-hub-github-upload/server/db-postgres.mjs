@@ -89,7 +89,7 @@ export async function readPostgresDb() {
     db.query("select supplier, market, contact, note, ratings, updated_at as \"updatedAt\" from supplier_profiles order by updated_at desc"),
     db.query(`select id, type, type_label as "typeLabel", project_id as "projectId",
       project_name as "projectName", amount::float, reason, payee, category,
-      status, current_role as "currentRole", idempotency_key as "idempotencyKey", applicant_id as "applicantId",
+      status, approval_role as "currentRole", idempotency_key as "idempotencyKey", applicant_id as "applicantId",
       applicant_name as "applicantName", applicant_role as "applicantRole",
       steps, logs, applied_at as "appliedAt", completed_at as "completedAt",
       completed_by as "completedBy", created_at as "createdAt", updated_at as "updatedAt"
@@ -474,7 +474,7 @@ export async function writePostgresDbFromSnapshot(snapshot) {
       await db.query(
         `insert into approvals (
           id, type, type_label, project_id, project_name, amount, reason, payee,
-          category, status, current_role, idempotency_key, applicant_id, applicant_name, applicant_role,
+          category, status, approval_role, idempotency_key, applicant_id, applicant_name, applicant_role,
           steps, logs, applied_at, completed_at, completed_by, created_at, updated_at
         ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
         [
