@@ -29,6 +29,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
   const [confirmed, setConfirmed] = useState(false);
   const bodyRef = useRef(null);
   const previewRef = useRef(null);
+  const previewRequestRef = useRef(false);
   const [progress, setProgress] = useState(() => initialFiles.length
     ? { step: "ready", percent: 12, text: `已选择 ${initialFiles.length} 个文件，下一步点击 AI 预览识别` }
     : { step: "idle", percent: 0, text: "等待选择文件" });
@@ -125,6 +126,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
   }
 
   async function requestPreview() {
+    if (previewRequestRef.current) return;
     if (type === "create-project" && !canUseCreateProject) {
       setMessage("当前账号不能创建新项目，请让销售、PM 或管理层上传合同创建项目。");
       setUploadError(null);
@@ -140,6 +142,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
       setUploadError(null);
       return;
     }
+    previewRequestRef.current = true;
     setLoading(true);
     setProgress({ step: "preview", percent: 34, text: "正在上传文件并解析基础信息" });
     setMessage("AI 正在预览识别结果，预览阶段不会写入项目。");
@@ -161,6 +164,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
       setMessage("");
       setUploadError(explainUploadError(error));
     } finally {
+      previewRequestRef.current = false;
       setLoading(false);
     }
   }
