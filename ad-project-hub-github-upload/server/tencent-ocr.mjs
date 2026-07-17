@@ -3,6 +3,8 @@ import { createHash, createHmac } from "node:crypto";
 const endpoint = "ocr.tencentcloudapi.com";
 const service = "ocr";
 const version = "2018-11-19";
+const ocrResultCache = new Map();
+const OCR_CACHE_TTL_MS = 30 * 60 * 1000;
 
 export function tencentOcrConfigured() {
   return Boolean(envValue("TENCENT_SECRET_ID") && envValue("TENCENT_SECRET_KEY"));
@@ -23,11 +25,38 @@ export async function recognizeFileWithTencentOcrDetailed(file, options = {}) {
   if (!base64) throw new Error("文件缺少 base64 内容，无法调用 OCR");
 
   const isPdf = options.isPdf ?? isPdfFile(file);
+  const pageCount = isPdf ? resolvePdfPageCount(file, options) : 1;
+  const cacheKey = sha256(`${isPdf ? "pdf" : "image"}:${pageCount}:${base64}`);
+  return deduplicateTencentOcr(cacheKey, async () => recognizeFileUncached(file, { isPdf, pageCount }));
+}
+
+export async function deduplicateTencentOcr(cacheKey, recognize) {
+  const now = Date.now();
+  const cached = ocrResultCache.get(cacheKey);
+  if (cached && (cached.promise || now - cached.createdAt < OCR_CACHE_TTL_MS)) {
+    console.log(`[OCR] cache hit ${cacheKey.slice(0, 12)}; reusing recognition result`);
+    return cached.promise || cached.result;
+  }
+
+  const entry = { createdAt: now, promise: null, result: null };
+  entry.promise = Promise.resolve().then(recognize);
+  ocrResultCache.set(cacheKey, entry);
+  try {
+    entry.result = await entry.promise;
+    entry.promise = null;
+    return entry.result;
+  } catch (error) {
+    ocrResultCache.delete(cacheKey);
+    throw error;
+  }
+}
+
+async function recognizeFileUncached(file, { isPdf, pageCount }) {
+  const base64 = file.base64 || "";
   if (!isPdf) {
     return await recognizePage(base64, { isPdf: false });
   }
 
-  const pageCount = resolvePdfPageCount(file, options);
   const texts = [];
   const tableRows = [];
   const errors = [];
