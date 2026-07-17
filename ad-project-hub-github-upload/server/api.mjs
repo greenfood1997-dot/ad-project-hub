@@ -12,6 +12,7 @@ import {
   answerAiAssistant,
   archiveFileRecord,
   createProject,
+  confirmProjectUpload,
   archiveProjectTask,
   clientLibrary,
   collectionLibrary,
@@ -1114,7 +1115,9 @@ export async function handleApi(req, res) {
     if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
     const body = await readBody(req);
     const data = await mutateDb(async (db) => {
-      const result = await createProject(db, body.values, body.files || [], user);
+      const result = body.previewId
+        ? await confirmProjectUpload(db, body, user)
+        : await createProject(db, body.values, body.files || [], user);
       if (!result?.merged) scanSystemNotifications(db, { id: "system", name: "项目入库巡检" });
       return result;
     });
@@ -1133,7 +1136,7 @@ export async function handleApi(req, res) {
       sendJson(res, 403, { ok: false, error: "无权限向该项目上传文件" });
       return;
     }
-    const data = await previewProjectUpload(snapshot, body, user);
+    const data = await mutateDb((db) => previewProjectUpload(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }

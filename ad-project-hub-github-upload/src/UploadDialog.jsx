@@ -189,7 +189,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
       if (type === "create-project") {
         await apiRequest("/api/projects", session, {
           method: "POST",
-          body: JSON.stringify({ values, files }),
+          body: JSON.stringify({ previewId: preview?.previewId, values }),
         });
       }
       if (type === "cost-sheet") {

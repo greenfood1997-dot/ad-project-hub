@@ -5,11 +5,12 @@ import { recognizeFileWithTencentOcr, recognizeFileWithTencentOcrDetailed, tence
 import { rootDir } from "./config.mjs";
 import { resolveStorageSettings } from "./storage-settings.mjs";
 
-export async function createProject(db, values, files, user) {
+export async function createProject(db, values, files, user, options = {}) {
   if (!values?.["项目名称"] && !files.length) throw new Error("请填写项目名称或先上传合同/执行表");
   const now = new Date().toISOString();
+  const previewParsed = options.parsed && typeof options.parsed === "object" ? options.parsed : null;
   if (files.length) {
-    const parsedForRouting = await analyzeProjectFiles(db.settings?.aiService, values || {}, files || [], db.settings?.interestRate);
+    const parsedForRouting = previewParsed || await analyzeProjectFiles(db.settings?.aiService, values || {}, files || [], db.settings?.interestRate);
     const hasContractInBatch = hasContractLikeFile(files, parsedForRouting);
     if (parsedForRouting.hasCostSheet && !hasContractInBatch) {
       const targetProject = findMatchingProjectForCostSheet(db, parsedForRouting, files);
@@ -57,7 +58,11 @@ export async function createProject(db, values, files, user) {
 
   if (files.length) {
     try {
-      await analyzeAndApplyProjectFiles(db, project, parseJob);
+      if (previewParsed) {
+        applyParsedFields(db, project, parseJob, previewParsed);
+      } else {
+        await analyzeAndApplyProjectFiles(db, project, parseJob);
+      }
       await applyInitialQuoteSheets(db, project, parseJob.files || project.files || files, user, now);
       assertUniqueProject(db, projectToValues(project), project.files || files, project.contract, project.id);
     } catch (error) {
@@ -91,6 +96,7 @@ export async function previewProjectUpload(db, body, user) {
   const warnings = [];
   let parsed = {};
   let preview = {
+    previewId: `preview-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
     type,
     targetProject: targetProject ? {
       id: targetProject.id,
@@ -287,7 +293,34 @@ export async function previewProjectUpload(db, body, user) {
   if (!preview.fields["项目名称"]) warnings.push("项目名称未明确识别，确认前建议手动填写或检查合同。");
   if (!contract) warnings.push("合同金额未明确识别，确认后可能需要在项目详情中补充。");
   preview.summary = parsed.summary || "合同/报价文件已完成预解析，确认后会创建项目并写入项目台账。";
+  db.uploadPreviews = Array.isArray(db.uploadPreviews) ? db.uploadPreviews : [];
+  db.uploadPreviews = db.uploadPreviews
+    .filter((item) => Date.now() - Date.parse(item.previewedAt || 0) < 30 * 60 * 1000)
+    .slice(0, 49);
+  db.uploadPreviews.unshift({
+    id: preview.previewId,
+    userId: user.id,
+    type,
+    values,
+    files,
+    parsed,
+    previewedAt: now,
+    usedAt: ""
+  });
   return preview;
+}
+
+export async function confirmProjectUpload(db, body, user) {
+  const preview = (db.uploadPreviews || []).find((item) => item.id === body.previewId);
+  if (!preview || preview.type !== "create-project") throw new Error("预览结果已失效，请重新预览后再入库");
+  if (preview.userId !== user.id) throw new Error("无权使用该预览结果");
+  if (preview.usedAt) throw new Error("该预览结果已入库，请勿重复提交");
+  if (Date.now() - Date.parse(preview.previewedAt || 0) >= 30 * 60 * 1000) throw new Error("预览结果已超过 30 分钟，请重新预览");
+
+  const values = { ...preview.values, ...(body.values || {}) };
+  const result = await createProject(db, values, preview.files || [], user, { parsed: preview.parsed || {} });
+  preview.usedAt = new Date().toISOString();
+  return result;
 }
 
 export function updateProject(db, body, user) {
