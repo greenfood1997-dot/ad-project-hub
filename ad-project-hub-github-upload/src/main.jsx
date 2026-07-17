@@ -6673,7 +6673,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
       if (type === "create-project") {
         await apiRequest("/api/projects", session, {
           method: "POST",
-          body: JSON.stringify({ values, files }),
+          body: JSON.stringify({ previewId: preview?.previewId, values }),
         });
       }
       if (type === "cost-sheet") {

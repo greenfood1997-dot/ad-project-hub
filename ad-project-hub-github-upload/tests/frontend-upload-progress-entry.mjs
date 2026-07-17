@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
 const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
 const uploadDialogSource = await readFile(new URL("../src/UploadDialog.jsx", import.meta.url), "utf8");
+const mainSource = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -19,6 +20,8 @@ assert(source.includes("读取文件") && source.includes("AI/OCR识别") && sou
 assert(source.includes("appendPickedFiles"), "file picker and drag-drop should share append logic");
 assert(source.includes("const [uploadInitialFiles, setUploadInitialFiles]") && source.includes("initialFiles={uploadInitialFiles}"), "project dashboard should pass AI-dropped files into the upload dialog");
 assert(source.includes("function UploadDialog({ session, projects, selected, initialType = \"create-project\", initialFiles = []") && source.includes("const [files, setFiles] = useState(() => initialFiles)"), "upload dialog should initialize its file list from AI-dropped files");
+assert(mainSource.includes('body: JSON.stringify({ previewId: preview?.previewId, values })'), "the active main upload dialog must reuse previewId when confirming a project");
+assert(!mainSource.includes('body: JSON.stringify({ values, files })'), "project confirmation must not resend original files for a second OCR pass");
 assert(source.includes("已选择 ${initialFiles.length} 个文件，下一步点击 AI 预览识别"), "upload dialog should show ready progress for prefilled AI-dropped files");
 assert(source.includes("setFiles((current) =>") && source.includes("merged.push(file)"), "file picker should append new files instead of replacing current files");
 assert(source.includes("uploadedFileKey") && source.includes("keys.has(key)"), "file picker should deduplicate repeated files while appending");
