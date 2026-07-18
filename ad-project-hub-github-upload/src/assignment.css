@@ -1,6 +1,6 @@
 .assignment-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
+  grid-template-columns: minmax(300px, 0.8fr) minmax(520px, 1.2fr);
   gap: 18px;
   align-items: start;
 }
@@ -22,7 +22,7 @@
 
 .assignment-form .section-head span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-caption);
 }
 
 .assignment-suggestion {
@@ -37,7 +37,7 @@
 .assignment-suggestion h3 {
   margin: 0;
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--font-body);
 }
 
 .suggestion-grid {
@@ -54,7 +54,7 @@
 
 .suggestion-column > strong {
   color: #3370ff;
-  font-size: 12px;
+  font-size: var(--font-caption);
 }
 
 .suggestion-column div {
@@ -74,7 +74,7 @@
 
 .suggestion-column span {
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--font-caption);
   font-style: normal;
   font-weight: 800;
   white-space: nowrap;
@@ -82,7 +82,8 @@
 
 .suggestion-column em {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-caption);
+  line-height: 1.5;
   font-style: normal;
 }
 
@@ -102,7 +103,7 @@
 
 .suggestion-empty-candidate span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-caption);
   white-space: normal;
 }
 
@@ -117,7 +118,7 @@
 
 .assignment-members > span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-caption);
   font-weight: 800;
 }
 
@@ -153,7 +154,7 @@
   grid-area: name;
   overflow: hidden;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-body);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -162,7 +163,7 @@
   grid-area: meta;
   overflow: hidden;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--font-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -178,13 +179,13 @@
 
 .assignment-preview strong {
   color: #3370ff;
-  font-size: 12px;
+  font-size: var(--font-caption);
 }
 
 .assignment-preview span {
   color: var(--text);
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: var(--font-body);
+  line-height: 1.5;
   word-break: break-word;
 }
 
