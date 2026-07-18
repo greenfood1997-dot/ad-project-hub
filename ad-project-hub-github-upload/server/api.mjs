@@ -739,6 +739,18 @@ export async function handleApi(req, res) {
     return;
   }
 
+  // URL verification must finish within Feishu's 3-second deadline and needs no database state.
+  if (req.method === "POST" && url.pathname === "/api/integrations/feishu/events") {
+    const body = await readBody(req);
+    if (body?.challenge) {
+      sendJson(res, 200, { challenge: body.challenge });
+      return;
+    }
+    const data = await mutateDb(async (db) => handleFeishuEvent(db, body, { id: "feishu-bot", name: "飞书机器人", role: "bot" }));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
   const snapshot = await readDb();
 
   if (req.method === "POST" && url.pathname === "/api/auth/login") {
@@ -790,15 +802,6 @@ export async function handleApi(req, res) {
     });
     if (!updated) { sendJson(res, 401, { ok: false, error: "账号不可用" }); return; }
     sendJson(res, 200, { ok: true, data: { ...updated, token: issueAuthToken(updated) } });
-    return;
-  }
-
-  // Feishu calls this endpoint from its own servers, so it must precede OA login authentication.
-  if (req.method === "POST" && url.pathname === "/api/integrations/feishu/events") {
-    const body = await readBody(req);
-    const data = await mutateDb(async (db) => handleFeishuEvent(db, body, { id: "feishu-bot", name: "飞书机器人", role: "bot" }));
-    if (data.challenge) sendJson(res, 200, { challenge: data.challenge });
-    else sendJson(res, 200, { ok: true, data });
     return;
   }
 
