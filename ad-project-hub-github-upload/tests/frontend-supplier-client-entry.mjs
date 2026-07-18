@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
 const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const supplierClientStyles = await readFile(new URL("../src/supplier-client.css", import.meta.url), "utf8");
 const supplierSource = await readFile(new URL("../src/SupplierLibrary.jsx", import.meta.url), "utf8");
 const clientSource = await readFile(new URL("../src/ClientLibrary.jsx", import.meta.url), "utf8");
 
@@ -59,6 +60,8 @@ assert(source.includes("const [focusedSupplier") && source.includes("setFocusedS
 assert(source.includes("const [focusedRatingKey") && source.includes("const latestRating = savedSupplier?.ratings?.[0]") && source.includes("setFocusedRatingKey(`${latestRating?.user || session.name || session.email}-${latestRating?.at || \"\"}`)"), "supplier rating save should focus the new rating record returned by backend");
 assert(source.includes("供应商评分已保存，推荐星级和评分记录已刷新："), "supplier rating save should tell users which supplier refreshed");
 assert(source.includes("const supplierRatingTags = [") && source.includes("配合快") && source.includes("报价稳") && source.includes("发票慢") && source.includes("需比价"), "supplier rating form should provide practical evaluation tags");
+assert(supplierClientStyles.includes("Client handoff uses a deliberate header + detail/editor layout") && supplierClientStyles.includes("grid-column: 1 / -1"), "client selector should span the page before detail and editor columns");
+assert(supplierClientStyles.includes("repeat(5, minmax(0, 1fr))") && supplierClientStyles.includes("max-height: 320px"), "client handoff statistics should align and long sections should scroll internally");
 assert(source.includes("function applySupplierRatingTag(tag)") && source.includes("已加入「${tag.label}」评价标签，请按真实情况调整后保存评分。"), "supplier rating tags should prefill comments without auto-saving");
 assert(source.includes("supplier-rating-tags") && source.includes("applySupplierRatingTag(tag)"), "supplier rating tags should render as clickable form helpers");
 assert(source.includes('focusedSupplier === item.supplier ? "fresh" : ""') && source.includes('focusedRatingKey === `${item.user}-${item.at || ""}` ? "fresh" : ""'), "supplier library should visually highlight refreshed card and rating row");

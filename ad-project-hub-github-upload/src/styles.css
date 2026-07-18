@@ -6345,6 +6345,77 @@ select {
   line-height: 1.5;
 }
 
+/* Client handoff: client selector on top, summary and editor below. */
+.client-library {
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+  align-items: start;
+}
+
+.client-library > .feature-panel:first-child {
+  grid-column: 1 / -1;
+}
+
+.client-library > .supplier-detail-panel {
+  grid-column: 1;
+}
+
+.client-library > .settings-form {
+  grid-column: 2;
+  position: sticky;
+  top: 18px;
+}
+
+.client-library .section-head {
+  align-items: center;
+}
+
+.client-library .panel-title,
+.client-library h2 {
+  min-width: 0;
+  white-space: normal;
+}
+
+.client-library .review-summary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.client-library .review-summary .mini {
+  min-width: 0;
+}
+
+.client-library .client-handoff-actions,
+.client-library .supplier-detail-panel > .compact-list {
+  max-height: 320px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.client-library .supplier-card small {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+@media (max-width: 1180px) {
+  .client-library > .feature-panel:first-child,
+  .client-library > .supplier-detail-panel,
+  .client-library > .settings-form {
+    grid-column: 1;
+  }
+
+  .client-library > .settings-form {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .client-library .review-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .supplier-risk-panel {
   display: grid;
   gap: 10px;
