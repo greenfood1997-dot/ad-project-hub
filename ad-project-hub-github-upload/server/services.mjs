@@ -4739,6 +4739,7 @@ export async function handleFeishuEvent(db, payload, user = { id: "system", name
   let action = "message";
   let status = "已记录";
   let reply = "已收到，我会把这条消息沉淀到 OA。";
+  let shouldReply = false;
 
   if (asksNewProject && !project) {
     const projectName = event.fileName
@@ -4772,6 +4773,7 @@ export async function handleFeishuEvent(db, payload, user = { id: "system", name
     action = "create-project-draft";
     status = "已创建项目草稿";
     reply = `已创建「${draft.name}」项目草稿。请补齐合同/报价表，AI 会继续解析项目金额、客户和回款节点。`;
+    shouldReply = true;
   } else if (project && fileLike) {
     const fileRecord = {
       name: event.fileName || `飞书文件-${event.eventId}`,
@@ -4790,6 +4792,7 @@ export async function handleFeishuEvent(db, payload, user = { id: "system", name
       action = `download-and-pending-${uploadType}`;
       status = "待人工确认";
       reply = `已下载飞书文件「${downloaded.name}」，已进入待确认队列。确认后才会写入「${project.name}」。`;
+      shouldReply = true;
       fileRecord.pendingFileId = pending.id;
     } catch (error) {
       fileRecord.downloadStatus = `下载/解析待处理：${error.message}`;
@@ -4798,6 +4801,7 @@ export async function handleFeishuEvent(db, payload, user = { id: "system", name
       action = "record-file-reference";
       status = "已记录文件引用";
       reply = `已把飞书文件「${fileRecord.name}」登记到「${project.name}」，但暂未完成下载解析：${error.message}`;
+      shouldReply = true;
     }
   } else if (project) {
     db.comments.unshift({
@@ -4813,6 +4817,7 @@ export async function handleFeishuEvent(db, payload, user = { id: "system", name
   } else {
     status = "待匹配项目";
     reply = "已收到，但还没匹配到项目。请在后台把飞书群 Chat ID 绑定项目，或在消息里写清项目/客户名称。";
+    shouldReply = true;
   }
 
   const record = {
@@ -4827,13 +4832,15 @@ export async function handleFeishuEvent(db, payload, user = { id: "system", name
   };
   db.feishuEvents = db.feishuEvents || [];
   db.feishuEvents.unshift(record);
-  if (event.chatId) {
+  if (event.chatId && shouldReply) {
     try {
       const delivery = await sendFeishuChatMessage(db.settings?.feishu || {}, event.chatId, reply);
       record.replyDelivery = { ok: true, messageId: delivery.messageId, mocked: Boolean(delivery.mocked), sentAt: new Date().toISOString() };
     } catch (error) {
       record.replyDelivery = { ok: false, error: error.message, sentAt: new Date().toISOString() };
     }
+  } else if (event.chatId) {
+    record.replyDelivery = { ok: true, skipped: true, reason: "普通文字消息静默记录，避免群聊刷屏", sentAt: new Date().toISOString() };
   }
   db.auditLogs.unshift({
     type: "feishu",
