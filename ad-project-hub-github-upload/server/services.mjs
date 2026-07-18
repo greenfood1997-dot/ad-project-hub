@@ -196,6 +196,8 @@ export async function previewProjectUpload(db, body, user) {
   }
 
   if (type === "cost-sheet") {
+    const invoiceItems = extractInvoiceItems(files);
+    if (invoiceItems.length) parsed = mergeInvoiceCosts(parsed, invoiceItems);
     const contract = Number(targetProject.contract || 0) || parseMoney(parsed.contract);
     const profitBreakdown = calculateProfitBreakdown(contract, { ...parsed, hasCostSheet: true }, db.settings?.interestRate);
     const reimbursementItems = extractReimbursementItems(files);
@@ -1372,6 +1374,8 @@ export async function uploadProjectCostSheet(db, body, user) {
   } catch {
     parsed = {};
   }
+  const invoiceItems = extractInvoiceItems(files);
+  if (invoiceItems.length) parsed = mergeInvoiceCosts(parsed, invoiceItems);
   const parsedMonths = inferCoveredMonths(JSON.stringify(parsed || {}), new Date(now));
   if (parsedMonths.length) {
     files.forEach((file) => {
@@ -6465,6 +6469,71 @@ function extractReimbursementItems(files = []) {
     items.push({ person, item, amount, note, category });
   }
   return items.slice(0, 80);
+}
+
+export function extractInvoiceItems(files = []) {
+  return files.flatMap((file) => {
+    const text = String(file.text || "").replace(/[：:]/g, ":");
+    if (!/(发票|增值税|电子票)/.test(`${file.name || ""}\n${text}`)) return [];
+    const total = invoiceTotalFromText(text);
+    if (!total) return [];
+    const invoiceNo = firstCapture(text, [
+      /(?:发票号码|票据号码|号码)\s*:\s*([0-9]{8,20})/,
+      /(?:No\.?|发票代码)\s*[:：]?\s*([0-9]{8,20})/i
+    ]);
+    const seller = firstCapture(text, [
+      /(?:销售方|销方)(?:信息)?[\s\S]{0,80}?(?:名称)?\s*:\s*([^\n]{2,60})/,
+      /(?:销售方名称|销方名称)\s*:\s*([^\n]{2,60})/
+    ]);
+    const date = firstCapture(text, [/(20\d{2}[年./-]\s*\d{1,2}[月./-]\s*\d{1,2}日?)/]);
+    const category = inferExpenseCategory({ reason: `${file.name || ""} ${text.slice(0, 3000)}`, payee: seller }).category;
+    return [{
+      fileName: file.name || "发票",
+      invoiceNo,
+      seller,
+      date,
+      amount: total,
+      category
+    }];
+  });
+}
+
+function invoiceTotalFromText(text = "") {
+  const patterns = [
+    /价\s*税\s*合\s*计(?:\s*[（(][^）)]*小写[^）)]*[）)])?\s*[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)/,
+    /(?:小写|合计金额|发票金额)\s*[¥￥]?\s*([\d,]+(?:\.\d{1,2})?)/,
+    /(?:金额合计|合\s*计)\s*[¥￥]\s*([\d,]+(?:\.\d{1,2})?)/
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const amount = parseMoney(match?.[1]);
+    if (amount > 0) return amount;
+  }
+  return 0;
+}
+
+function firstCapture(text, patterns) {
+  for (const pattern of patterns) {
+    const value = String(text.match(pattern)?.[1] || "").trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+function mergeInvoiceCosts(parsed = {}, invoiceItems = []) {
+  const invoiceTotal = invoiceItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const invoiceCosts = invoiceItems.map((item) => [
+    `发票-${item.category}${item.invoiceNo ? `-${item.invoiceNo}` : ""}`,
+    Number(item.amount || 0)
+  ]);
+  return {
+    ...parsed,
+    hasCostSheet: true,
+    executionCost: invoiceTotal,
+    costs: invoiceCosts,
+    invoiceItems,
+    summary: `识别到 ${invoiceItems.length} 张发票，价税合计 ${invoiceTotal.toLocaleString("zh-CN")} 元。`
+  };
 }
 
 function buildReimbursementColumnMap(cells = []) {

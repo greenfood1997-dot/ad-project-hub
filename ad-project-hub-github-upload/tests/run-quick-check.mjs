@@ -24,6 +24,7 @@ const checks = [
   ["前端性能入口", "tests/frontend-performance-entry.mjs"],
   ["上传进度入口", "tests/frontend-upload-progress-entry.mjs"],
   ["OCR 重复请求复用", "tests/ocr-deduplication-regression.mjs"],
+  ["图片发票识别", "tests/invoice-image-parser-regression.mjs"],
   ["报销表上传预览", "tests/reimbursement-upload-preview-regression.mjs"],
   ["审批工作台入口", "tests/frontend-approval-workbench-entry.mjs"],
   ["回款台账入口", "tests/frontend-payment-ledger-entry.mjs"],
