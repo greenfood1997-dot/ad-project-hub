@@ -5160,7 +5160,29 @@ function mergeParsedFields(fallback, aiParsed) {
   }
   const fallbackContract = parseMoney(fallback.contract);
   if (fallbackContract) merged.contract = fallbackContract;
+  if (fallback.costTableAuthoritative) {
+    const financialFields = [
+      "advancePayment", "advanceInterest", "advanceInterestProvided", "executionCost",
+      "internalLabor", "overhead", "additionalCost", "costBudget", "costUsed", "costs"
+    ];
+    for (const field of financialFields) merged[field] = fallback[field];
+    // AI may explain a classification, but it cannot rename, merge or move spreadsheet columns.
+    merged.costClassifications = mergeClassificationReasons(fallback.costClassifications, aiParsed?.costClassifications);
+  }
   return merged;
+}
+
+function mergeClassificationReasons(tableItems = [], aiItems = []) {
+  const aiByName = new Map((Array.isArray(aiItems) ? aiItems : []).map((item) => [String(item?.name || "").trim(), item]));
+  return (Array.isArray(tableItems) ? tableItems : []).map((item) => {
+    const suggestion = aiByName.get(String(item?.name || "").trim());
+    return {
+      ...item,
+      reason: suggestion?.reason || item.reason,
+      confidence: suggestion?.confidence || item.confidence,
+      aiSuggestedCategory: normalizeCostCategory(suggestion?.category) || ""
+    };
+  });
 }
 
 async function requestAiJson(ai, values, text) {
@@ -5399,6 +5421,7 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
     internalLabor,
     overhead,
     additionalCost,
+    costTableAuthoritative: Boolean(tableMetrics.costs?.length),
     hasCostSheet,
     partyA: parties.partyA,
     partyB: parties.partyB,
