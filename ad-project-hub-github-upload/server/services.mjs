@@ -294,6 +294,12 @@ export async function previewProjectUpload(db, body, user) {
   }
   if (!preview.fields["项目名称"]) warnings.push("项目名称未明确识别，确认前建议手动填写或检查合同。");
   if (!contract) warnings.push("合同金额未明确识别，确认后可能需要在项目详情中补充。");
+  const unreadableContract = files.length > 0 && files.every((file) => /OCR.*失败|未提取到.*文本|未识别到文本|内容提取失败/.test(file.extractionStatus || ""));
+  if (type === "create-project" && unreadableContract && !contract) {
+    preview.canConfirm = false;
+    preview.requiresManualContract = true;
+    warnings.push("合同正文/OCR 未读取成功，请在上方手动填写项目名称和合同金额后再确认入库，或更换清晰 PDF/图片重新预览。");
+  }
   preview.summary = parsed.summary || "合同/报价文件已完成预解析，确认后会创建项目并写入项目台账。";
   db.uploadPreviews = Array.isArray(db.uploadPreviews) ? db.uploadPreviews : [];
   db.uploadPreviews = db.uploadPreviews

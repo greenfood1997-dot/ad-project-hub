@@ -42,6 +42,17 @@ const cases = [
     period: "2024-01-15 至 2024-12-31"
   },
   {
+    name: "malformed comma grouping from OCR",
+    text: `甲方：北京汽车销售有限公司
+乙方：上海某广告有限公司
+第二条 合同金额及支付
+本合同项目总服务费用为 ￥4,074700.00元，具体费用明细详见附件。`,
+    contract: 4074700,
+    partyA: "北京汽车销售有限公司",
+    partyB: "上海某广告有限公司",
+    period: ""
+  },
+  {
     name: "uppercase chinese amount",
     text: `委托方：杭州鹿鸣科技有限公司
 受托方：上海禾木广告有限公司

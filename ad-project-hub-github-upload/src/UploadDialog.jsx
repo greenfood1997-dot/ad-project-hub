@@ -239,7 +239,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
       await requestPreview();
       return;
     }
-    if (!preview.canConfirm) {
+    if (!canConfirmPreview) {
       setMessage("当前识别结果还不能确认入库，请先按提示补充或更换文件。");
       setUploadError(null);
       return;
@@ -251,13 +251,16 @@ export default function UploadDialog({ session, projects, selected, initialType 
   const progressPercent = Math.max(0, Math.min(100, progress.percent || 0));
   const progressLabel = loading ? progress.text : confirmed ? "已完成入库" : progress.text;
   const canCloseUpload = !loading;
+  const manualContract = Number(String(values["合同金额"] || "").replace(/[,，￥¥元\s]/g, ""));
+  const manualProjectName = String(values["项目名称"] || preview?.fields?.["项目名称"] || "").trim();
+  const canConfirmPreview = Boolean(preview && (preview.canConfirm || (preview.requiresManualContract && manualContract > 0 && manualProjectName)));
   const canEditUploadFiles = !loading && !confirmed;
   const uploadTargetName = needsProject ? targetProject?.name || "当前项目" : values["项目名称"] || "新项目";
   const uploadNextAction = loading
     ? "后台处理中，完成前不用重复提交"
     : confirmed
       ? "已完成，可以回到项目大盘查看"
-      : preview?.canConfirm
+      : canConfirmPreview
         ? "点开后确认入库"
         : preview
           ? "点开后处理识别提示"
@@ -306,7 +309,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
               <div className="upload-head-review-actions">
                 <button type="button" className="ghost" onClick={showPreview}>查看识别结果</button>
                 <button type="button" className="ghost" onClick={requestPreview} disabled={loading}>重新预览</button>
-                <button type="button" className="primary" onClick={confirmUpload} disabled={loading || !preview.canConfirm}>{loading ? "处理中" : "确认入库"}</button>
+                <button type="button" className="primary" onClick={confirmUpload} disabled={loading || !canConfirmPreview}>{loading ? "处理中" : "确认入库"}</button>
               </div>
             )}
             {hasProgress && <button type="button" className="ghost" onClick={onMinimize}><Minimize2 size={15} />缩到后台继续</button>}
@@ -354,10 +357,10 @@ export default function UploadDialog({ session, projects, selected, initialType 
                   <span>{key}</span>
                   <input value={values[key]} onChange={(event) => {
                     setValues({ ...values, [key]: event.target.value });
-                    setPreview(null);
+                    if (!preview?.requiresManualContract) setPreview(null);
                     setConfirmed(false);
                     setUploadError(null);
-                  }} placeholder={key === "项目名称" ? "可留空，由 AI 从合同识别" : ""} />
+                  }} placeholder={key === "项目名称" ? "可留空，由 AI 从合同识别" : key === "合同金额" ? "识别失败时请手动填写，例如 4074700" : ""} />
                 </label>
               ))}
             </div>
@@ -408,7 +411,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
             {hasProgress && <button type="button" className="ghost" onClick={onMinimize}>缩到后台继续</button>}
             {preview && <button type="button" className="ghost" onClick={showPreview}>查看识别结果</button>}
             {preview && !confirmed && <button type="button" className="ghost" onClick={requestPreview} disabled={loading}>重新预览</button>}
-            <button type="submit" className="primary" disabled={loading || (preview && !preview.canConfirm)}>{loading ? "处理中" : preview ? "确认入库" : "AI 预览识别"}</button>
+            <button type="submit" className="primary" disabled={loading || (preview && !canConfirmPreview)}>{loading ? "处理中" : preview ? "确认入库" : "AI 预览识别"}</button>
           </div>
         </div>
       </form>
