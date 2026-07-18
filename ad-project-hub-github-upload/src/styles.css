@@ -30,6 +30,104 @@ button {
   min-height: 100vh;
 }
 
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+.app-shell > *,
+main > *,
+.feature-grid > *,
+.dashboard-grid > *,
+.workspace > * {
+  min-width: 0;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+main {
+  width: 100%;
+  max-width: 1600px;
+  margin-inline: auto;
+  overflow-x: clip;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(238, 242, 246, 0.94);
+  backdrop-filter: blur(12px);
+}
+
+.feature-panel,
+.panel,
+.detail,
+.project-list,
+.member-table,
+.member-form {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.section-head {
+  flex-wrap: wrap;
+}
+
+.section-head > *,
+.button-row > * {
+  min-width: 0;
+}
+
+.button-row {
+  flex-wrap: wrap;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+p,
+span,
+strong,
+em,
+td,
+th {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  main {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 760px) {
+  .sidebar {
+    position: static;
+    height: auto;
+    max-height: none;
+  }
+
+  .topbar {
+    position: static;
+  }
+}
+
 .sidebar {
   background: #14213d;
   color: #f8fafc;

@@ -22,6 +22,7 @@ const checks = [
   ["上线健康", "tests/deploy-health-regression.mjs"],
   ["生产风险入口", "tests/frontend-production-risk-entry.mjs"],
   ["前端性能入口", "tests/frontend-performance-entry.mjs"],
+  ["全站排版约束", "tests/frontend-layout-discipline-regression.mjs"],
   ["上传进度入口", "tests/frontend-upload-progress-entry.mjs"],
   ["OCR 重复请求复用", "tests/ocr-deduplication-regression.mjs"],
   ["图片发票识别", "tests/invoice-image-parser-regression.mjs"],

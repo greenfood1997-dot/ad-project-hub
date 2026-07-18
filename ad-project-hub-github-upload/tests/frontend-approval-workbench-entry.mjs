@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
 const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const approvalStyles = await readFile(new URL("../src/approval.css", import.meta.url), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -83,6 +84,8 @@ assert(source.includes("增加备用金预算") && source.includes("员工报销
 assert(styles.includes(".approval-workbench"), "approval workbench should have layout styles");
 assert(styles.includes(".approval-summary-row"), "approval summary should have dedicated styles");
 assert(styles.includes(".reimbursement-summary-panel") && styles.includes(".reimbursement-summary-controls") && styles.includes(".reimbursement-summary-grid"), "reimbursement summary should have dedicated responsive styles");
+assert(approvalStyles.includes("grid-template-columns: repeat(3, minmax(0, 1fr))") && approvalStyles.includes("max-height: 430px") && approvalStyles.includes("scrollbar-gutter: stable"), "approval statistics and long queues should stay aligned and scroll inside their sections");
+assert(approvalStyles.includes("position: sticky") && approvalStyles.includes("max-height: calc(100vh - 48px)"), "approval flow context should remain visible without stretching the whole page");
 assert(styles.includes(".approval-empty-actions"), "approval actionable empty state should have styles");
 assert(styles.includes(".approval-flow-empty"), "approval flow empty state should have dedicated styles");
 assert(styles.includes(".approval-next-line") && styles.includes(".approval-next-panel") && styles.includes(".approval-next-panel.danger"), "approval runtime responsibility panel should have SLA styles");

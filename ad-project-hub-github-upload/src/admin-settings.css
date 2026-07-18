@@ -579,6 +579,54 @@
   overflow-wrap: anywhere;
 }
 
+/* Product settings are a linear checklist, not a masonry dashboard. */
+.admin-grid {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(100%, 1180px);
+  margin-inline: auto;
+}
+
+.admin-grid > * {
+  min-width: 0;
+}
+
+.admin-grid .member-table,
+.admin-grid .member-form,
+.admin-grid .settings-help,
+.admin-grid .deploy-health-panel {
+  width: 100%;
+}
+
+.settings-help {
+  display: grid;
+  gap: 18px;
+}
+
+.settings-help > * + * {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.deploy-health-grid,
+.integration-status-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.deploy-health-grid > *,
+.integration-status-grid > *,
+.settings-block,
+.backup-check-result {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .deploy-health-grid,
+  .integration-status-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .storage-test-result a {
   color: var(--primary);
   text-decoration: none;

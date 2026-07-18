@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
 const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const adminStyles = await readFile(new URL("../src/admin-settings.css", import.meta.url), "utf8");
 const readinessSource = await readFile(new URL("../src/utils/deployReadiness.js", import.meta.url), "utf8");
 
 function assert(condition, message) {
@@ -76,6 +77,7 @@ assert(source.includes("const [restoringBackup") && source.includes('api("/api/a
 assert(source.includes("恢复会覆盖当前业务数据") && source.includes("执行恢复备份"), "backup restore should clearly explain destructive scope");
 assert(source.includes("function BackupDiffPreview") && source.includes("恢复预演影响：") && source.includes("<BackupDiffPreview diff={backupCheck.diff} />"), "backup validation should show a restore impact diff before writing data");
 assert(styles.includes(".backup-check-result") && styles.includes(".backup-validate-block") && styles.includes(".backup-restore-box") && styles.includes(".backup-diff-preview") && styles.includes(".danger-button"), "backup validation, diff preview, and restore result should have stable styles");
+assert(adminStyles.includes("Product settings are a linear checklist") && adminStyles.includes("width: min(100%, 1180px)"), "product settings should use a continuous centered column instead of uneven masonry gaps");
 assert(source.includes("const [savingSettingType") && source.includes("setSavingSettingType(type)") && source.includes('setSavingSettingType("")'), "typed settings should track which integration block is saving");
 assert(source.includes("const [syncingFeishuContacts") && source.includes("setSyncingFeishuContacts(true)") && source.includes("setSyncingFeishuContacts(false)"), "Feishu contact sync should expose syncing state");
 assert(source.includes('savingProductSettings ? "保存中" : "保存产品设置"'), "product settings save button should show saving copy");
