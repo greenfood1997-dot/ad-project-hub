@@ -4,12 +4,15 @@ const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8
 const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
 const adminStyles = await readFile(new URL("../src/admin-settings.css", import.meta.url), "utf8");
 const readinessSource = await readFile(new URL("../src/utils/deployReadiness.js", import.meta.url), "utf8");
+const adminShellSource = await readFile(new URL("../src/AdminShell.jsx", import.meta.url), "utf8");
+const integrationSettingsSource = await readFile(new URL("../src/IntegrationSettingsPanel.jsx", import.meta.url), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
 assert(source.includes("adminRouteMap"), "app shell should map admin deep links to backend tabs");
+assert(source.includes('const AdminShell = React.lazy(() => import("./AdminShell.jsx"))') && source.includes("<AdminShell session={session}"), "production entry must render the shared admin shell instead of the stale inline admin implementation");
 assert(source.includes('app-route-preserved hidden') && source.includes('view.startsWith("admin") && uploadOpen'), "admin navigation should preserve and minimize an active upload task");
 assert(source.includes('"admin:product": "product"'), "admin:product should open product settings");
 assert(source.includes('"admin:assignments": "assignments"'), "admin:assignments should open project assignment");
@@ -78,6 +81,9 @@ assert(source.includes("恢复会覆盖当前业务数据") && source.includes("
 assert(source.includes("function BackupDiffPreview") && source.includes("恢复预演影响：") && source.includes("<BackupDiffPreview diff={backupCheck.diff} />"), "backup validation should show a restore impact diff before writing data");
 assert(styles.includes(".backup-check-result") && styles.includes(".backup-validate-block") && styles.includes(".backup-restore-box") && styles.includes(".backup-diff-preview") && styles.includes(".danger-button"), "backup validation, diff preview, and restore result should have stable styles");
 assert(adminStyles.includes("Product settings are a linear checklist") && adminStyles.includes("width: min(100%, 1180px)"), "product settings should use a continuous centered column instead of uneven masonry gaps");
+assert(adminShellSource.includes("function ProductSettingsSection") && adminShellSource.includes('useState("basics")') && (adminShellSource.match(/<ProductSettingsSection/g) || []).length >= 7, "product settings should expose seven single-open accordion sections");
+assert(integrationSettingsSource.includes("function SettingsSection") && integrationSettingsSource.includes('useState("feishu")') && (integrationSettingsSource.match(/<SettingsSection/g) || []).length >= 5, "collaboration settings should use nested single-open sections");
+assert(adminStyles.includes(".product-settings-trigger") && adminStyles.includes(".settings-accordion-trigger") && adminStyles.includes("transform: rotate(180deg)"), "settings accordions should have consistent large-panel styling and expanded state");
 assert(source.includes("const [savingSettingType") && source.includes("setSavingSettingType(type)") && source.includes('setSavingSettingType("")'), "typed settings should track which integration block is saving");
 assert(source.includes("const [syncingFeishuContacts") && source.includes("setSyncingFeishuContacts(true)") && source.includes("setSyncingFeishuContacts(false)"), "Feishu contact sync should expose syncing state");
 assert(source.includes('savingProductSettings ? "保存中" : "保存产品设置"'), "product settings save button should show saving copy");

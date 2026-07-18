@@ -32,6 +32,8 @@ import {
 import "./styles.css";
 import { deployReadinessActions } from "./utils/deployReadiness.js";
 
+const AdminShell = React.lazy(() => import("./AdminShell.jsx"));
+
 const SESSION_KEY = "ad-project-hub-session";
 const BUILD_VERSION = "2026-07-08-ai-task-command-pass";
 const roleOptions = [
@@ -8700,7 +8702,9 @@ function AppShell() {
     <div className={adminVisible ? "app-route-preserved hidden" : "app-route-preserved"}>
       <ProjectDashboard session={session} view={view} setView={setView} onLogout={logout} />
     </div>
-    {adminVisible && <AdminMembers session={session} setView={setView} onLogout={logout} initialTab={adminRouteMap[view]} />}
+    {adminVisible && <React.Suspense fallback={<main><p>后台管理加载中...</p></main>}>
+      <AdminShell session={session} setView={setView} onLogout={logout} initialTab={adminRouteMap[view]} buildVersion={BUILD_VERSION} />
+    </React.Suspense>}
   </>;
 }
 

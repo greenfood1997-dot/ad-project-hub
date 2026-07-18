@@ -1,4 +1,18 @@
-import React from "react";
+import React, { useState } from "react";
+import { ChevronDown } from "lucide-react";
+
+function SettingsSection({ id, title, description, openSection, setOpenSection, children }) {
+  const open = openSection === id;
+  return (
+    <section className={`settings-accordion ${open ? "open" : ""}`}>
+      <button type="button" className="settings-accordion-trigger" aria-expanded={open} onClick={() => setOpenSection(open ? "" : id)}>
+        <span><strong>{title}</strong><em>{description}</em></span>
+        <ChevronDown size={18} />
+      </button>
+      {open && <div className="settings-accordion-body">{children}</div>}
+    </section>
+  );
+}
 
 export default function IntegrationSettingsPanel({
   feishuSettings,
@@ -22,10 +36,10 @@ export default function IntegrationSettingsPanel({
   onSyncFeishuContacts,
   onTestStorageUpload
 }) {
+  const [openSection, setOpenSection] = useState("feishu");
   return (
-    <>
-      <div className="settings-block">
-        <h3>飞书机器人</h3>
+    <div className="integration-settings-accordion">
+      <SettingsSection id="feishu" title="飞书机器人" description="通讯录、事件订阅、文件接收与消息发送" openSection={openSection} setOpenSection={setOpenSection}>
         <p className="settings-next-step">{settingNextStep("feishu")}</p>
         {[
           ["appId", "App ID"],
@@ -53,10 +67,9 @@ export default function IntegrationSettingsPanel({
         <button type="button" className="ghost" disabled={savingSettingType === "feishu" || syncingFeishuContacts} onClick={() => onSaveTypedSetting("feishu", feishuSettings, "飞书配置")}>{savingSettingType === "feishu" ? "保存中" : "保存飞书配置"}</button>
         <button type="button" className="ghost" disabled={syncingFeishuContacts || savingSettingType === "feishu"} onClick={onSyncFeishuContacts}>{syncingFeishuContacts ? "同步中" : "同步飞书通讯录"}</button>
         {feishuSyncResult && <p className="form-message">最近同步：新增 {feishuSyncResult.created} 人，更新 {feishuSyncResult.updated} 人，跳过 {feishuSyncResult.skipped} 人。</p>}
-      </div>
+      </SettingsSection>
 
-      <div className="settings-block">
-        <h3>企业微信</h3>
+      <SettingsSection id="wechat" title="企业微信" description="群机器人和企业应用消息配置" openSection={openSection} setOpenSection={setOpenSection}>
         <p className="settings-next-step">{settingNextStep("wechat")}</p>
         {[
           ["webhookUrl", "群机器人 Webhook"],
@@ -70,10 +83,9 @@ export default function IntegrationSettingsPanel({
           </label>
         ))}
         <button type="button" className="ghost" disabled={savingSettingType === "wechat"} onClick={() => onSaveTypedSetting("wechat", wechatSettings, "企业微信配置")}>{savingSettingType === "wechat" ? "保存中" : "保存企业微信配置"}</button>
-      </div>
+      </SettingsSection>
 
-      <div className="settings-block">
-        <h3>对象存储</h3>
+      <SettingsSection id="storage" title="对象存储" description="合同、发票和票据的长期文件保存" openSection={openSection} setOpenSection={setOpenSection}>
         <p className="settings-next-step">{settingNextStep("storage")}</p>
         {[
           ["provider", "服务商"],
@@ -106,10 +118,9 @@ export default function IntegrationSettingsPanel({
             {storageTestResult.warning && <em>{storageTestResult.warning}</em>}
           </div>
         )}
-      </div>
+      </SettingsSection>
 
-      <div className="settings-block">
-        <h3>审批阈值</h3>
+      <SettingsSection id="approval" title="审批阈值" description="备用金、财务和老板审批金额线" openSection={openSection} setOpenSection={setOpenSection}>
         <p className="settings-next-step">{settingNextStep("approvalRules")}</p>
         {[
           ["pettyCashDirectorLimit", "备用金总监审批线"],
@@ -122,10 +133,9 @@ export default function IntegrationSettingsPanel({
           </label>
         ))}
         <button type="button" className="ghost" disabled={savingSettingType === "approvalRules"} onClick={() => onSaveTypedSetting("approvalRules", approvalSettings, "审批规则")}>{savingSettingType === "approvalRules" ? "保存中" : "保存审批规则"}</button>
-      </div>
+      </SettingsSection>
 
-      <div className="settings-block">
-        <h3>自动外部提醒</h3>
+      <SettingsSection id="notifications" title="自动外部提醒" description="高风险待办的飞书与企业微信推送" openSection={openSection} setOpenSection={setOpenSection}>
         <p className="settings-next-step">默认关闭。开启后，后台巡检只会把本次新出现的高风险待办推送到所选渠道；中风险和既有待办仍留在 OA，避免重复打扰同事。</p>
         <label className="setting-check"><input type="checkbox" checked={alertSettings.autoNotifyEnabled === true || alertSettings.autoNotifyEnabled === "true"} onChange={(event) => setAlertSettings({ ...alertSettings, autoNotifyEnabled: event.target.checked })} /><span>开启高风险自动提醒</span></label>
         <label className="setting-check"><input type="checkbox" checked={(alertSettings.autoNotifyChannels || []).includes("feishu")} onChange={(event) => {
@@ -140,7 +150,7 @@ export default function IntegrationSettingsPanel({
         }} /><span>企业微信机器人</span></label>
         <p className={`form-message auto-notification-status ${automaticNotificationStatus.ready ? "ok" : "warn"}`}>{automaticNotificationStatus.text}</p>
         <button type="button" className="ghost" disabled={savingSettingType === "alertSettings"} onClick={() => onSaveTypedSetting("alertSettings", alertSettings, "自动提醒规则")}>{savingSettingType === "alertSettings" ? "保存中" : "保存自动提醒规则"}</button>
-      </div>
-    </>
+      </SettingsSection>
+    </div>
   );
 }

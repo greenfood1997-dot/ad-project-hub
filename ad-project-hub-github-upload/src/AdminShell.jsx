@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useState } from "react";
-import { Bot, LayoutDashboard, LogOut, Plus, Settings2, UserCog, UsersRound } from "lucide-react";
+import { Bot, ChevronDown, LayoutDashboard, LogOut, Plus, Settings2, UserCog, UsersRound } from "lucide-react";
 import { downloadFile } from "./utils/api.js";
 import { money } from "./utils/format.js";
 import { canManageAssignmentsRole, canUseAdminRole, roleLabel, roleOptions } from "./utils/permissions.js";
@@ -19,10 +19,24 @@ const AdminMemberPanel = React.lazy(() => import("./AdminMemberPanel.jsx"));
 const InterestRatePanel = React.lazy(() => import("./InterestRatePanel.jsx"));
 const ProjectCleanupPanel = React.lazy(() => import("./ProjectCleanupPanel.jsx"));
 
+function ProductSettingsSection({ id, title, description, openSection, setOpenSection, children }) {
+  const open = openSection === id;
+  return (
+    <section className={`product-settings-section ${open ? "open" : ""}`}>
+      <button type="button" className="product-settings-trigger" aria-expanded={open} onClick={() => setOpenSection(open ? "" : id)}>
+        <span><strong>{title}</strong><em>{description}</em></span>
+        <ChevronDown size={20} />
+      </button>
+      {open && <div className="product-settings-body">{children}</div>}
+    </section>
+  );
+}
+
 export default function AdminShell({ session, setView, onLogout, initialTab = "members", buildVersion }) {
   const isAdmin = canUseAdminRole(session);
   const canManageAssignments = canManageAssignmentsRole(session);
   const [adminTab, setAdminTab] = useState(initialTab);
+  const [openProductSection, setOpenProductSection] = useState("basics");
   const [members, setMembers] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [projectRecords, setProjectRecords] = useState([]);
@@ -706,8 +720,9 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
           </Suspense>
         )}
 
-        {isAdmin && adminTab === "product" && <section className="admin-grid">
-          <Suspense fallback={<ModuleFallback title="基础参数加载中" />}>
+        {isAdmin && adminTab === "product" && <section className="admin-grid product-settings-center">
+          <ProductSettingsSection id="basics" title="基础参数" description="公司名称、默认预算比例和自动巡检频率" openSection={openProductSection} setOpenSection={setOpenProductSection}>
+            <Suspense fallback={<ModuleFallback title="基础参数加载中" />}>
             <ProductSettingsForm
               productSettings={productSettings}
               setProductSettings={setProductSettings}
@@ -715,24 +730,28 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
               savingProductSettings={savingProductSettings}
               onSaveProductSettings={saveProductSettings}
             />
-          </Suspense>
-          <Suspense fallback={<ModuleFallback title="利率配置加载中" />}>
+            </Suspense>
+          </ProductSettingsSection>
+          <ProductSettingsSection id="interest" title="利率与垫资成本" description="刷新 LPR，维护项目垫资利息计算口径" openSection={openProductSection} setOpenSection={setOpenProductSection}>
+            <Suspense fallback={<ModuleFallback title="利率配置加载中" />}>
             <InterestRatePanel
               interestRate={interestRate}
               refreshing={refreshingInterestRate}
               onRefresh={refreshInterestRate}
             />
-          </Suspense>
-          <Suspense fallback={<ModuleFallback title="项目清理加载中" />}>
+            </Suspense>
+          </ProductSettingsSection>
+          <ProductSettingsSection id="cleanup" title="误建项目清理" description="清理重复建项或上传错误的项目及关联记录" openSection={openProductSection} setOpenSection={setOpenProductSection}>
+            <Suspense fallback={<ModuleFallback title="项目清理加载中" />}>
             <ProjectCleanupPanel
               projects={projectRecords}
               state={adminState}
               deleting={deletingProject}
               onDelete={deleteMistakenProject}
             />
-          </Suspense>
-          <div className="member-table settings-help">
-            <div className="section-head"><h2>协同与生产配置</h2></div>
+            </Suspense>
+          </ProductSettingsSection>
+          <ProductSettingsSection id="backup" title="备份与安全恢复" description="导出、校验和恢复 OA 业务数据" openSection={openProductSection} setOpenSection={setOpenProductSection}>
             <Suspense fallback={<ModuleFallback title="备份校验加载中" />}>
               <BackupRestorePanel
                 backupText={backupText}
@@ -753,6 +772,8 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
                 }}
               />
             </Suspense>
+          </ProductSettingsSection>
+          <ProductSettingsSection id="health" title="上线健康检查" description={`${deployReadyCount}/${deployCheckItems.length} 项就绪 · 部署、数据库、文件、AI 与 OCR`} openSection={openProductSection} setOpenSection={setOpenProductSection}>
             <Suspense fallback={<ModuleFallback title="上线健康检查加载中" />}>
               <DeployHealthPanel
                 items={deployCheckItems}
@@ -776,6 +797,8 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
                 </div>
               ))}
             </div>
+          </ProductSettingsSection>
+          <ProductSettingsSection id="collaboration" title="协同与生产配置" description="飞书、企业微信、对象存储、审批阈值与自动提醒" openSection={openProductSection} setOpenSection={setOpenProductSection}>
             <Suspense fallback={<ModuleFallback title="协同配置加载中" />}>
               <IntegrationSettingsPanel
                 feishuSettings={feishuSettings}
@@ -800,6 +823,8 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
                 onTestStorageUpload={testStorageUpload}
               />
             </Suspense>
+          </ProductSettingsSection>
+          <ProductSettingsSection id="feishu-bot" title="飞书机器人工作台" description="项目绑定、待确认文件、事件记录和消息发送" openSection={openProductSection} setOpenSection={setOpenProductSection}>
             <Suspense fallback={<ModuleFallback title="飞书机器人加载中" />}>
               <FeishuBotPanel
                 api={api}
@@ -813,7 +838,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
                 onReload={loadFeishuBindings}
               />
             </Suspense>
-          </div>
+          </ProductSettingsSection>
         </section>}
       </main>
     </div>
