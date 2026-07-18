@@ -401,7 +401,7 @@ export default function DashboardContent({
       )}
 
       {!!visibleProjects.length && activeView === "dashboard" && activeSubView === "我的项目" && (
-        <section className="workspace">
+        <section className="workspace project-accordion-workspace">
           <div className="project-list">
             <div className="section-head">
               <h2>我的项目</h2>

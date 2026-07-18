@@ -5478,6 +5478,26 @@ select {
   margin-top: 16px;
 }
 
+.workspace.project-accordion-workspace {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.project-accordion-workspace .project-list,
+.project-accordion-workspace .detail {
+  width: 100%;
+  max-width: none;
+}
+
+.project-accordion-workspace .project-list {
+  display: grid;
+  gap: 8px;
+}
+
+.project-accordion-workspace .project-row {
+  margin-top: 0;
+}
+
 @media (min-width: 1181px) {
   .topbar > :first-child {
     flex: 0 0 280px;

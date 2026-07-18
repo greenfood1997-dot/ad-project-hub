@@ -7,6 +7,7 @@ import {
   BellRing,
   Bot,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   CircleDollarSign,
   Clock3,
@@ -33,6 +34,7 @@ import "./styles.css";
 import { deployReadinessActions } from "./utils/deployReadiness.js";
 
 const AdminShell = React.lazy(() => import("./AdminShell.jsx"));
+const ProjectDetail = React.lazy(() => import("./ProjectDetail.jsx"));
 
 const SESSION_KEY = "ad-project-hub-session";
 const BUILD_VERSION = "2026-07-08-ai-task-command-pass";
@@ -2349,7 +2351,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         )}
 
         {!!visibleProjects.length && activeView === "dashboard" && activeSubView === "我的项目" && (
-          <section className="workspace">
+          <section className="workspace project-accordion-workspace">
             <div className="project-list">
               <div className="section-head">
                 <h2>我的项目</h2>
@@ -2375,7 +2377,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
               ))}
             </div>
 
-            <ProjectDetail
+            <React.Suspense fallback={<ModuleFallback title="项目详情加载中" variant="detail" />}><ProjectDetail
               project={selected}
               isManagement={isManagement}
               session={session}
@@ -2417,7 +2419,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
               }}
               onDone={() => loadState()}
               onNotice={setNotice}
-            />
+            /></React.Suspense>
           </section>
         )}
         {uploadOpen && <UploadDialog
@@ -2970,7 +2972,7 @@ function RiskBadge({ risk }) {
   return <b className={`risk risk-${risk}`}>{risk}风险</b>;
 }
 
-function ProjectDetail({ project, isManagement, session, files, parseJobs, approvals, suppliers = [], clients = [], payments = [], collectionScripts = [], feishuPendingFiles = [], comments, alertUpdates = [], auditLogs, focusTarget = "", onFocusConsumed, onOpenApproval, onOpenSupplier, onOpenClient, onDone, onNotice }) {
+function LegacyProjectDetail({ project, isManagement, session, files, parseJobs, approvals, suppliers = [], clients = [], payments = [], collectionScripts = [], feishuPendingFiles = [], comments, alertUpdates = [], auditLogs, focusTarget = "", onFocusConsumed, onOpenApproval, onOpenSupplier, onOpenClient, onDone, onNotice }) {
   const usedRate = project.costBudget ? Math.round((project.costUsed / project.costBudget) * 100) : 0;
   const health = projectHealth(project);
   const pettyCashLeft = Math.max(Number(project.pettyCashBudget || 0) - Number(project.pettyCashUsed || 0), 0);
