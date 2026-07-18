@@ -1,3 +1,5 @@
+import { money } from "./format.js";
+
 const chartTextStyle = {
   color: "#4e5969",
   fontFamily: "Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif",
@@ -42,7 +44,7 @@ export function cashChartOption(projects = []) {
     },
     yAxis: {
       type: "value",
-      axisLabel: { formatter: (v) => `${v / 10000}万`, color: "#6b778c", fontSize: 12 },
+      axisLabel: { formatter: (v) => money(v), color: "#6b778c", fontSize: 12 },
       splitLine: { lineStyle: { color: "#edf1f7" } }
     },
     color: ["#3370ff", "#8fb4ff"],

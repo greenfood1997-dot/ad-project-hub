@@ -135,10 +135,11 @@ function approvalTypeOptionsFor(session) {
 
 function money(value) {
   const number = Number(value || 0);
-  if (Math.abs(number) >= 100000) {
-    return `${Number((number / 10000).toFixed(2)).toLocaleString("zh-CN")}万`;
-  }
-  return number.toLocaleString("zh-CN");
+  const safeNumber = Number.isFinite(number) ? number : 0;
+  return `¥${safeNumber.toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function daysFromNow(days = 0) {
@@ -1847,7 +1848,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     },
     yAxis: {
       type: "value",
-      axisLabel: { formatter: (v) => `${v / 10000}万`, color: "#6b778c", fontSize: 12 },
+      axisLabel: { formatter: (v) => money(v), color: "#6b778c", fontSize: 12 },
       splitLine: { lineStyle: { color: "#edf1f7" } }
     },
     color: ["#3370ff", "#8fb4ff"],

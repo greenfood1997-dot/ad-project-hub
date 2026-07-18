@@ -1,15 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { CheckCircle2, FileSpreadsheet, FileText, MessageSquareText } from "lucide-react";
 import { apiRequest } from "./utils/api.js";
-import { downloadCsv } from "./utils/format.js";
+import { downloadCsv, money } from "./utils/format.js";
 import { clientHandoffRows } from "./utils/ledgerRows.js";
 import "./supplier-client.css";
-
-function money(value) {
-  const number = Number(value || 0);
-  if (!number) return "¥0";
-  return `¥${number.toLocaleString("zh-CN", { maximumFractionDigits: 0 })}`;
-}
 
 function PanelTitle({ icon: Icon, title }) {
   return <h2>{Icon && <Icon size={18} />}{title}</h2>;

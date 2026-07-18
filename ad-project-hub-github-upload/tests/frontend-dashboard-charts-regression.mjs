@@ -19,7 +19,7 @@ const cash = cashChartOption(projects);
 assert.deepEqual(cash.xAxis.data, ["捷途", "咖啡", "食品"]);
 assert.deepEqual(cash.series[0].data, [300000, 500000, 0]);
 assert.deepEqual(cash.series[1].data, [700000, 0, 100000]);
-assert.equal(cash.yAxis.axisLabel.formatter(10000), "1万");
+assert.equal(cash.yAxis.axisLabel.formatter(10000), "¥10,000.00");
 
 const cost = costChartOption(projects);
 assert.deepEqual(cost.yAxis.data, ["唐初", "小林", "小王"]);

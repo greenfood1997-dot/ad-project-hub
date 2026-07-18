@@ -1,3 +1,5 @@
+import { money } from "./format.js";
+
 export function projectLedgerRows(projects = [], isManagement = false, options = {}) {
   const materialStatus = typeof options.materialStatus === "function"
     ? options.materialStatus
@@ -229,12 +231,6 @@ export function feishuPendingLedgerRows(items = []) {
   return [headers, ...body];
 }
 
-function rmb(value) {
-  const number = Number(value || 0);
-  if (!number) return "¥0";
-  return `¥${number.toLocaleString("zh-CN", { maximumFractionDigits: 0 })}`;
-}
-
 export function supplierProfileRows(suppliers = []) {
   const headers = [
     "供应商",
@@ -293,7 +289,7 @@ export function clientHandoffRows(client = {}) {
     ["最近项目", `${client.latestProject || "待补充"}${client.latestStatus ? `（${client.latestStatus}）` : ""}`],
     ["自动交接摘要", handoff.summary || client.handoffSummary || "待补充"],
     ["接手先做", handoff.firstActions?.join("；") || "先确认项目状态、回款节点和客户雷区"],
-    ["重点回款", handoff.receivableProjects?.map((item) => `${item.name} ${rmb(item.amount)}${item.paymentDue ? `（${item.paymentDue}）` : ""}`).join("；") || "暂无待回款"],
+    ["重点回款", handoff.receivableProjects?.map((item) => `${item.name} ${money(item.amount)}${item.paymentDue ? `（${item.paymentDue}）` : ""}`).join("；") || "暂无待回款"],
     ["最近反馈", handoff.latestFeedback?.join("；") || "暂无可交接反馈"],
     ["客户喜欢", client.likes?.join("；") || "待沉淀"],
     ["客户不喜欢", client.dislikes?.join("；") || "待沉淀"],

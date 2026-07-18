@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { csvCell, daysFromNow, fileSize, money } from "../src/utils/format.js";
 
-assert.equal(money(0), "0");
-assert.equal(money(99999), "99,999");
-assert.equal(money(100000), "10万");
-assert.equal(money(1870700), "187.07万");
-assert.equal(money(-125000), "-12.5万");
+assert.equal(money(0), "¥0.00");
+assert.equal(money(99999), "¥99,999.00");
+assert.equal(money(100000), "¥100,000.00");
+assert.equal(money(1870700), "¥1,870,700.00");
+assert.equal(money(754553.29), "¥754,553.29");
+assert.equal(money(-125000.5), "¥-125,000.50");
+assert.equal(money("invalid"), "¥0.00");
 
 assert.equal(fileSize(0), "0 B");
 assert.equal(fileSize(512), "512 B");

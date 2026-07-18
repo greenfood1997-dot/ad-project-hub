@@ -1,9 +1,10 @@
 export function money(value) {
   const number = Number(value || 0);
-  if (Math.abs(number) >= 100000) {
-    return `${Number((number / 10000).toFixed(2)).toLocaleString("zh-CN")}万`;
-  }
-  return number.toLocaleString("zh-CN");
+  const safeNumber = Number.isFinite(number) ? number : 0;
+  return `¥${safeNumber.toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export function daysFromNow(days = 0) {
