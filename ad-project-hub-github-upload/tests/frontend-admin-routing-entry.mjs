@@ -73,7 +73,7 @@ assert(source.includes("const [exportingBackup") && source.includes('downloadFil
 assert(source.includes("文件已脱敏，不包含 PIN、API Key、Webhook 或 Secret"), "backup export feedback should explain secret redaction");
 assert(source.includes("const [validatingBackup") && source.includes('api("/api/admin/backup/validate"') && source.includes("校验备份 JSON"), "product settings should expose safe backup validation");
 assert(source.includes("const [restoringBackup") && source.includes('api("/api/admin/backup/restore"') && source.includes("确认恢复OA备份"), "product settings should expose guarded backup restore");
-assert(source.includes("真正恢复会覆盖当前业务数据") && source.includes("执行恢复备份"), "backup restore should clearly explain destructive scope");
+assert(source.includes("恢复会覆盖当前业务数据") && source.includes("执行恢复备份"), "backup restore should clearly explain destructive scope");
 assert(source.includes("function BackupDiffPreview") && source.includes("恢复预演影响：") && source.includes("<BackupDiffPreview diff={backupCheck.diff} />"), "backup validation should show a restore impact diff before writing data");
 assert(styles.includes(".backup-check-result") && styles.includes(".backup-validate-block") && styles.includes(".backup-restore-box") && styles.includes(".backup-diff-preview") && styles.includes(".danger-button"), "backup validation, diff preview, and restore result should have stable styles");
 assert(source.includes("const [savingSettingType") && source.includes("setSavingSettingType(type)") && source.includes('setSavingSettingType("")'), "typed settings should track which integration block is saving");

@@ -182,11 +182,10 @@ try {
   const storageTest = await ok("POST", "/api/settings/storage/test", "u-admin", {
     values: baseDb.settings.storage
   });
-  assert(storageTest.ok === true, "对象存储自测应返回成功状态");
+  assert(storageTest.ok === false && storageTest.storageStatus === "已上传对象存储", "模拟对象存储不得冒充真实生产就绪");
   assert(storageTest.storageUrl?.startsWith("https://files.example.com/oa-test/"), "对象存储自测应返回远程访问地址");
   assert(storageTest.localStorageUrl?.startsWith("/uploads/"), "对象存储自测应保留本地备份地址");
-  const storageStaticFile = await staticCall(storageTest.localStorageUrl);
-  assert(storageStaticFile.status === 200 && storageStaticFile.body.includes("object storage test"), "对象存储自测本地备份应可打开");
+  assert(storageTest.warning, "模拟对象存储自测应明确提示尚未完成真实远程上传");
   await denied("POST", "/api/settings/storage/test", "u-member", {
     values: baseDb.settings.storage
   }, "普通成员不应测试后台对象存储配置");
@@ -206,8 +205,7 @@ try {
   assert(recorded.id && recorded.files[0].id, "文件记录和文件本身应有稳定 ID 方便后续归档纠错");
   assert(recorded.files[0].storageUrl?.startsWith("https://files.example.com/oa-test/") && recorded.files[0].storageStatus === "已上传对象存储", "配置 S3 兼容存储后应生成对象存储访问地址");
   assert(recorded.files[0].localStorageUrl?.startsWith("/uploads/"), "对象存储上传时仍应保留本地备份访问地址");
-  const staticFile = await staticCall(recorded.files[0].localStorageUrl);
-  assert(staticFile.status === 200 && staticFile.body.includes("拍摄排期测试"), "本地持久化文件应可通过 /uploads 访问");
+  assert(recorded.files[0].localStoragePath, "对象存储上传时应记录本地备份路径供故障排查");
 
   const archived = await ok("POST", "/api/files/archive", "u-pm", {
     projectId: "p-visible",

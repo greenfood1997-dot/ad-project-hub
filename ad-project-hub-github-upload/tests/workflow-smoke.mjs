@@ -324,7 +324,7 @@ try {
     email: "smoke-member@company.local",
     role: "member",
     department: "执行部",
-    pin: "123456",
+    pin: "482915",
     feishuOpenId: "ou_smoke_member"
   });
   assert(newMember.email === "smoke-member@company.local", "后台成员应能新增");
