@@ -4,6 +4,7 @@ import { apiRequest, fileToPayload } from "./utils/api.js";
 import { money } from "./utils/format.js";
 import { canCreateProjectRole, canSeeManagement, canUseCollectionRole } from "./utils/permissions.js";
 import { projectHealth } from "./utils/projectMetrics.js";
+import { useLocalWeather } from "./utils/localWeather.js";
 import "./ai.css";
 
 function roleLabel(role) {
@@ -396,7 +397,7 @@ export function DashboardAiPanel({ session, projects, approvals = [], settings =
   const { question, setQuestion, sending, messages, setMessages, ask, confirmPending, appendAssistant } = useAiMessages({
     session, projects, approvals, settings, stats, selected, onDone, onNotice, onApprovalCreated, maxMessages: 7
   });
-  const weatherText = "上海 29°C · 多云，外拍注意补水";
+  const weatherText = useLocalWeather();
   const timeText = new Intl.DateTimeFormat("zh-CN", {
     month: "2-digit",
     day: "2-digit",

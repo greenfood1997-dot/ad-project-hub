@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import { deployReadinessActions } from "./utils/deployReadiness.js";
+import { useLocalWeather } from "./utils/localWeather.js";
 import ModuleFallback from "./ModuleFallback.jsx";
 
 const AdminShell = React.lazy(() => import("./AdminShell.jsx"));
@@ -2778,7 +2779,7 @@ function DashboardAiPanel({ session, projects, approvals = [], settings = {}, st
       text: "我会结合你的账号权限、当前项目和上传记录回答问题。你可以问备用金、报销、进度，也可以说“帮我登记到我的项目里”。",
     },
   ]);
-  const weatherText = "上海 29°C · 多云，外拍注意补水";
+  const weatherText = useLocalWeather();
   const timeText = new Intl.DateTimeFormat("zh-CN", {
     month: "2-digit",
     day: "2-digit",

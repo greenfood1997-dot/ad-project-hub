@@ -52,6 +52,9 @@ assert(source.includes('<button type="button" className="ghost" onClick={() => o
 assert(styles.includes(".ai-confirm-actions"), "AI confirmation controls should have styles");
 assert(styles.includes(".ai-filing-actions") && styles.includes(".ai-project-options"), "AI filing action cards should have styles");
 assert(styles.includes(".overview-layout.ai-collapsed") && styles.includes("grid-template-columns: minmax(0, 1fr) 72px"), "collapsed AI layout should free dashboard width");
+assert(styles.includes("grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto"), "dashboard AI panel should reserve a row for every section and keep the composer visible");
+assert(aiWorkspaceSource.includes("useLocalWeather()") && source.includes("useLocalWeather()"), "both dashboard implementations should use shared local weather");
+assert(!aiWorkspaceSource.includes('const weatherText = "上海 29°C') && !source.includes('const weatherText = "上海 29°C'), "dashboard weather must not be hard-coded to Shanghai");
 assert(styles.includes(".ai-panel-toggle") && styles.includes(".ai-collapsed-button") && styles.includes(".ai-activity-panel.collapsed"), "AI collapse controls should have dedicated styles");
 assert(styles.includes(".ai-drop-hint") && styles.includes("border: 1px dashed #c7d2fe"), "AI drag upload hint should have dedicated styles");
 

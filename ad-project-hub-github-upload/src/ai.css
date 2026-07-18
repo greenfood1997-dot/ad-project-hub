@@ -313,6 +313,9 @@
 }
 
 .ai-compose {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 44px;
   gap: 10px;
