@@ -21,7 +21,7 @@ export function deployReadinessActions(health = {}, items = [], buildVersion = "
       text: `当前仍有 ${health.insecureDefaultAccountCount} 个启用账号使用默认 PIN。请在 Render 临时配置 OA_BOOTSTRAP_ADMIN_PIN，部署后用管理员完成首次改密，再删除该环境变量。`
     });
   }
-  if (!health.aiEnv?.apiKey) {
+  if (!health.aiEnv?.apiKey && !health.aiEnv?.databaseConfigured) {
     actions.push({
       tone: "warn",
       title: "补 AI 环境变量或后台 Key",

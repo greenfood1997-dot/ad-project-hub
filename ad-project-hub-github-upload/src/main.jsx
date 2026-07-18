@@ -7165,7 +7165,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     status: "active",
     pin: "",
   });
-  const aiReady = Boolean(aiSettings["API Key"]);
+  const aiReady = Boolean(aiSettings["API Key"] || aiSettings.configured || deployHealth?.aiEnv?.databaseConfigured);
   const activeMembers = members.filter((member) => member.status !== "disabled");
   const feishuBoundCount = activeMembers.filter((member) => member.feishuOpenId || member.feishuUserId).length;
   const feishuMissingMembers = activeMembers.filter((member) => !member.feishuOpenId && !member.feishuUserId);
@@ -7506,10 +7506,14 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
       next: deployHealth?.uploadProgress ? "合同/报价/成本上传时会显示读取、识别、预览、写入进度。" : "请确认最新包已上传并重新部署。"
     },
     {
-      title: "AI 环境兜底",
+      title: "AI 配置与环境兜底",
       ok: aiReady || Boolean(deployHealth?.aiEnv?.apiKey),
-      status: aiReady ? "后台已保存 AI Key" : deployHealth?.aiEnv?.apiKey ? "Render 已配置 AI_API_KEY" : "未检测到 AI Key",
-      next: "如果覆盖 data/db.json 后后台 Key 丢失，可在 Render 环境变量配置 AI_API_KEY、AI_BASE_URL、AI_MODEL。"
+      status: aiReady
+        ? `后台已保存 AI Key${deployHealth?.aiEnv?.apiKey ? " · Render 兜底已配置" : " · Render 兜底未配置"}`
+        : deployHealth?.aiEnv?.apiKey ? "Render 已配置 AI_API_KEY" : "后台与 Render 均未检测到 AI Key",
+      next: aiReady && !deployHealth?.aiEnv?.apiKey
+        ? "后台 AI 可正常使用；如需部署级兜底，可选配 AI_API_KEY、AI_BASE_URL、AI_MODEL。"
+        : "如果后台 Key 丢失，可在 Render 环境变量配置 AI_API_KEY、AI_BASE_URL、AI_MODEL。"
     },
     {
       title: "腾讯 OCR",

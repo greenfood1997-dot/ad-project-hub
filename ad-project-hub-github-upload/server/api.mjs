@@ -119,7 +119,8 @@ async function deployHealthPayload() {
     aiEnv: {
       apiKey: envConfigured("AI_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY", "MOONSHOT_API_KEY"),
       baseUrl: envConfigured("AI_BASE_URL", "OPENAI_BASE_URL"),
-      model: envConfigured("AI_MODEL", "OPENAI_MODEL")
+      model: envConfigured("AI_MODEL", "OPENAI_MODEL"),
+      databaseConfigured: Boolean(db.settings?.aiService?.["API Key"])
     },
     ocrEnv: {
       secretId: envConfigured("TENCENT_SECRET_ID"),
