@@ -130,6 +130,7 @@ try {
   assert(suggestions.pmCandidates[0]?.id === "u-pm-free", "空闲 PM 应排在忙碌 PM 前面");
   assert(suggestions.memberCandidates.some((item) => item.id === "u-member-a"), "应推荐执行成员");
   assert(suggestions.pmCandidates.some((item) => item.id === "u-member-a"), "普通成员应可作为灵活 PM 候选");
+  assert(suggestions.salesCandidates.some((item) => item.id === "u-member-a"), "普通成员应可作为灵活销售候选");
   assert(suggestions.recommended.pmId === "u-pm-free", "推荐 PM 应写入 recommended");
   assert((suggestions.recommended.memberIds || []).length > 0, "应给出推荐执行成员 ID");
 

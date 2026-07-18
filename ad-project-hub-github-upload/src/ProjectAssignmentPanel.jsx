@@ -10,9 +10,9 @@ function PanelTitle({ icon: Icon, title }) {
 }
 
 export default function ProjectAssignmentPanel({ api, members, assignments, onReload, onCreateProject, onOpenMembers, onSyncFeishuContacts, syncingFeishuContacts = false }) {
-  const activeMembers = members.filter((member) => member.status !== "disabled");
+  const activeMembers = useMemo(() => members.filter((member) => member.status !== "disabled"), [members]);
   const [selectedProjectId, setSelectedProjectId] = useState(assignments[0]?.id || "");
-  const selected = assignments.find((item) => item.id === selectedProjectId) || assignments[0] || null;
+  const selected = assignments.find((item) => item.id === selectedProjectId) || null;
   const activeMemberById = useMemo(() => new Map(activeMembers.map((member) => [member.id, member])), [activeMembers]);
   const memberByNameOrContact = useMemo(() => {
     const map = new Map();
@@ -37,7 +37,7 @@ export default function ProjectAssignmentPanel({ api, members, assignments, onRe
 
   useEffect(() => {
     if (!assignments.length) return;
-    if (!selectedProjectId || !assignments.some((item) => item.id === selectedProjectId)) {
+    if (selectedProjectId && !assignments.some((item) => item.id === selectedProjectId)) {
       setSelectedProjectId(assignments[0].id);
     }
   }, [assignments, selectedProjectId]);

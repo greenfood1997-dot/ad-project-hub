@@ -436,7 +436,7 @@ function projectAssignmentSuggestions(db, projectId) {
     };
   };
   const pmRoles = ["pm", "director", "admin", "member"];
-  const salesRoles = ["sales", "director", "admin"];
+  const salesRoles = ["sales", "director", "admin", "member"];
   const memberRoles = ["member", "pm", "sales", "finance"];
   const sortByScore = (rows) => rows.sort((a, b) => b.score - a.score || a.load - b.load || a.name.localeCompare(b.name, "zh-CN"));
   const pmCandidates = sortByScore(users.filter((user) => pmRoles.includes(user.role)).map((user) => serialize(user, pmRoles))).slice(0, 3);

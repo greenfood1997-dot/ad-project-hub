@@ -20,7 +20,7 @@ export const supplierPaymentSubmitRoles = ["shareholder", "admin", "director", "
 export const paymentRecordRoles = ["shareholder", "admin", "director", "pm", "sales", "finance"];
 export const projectAlertHandleRoles = ["shareholder", "admin", "director", "pm", "sales", "finance"];
 export const assignmentPmCandidateRoles = ["pm", "director", "admin", "member"];
-export const assignmentSalesCandidateRoles = ["sales", "director", "admin"];
+export const assignmentSalesCandidateRoles = ["sales", "director", "admin", "member"];
 export const assignmentMemberExcludedRoles = ["shareholder", "viewer"];
 
 export function roleLabel(role) {

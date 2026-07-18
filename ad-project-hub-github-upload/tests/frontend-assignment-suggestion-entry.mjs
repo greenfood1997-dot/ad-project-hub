@@ -46,5 +46,8 @@ assert(source.includes('aria-pressed={checked}') && source.includes("toggleMembe
 assert(styles.includes(".member-check.selected") && styles.includes(".assignment-accordion.open"), "expanded projects and selected execution members should have visible states");
 assert(!panelSource.includes('type="checkbox"'), "the active assignment component should not use globally overridden checkbox inputs");
 assert(source.includes('assignmentPmCandidateRoles = ["pm", "director", "admin", "member"]'), "ordinary active members should be eligible for PM assignment when the company uses flexible roles");
+assert(source.includes('assignmentSalesCandidateRoles = ["sales", "director", "admin", "member"]'), "ordinary active members should be eligible for sales assignment when the company uses flexible roles");
+assert(panelSource.includes("const activeMembers = useMemo("), "assignment member derivation must be stable so form initialization does not overwrite every click");
+assert(panelSource.includes('const selected = assignments.find((item) => item.id === selectedProjectId) || null'), "collapsing an assignment accordion should not immediately reopen the first project");
 
 console.log("frontend assignment suggestion entry passed");
