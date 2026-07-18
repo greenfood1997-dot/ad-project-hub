@@ -435,7 +435,7 @@ function projectAssignmentSuggestions(db, projectId) {
       reason: `${load ? `当前 ${load} 个项目，建议谨慎加派` : "当前较空闲，适合承接"}${projectDept && user.department === projectDept ? "，部门匹配" : ""}${roles.includes(user.role) ? "，角色匹配" : ""}`
     };
   };
-  const pmRoles = ["pm", "director", "admin"];
+  const pmRoles = ["pm", "director", "admin", "member"];
   const salesRoles = ["sales", "director", "admin"];
   const memberRoles = ["member", "pm", "sales", "finance"];
   const sortByScore = (rows) => rows.sort((a, b) => b.score - a.score || a.load - b.load || a.name.localeCompare(b.name, "zh-CN"));

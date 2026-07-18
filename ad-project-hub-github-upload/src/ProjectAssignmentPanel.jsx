@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ChevronRight, FileSpreadsheet, UploadCloud, UserCog } from "lucide-react";
+import { Check, ChevronDown, FileSpreadsheet, UploadCloud, UserCog } from "lucide-react";
 import { downloadCsv } from "./utils/format.js";
 import { assignmentLedgerRows } from "./utils/ledgerRows.js";
 import { canBeAssignmentMember, canBeAssignmentPm, canBeAssignmentSales, roleLabel } from "./utils/permissions.js";
@@ -173,108 +173,36 @@ export default function ProjectAssignmentPanel({ api, members, assignments, onRe
   }
 
   return (
-    <section className="assignment-layout">
-      <div className="member-table assignment-list">
-        <div className="section-head">
-          <h2>项目列表</h2>
-          <div className="button-row compact">
-            <span>{assignments.length} 个</span>
-            <button type="button" className="ghost tiny" disabled={exportingAssignments} onClick={exportAssignmentLedger}><FileSpreadsheet size={14} />{exportingAssignments ? "导出中" : "导出分派表"}</button>
-          </div>
-        </div>
-        {assignments.map((project) => (
-          <button
-            type="button"
-            className={`project-row ${project.id === selected?.id ? "selected" : ""} ${focusedProjectId === project.id ? "fresh" : ""}`}
-            key={project.id}
-            onClick={() => setSelectedProjectId(project.id)}
-          >
-            <div>
-              <strong>{project.name}</strong>
-              <span>{project.client || "未填写客户"} · {project.status || "未设置状态"}</span>
-            </div>
-            <div className="row-right">
-              <span>{project.pm || "待分派 PM"}</span>
-              <ChevronRight size={16} />
-            </div>
-          </button>
-        ))}
+    <section className="assignment-accordion-list">
+      <div className="assignment-toolbar">
+        <div><h2>项目分派</h2><span>{assignments.length} 个项目 · 点击项目展开设置 PM、销售和执行成员</span></div>
+        <button type="button" className="ghost" disabled={exportingAssignments} onClick={exportAssignmentLedger}><FileSpreadsheet size={16} />{exportingAssignments ? "导出中" : "导出分派表"}</button>
       </div>
-
-      <form className="member-form assignment-form" onSubmit={save}>
-        <div className="section-head">
-          <h2>{selected?.name}</h2>
-          <span>{selected?.client || "未填写客户"}</span>
-        </div>
-        <div className="assignment-suggestion">
-          <div className="section-head">
-            <h3>AI 分派建议</h3>
-            <div className="button-row compact">
-              <button type="button" className="ghost tiny" onClick={() => loadSuggestions(selected?.id)} disabled={suggesting || !selected}>{suggesting ? "刷新中" : "刷新建议"}</button>
-              <button type="button" className="ghost tiny" onClick={applySuggestion} disabled={suggesting || !suggestions?.recommended}>{suggesting ? "分析中" : "一键套用推荐"}</button>
+      {assignments.map((project) => {
+        const open = project.id === selected?.id;
+        return <section className={`assignment-accordion ${open ? "open" : ""} ${focusedProjectId === project.id ? "fresh" : ""}`} key={project.id}>
+          <button type="button" className="assignment-accordion-trigger" aria-expanded={open} onClick={() => setSelectedProjectId(open ? "" : project.id)}>
+            <span><strong>{project.name}</strong><em>{project.client || "未填写客户"} · PM {project.pm || "待分派"} · 执行 {(project.members || []).length} 人</em></span>
+            <ChevronDown size={20} />
+          </button>
+          {open && <form className="member-form assignment-form assignment-accordion-body" onSubmit={save}>
+            <div className="section-head"><h2>{selected?.name}</h2><span>{selected?.client || "未填写客户"}</span></div>
+            <div className="assignment-suggestion">
+              <div className="section-head"><h3>AI 分派建议</h3><div className="button-row compact"><button type="button" className="ghost tiny" onClick={() => loadSuggestions(selected?.id)} disabled={suggesting || !selected}>{suggesting ? "刷新中" : "刷新建议"}</button><button type="button" className="ghost tiny" onClick={applySuggestion} disabled={suggesting || !suggestions?.recommended}>{suggesting ? "分析中" : "一键套用推荐"}</button></div></div>
+              {suggestions ? <div className="suggestion-grid"><SuggestionColumn title="推荐 PM" items={suggestions.pmCandidates} onRefresh={() => loadSuggestions(selected?.id)} onOpenMembers={onOpenMembers} /><SuggestionColumn title="推荐销售" items={suggestions.salesCandidates} onRefresh={() => loadSuggestions(selected?.id)} onOpenMembers={onOpenMembers} /><SuggestionColumn title="推荐执行" items={suggestions.memberCandidates?.slice(0, 3)} onRefresh={() => loadSuggestions(selected?.id)} onOpenMembers={onOpenMembers} /></div> : <div className="empty-state action-empty assignment-suggestion-empty"><strong>{suggesting ? "正在生成分派建议" : "暂无推荐数据"}</strong><span>{suggesting ? "系统正在根据项目部门、人员角色和负载匹配 PM、销售和执行成员。" : "可以刷新建议；如果候选为空，先同步飞书通讯录或去成员管理补角色、部门和飞书 ID。"}</span><div className="button-row compact"><button type="button" className="primary tiny" onClick={() => loadSuggestions(selected?.id)} disabled={suggesting || !selected}>{suggesting ? "刷新中" : "刷新建议"}</button>{onSyncFeishuContacts && <button type="button" className="ghost tiny" onClick={onSyncFeishuContacts} disabled={syncingFeishuContacts}>{syncingFeishuContacts ? "同步中" : "同步飞书通讯录"}</button>}{onOpenMembers && <button type="button" className="ghost tiny" onClick={onOpenMembers}>打开成员管理</button>}</div></div>}
             </div>
-          </div>
-          {suggestions ? (
-            <div className="suggestion-grid">
-              <SuggestionColumn title="推荐 PM" items={suggestions.pmCandidates} onRefresh={() => loadSuggestions(selected?.id)} onOpenMembers={onOpenMembers} />
-              <SuggestionColumn title="推荐销售" items={suggestions.salesCandidates} onRefresh={() => loadSuggestions(selected?.id)} onOpenMembers={onOpenMembers} />
-              <SuggestionColumn title="推荐执行" items={suggestions.memberCandidates?.slice(0, 3)} onRefresh={() => loadSuggestions(selected?.id)} onOpenMembers={onOpenMembers} />
+            <div className="assignment-role-grid">
+              <label><span>项目部门</span><input value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} placeholder="例如 项目部 / 内容部" /></label>
+              <label><span>PM</span><select value={form.pmId} onChange={(event) => setForm({ ...form, pmId: event.target.value })}><option value="">待分派</option>{activeMembers.filter(canBeAssignmentPm).map((member) => <option value={member.id} key={member.id}>{member.name} · {roleLabel(member.role)}</option>)}</select></label>
+              <label><span>销售</span><select value={form.salesId} onChange={(event) => setForm({ ...form, salesId: event.target.value })}><option value="">待确认</option>{activeMembers.filter(canBeAssignmentSales).map((member) => <option value={member.id} key={member.id}>{member.name} · {roleLabel(member.role)}</option>)}</select></label>
             </div>
-          ) : <div className="empty-state action-empty assignment-suggestion-empty">
-            <strong>{suggesting ? "正在生成分派建议" : "暂无推荐数据"}</strong>
-            <span>{suggesting ? "系统正在根据项目部门、人员角色和负载匹配 PM、销售和执行成员。" : "可以刷新建议；如果候选为空，先同步飞书通讯录或去成员管理补角色、部门和飞书 ID。"}</span>
-            <div className="button-row compact">
-              <button type="button" className="primary tiny" onClick={() => loadSuggestions(selected?.id)} disabled={suggesting || !selected}>{suggesting ? "刷新中" : "刷新建议"}</button>
-              {onSyncFeishuContacts && <button type="button" className="ghost tiny" onClick={onSyncFeishuContacts} disabled={syncingFeishuContacts}>{syncingFeishuContacts ? "同步中" : "同步飞书通讯录"}</button>}
-              {onOpenMembers && <button type="button" className="ghost tiny" onClick={onOpenMembers}>打开成员管理</button>}
-            </div>
-          </div>}
-        </div>
-        <label>
-          <span>项目部门</span>
-          <input value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} placeholder="例如 项目部 / 内容部" />
-        </label>
-        <label>
-          <span>PM</span>
-          <select value={form.pmId} onChange={(event) => setForm({ ...form, pmId: event.target.value })}>
-            <option value="">待分派</option>
-            {activeMembers.filter(canBeAssignmentPm).map((member) => (
-              <option value={member.id} key={member.id}>{member.name} · {roleLabel(member.role)}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>销售</span>
-          <select value={form.salesId} onChange={(event) => setForm({ ...form, salesId: event.target.value })}>
-            <option value="">待确认</option>
-            {activeMembers.filter(canBeAssignmentSales).map((member) => (
-              <option value={member.id} key={member.id}>{member.name} · {roleLabel(member.role)}</option>
-            ))}
-          </select>
-        </label>
-        <div className="assignment-members">
-          <span>执行成员</span>
-          <div>
-            {activeMembers.filter(canBeAssignmentMember).map((member) => (
-              <label className="member-check" key={member.id}>
-                <input
-                  type="checkbox"
-                  checked={form.memberIds.includes(member.id)}
-                  onChange={() => toggleMember(member.id)}
-                />
-                <strong>{member.name}</strong>
-                <small>{roleLabel(member.role)} · {member.department || "未分组"}</small>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="assignment-preview">
-          <strong>本次将保存</strong>
-          <span>PM {assignmentPreview.pm} · 销售 {assignmentPreview.sales} · 执行 {assignmentPreview.memberNames.length ? assignmentPreview.memberNames.join("、") : "待选择"}</span>
-        </div>
-        {message && <p className="form-message">{message}</p>}
-        <button type="submit" className="primary" disabled={saving}>{saving ? "保存中" : "保存项目分派"}</button>
-      </form>
+            <div className="assignment-members"><span>执行成员（可多选）</span><div>{activeMembers.filter(canBeAssignmentMember).map((member) => { const checked = form.memberIds.includes(member.id); return <button type="button" className={`member-check ${checked ? "selected" : ""}`} aria-pressed={checked} key={member.id} onClick={() => toggleMember(member.id)}><i><Check size={14} /></i><strong>{member.name}</strong><small>{roleLabel(member.role)} · {member.department || "未分组"}</small></button>; })}</div></div>
+            <div className="assignment-preview"><strong>本次将保存</strong><span>PM {assignmentPreview.pm} · 销售 {assignmentPreview.sales} · 执行 {assignmentPreview.memberNames.length ? assignmentPreview.memberNames.join("、") : "待选择"}</span></div>
+            {message && <p className="form-message">{message}</p>}
+            <button type="submit" className="primary" disabled={saving}>{saving ? "保存中" : "保存项目分派"}</button>
+          </form>}
+        </section>;
+      })}
     </section>
   );
 }

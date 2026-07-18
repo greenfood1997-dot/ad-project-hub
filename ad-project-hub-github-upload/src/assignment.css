@@ -1,9 +1,19 @@
-.assignment-layout {
-  display: grid;
-  grid-template-columns: minmax(300px, 0.8fr) minmax(520px, 1.2fr);
-  gap: 18px;
-  align-items: start;
-}
+.assignment-accordion-list { display: grid; gap: 16px; }
+.assignment-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.assignment-toolbar h2 { margin: 0; font-size: var(--font-section); }
+.assignment-toolbar span { display: block; margin-top: 5px; color: var(--muted); font-size: var(--font-caption); }
+.assignment-accordion { overflow: hidden; border: 1px solid var(--line-strong); border-radius: 14px; background: #fff; box-shadow: 0 10px 28px rgba(48, 55, 96, 0.05); }
+.assignment-accordion-trigger { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 92px; border: 0; background: #fff; padding: 20px 24px; text-align: left; cursor: pointer; }
+.assignment-accordion-trigger > span { min-width: 0; }
+.assignment-accordion-trigger strong, .assignment-accordion-trigger em { display: block; }
+.assignment-accordion-trigger strong { color: var(--text); font-size: var(--font-section); }
+.assignment-accordion-trigger em { margin-top: 7px; color: var(--muted); font-size: var(--font-body); font-style: normal; }
+.assignment-accordion-trigger svg { flex: 0 0 auto; color: var(--muted); transition: transform .2s ease; }
+.assignment-accordion.open .assignment-accordion-trigger { background: #f8f9ff; }
+.assignment-accordion.open .assignment-accordion-trigger svg { transform: rotate(180deg); }
+.assignment-accordion.fresh { border-color: #7fb0ff; box-shadow: 0 10px 24px rgba(56, 108, 216, 0.12); }
+.assignment-accordion-body { border-top: 1px solid var(--line); padding: 22px 24px 26px; }
+.assignment-role-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 
 .assignment-list,
 .assignment-form {
@@ -131,9 +141,7 @@
 .member-check {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
-  grid-template-areas:
-    "check name"
-    "check meta";
+  grid-template-areas: "check name" "check meta";
   column-gap: 8px;
   align-items: center;
   min-height: 52px;
@@ -142,13 +150,24 @@
   background: #fff;
   padding: 9px 10px;
   cursor: pointer;
+  text-align: left;
 }
 
-.member-check input {
+.member-check i {
   grid-area: check;
-  width: 16px;
-  height: 16px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid #bdc8d8;
+  border-radius: 5px;
+  color: transparent;
+  background: #fff;
+  font-style: normal;
 }
+
+.member-check.selected { border-color: #6654f1; background: #f6f4ff; box-shadow: inset 0 0 0 1px rgba(102, 84, 241, .12); }
+.member-check.selected i { border-color: #6654f1; background: #6654f1; color: #fff; }
 
 .member-check strong {
   grid-area: name;
@@ -190,8 +209,15 @@
 }
 
 @media (max-width: 1180px) {
-  .assignment-layout,
+  .assignment-role-grid,
   .suggestion-grid {
     grid-template-columns: 1fr;
   }
+}
+
+@media (max-width: 720px) {
+  .assignment-toolbar { align-items: stretch; flex-direction: column; }
+  .assignment-accordion-trigger { padding: 16px; }
+  .assignment-accordion-body { padding: 16px; }
+  .assignment-members > div { grid-template-columns: 1fr; }
 }

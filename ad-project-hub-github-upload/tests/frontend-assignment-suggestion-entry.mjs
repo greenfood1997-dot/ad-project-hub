@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 
-const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
-const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const mainSource = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
+const panelSource = await readFile(new URL("../src/ProjectAssignmentPanel.jsx", import.meta.url), "utf8");
+const assignmentStyles = await readFile(new URL("../src/assignment.css", import.meta.url), "utf8");
+const permissionsSource = await readFile(new URL("../src/utils/permissions.js", import.meta.url), "utf8");
+const source = `${mainSource}\n${panelSource}\n${permissionsSource}`;
+const styles = assignmentStyles;
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -37,5 +41,10 @@ assert(source.includes('focusedProjectId === project.id ? "fresh" : ""'), "assig
 assert(styles.includes(".assignment-preview"), "assignment save preview should have dedicated styles");
 assert(styles.includes(".assignment-list .project-row.fresh"), "assignment refreshed project row should have highlight styles");
 assert(styles.includes(".assignment-suggestion-empty") && styles.includes(".suggestion-empty-candidate"), "assignment empty suggestion states should have dedicated styles");
+assert(source.includes("assignment-accordion-trigger") && source.includes('aria-expanded={open}'), "assignment projects should use the same expandable accordion interaction as product settings");
+assert(source.includes('aria-pressed={checked}') && source.includes("toggleMember(member.id)"), "execution members should use reliable toggle buttons instead of form-styled checkboxes");
+assert(styles.includes(".member-check.selected") && styles.includes(".assignment-accordion.open"), "expanded projects and selected execution members should have visible states");
+assert(!panelSource.includes('type="checkbox"'), "the active assignment component should not use globally overridden checkbox inputs");
+assert(source.includes('assignmentPmCandidateRoles = ["pm", "director", "admin", "member"]'), "ordinary active members should be eligible for PM assignment when the company uses flexible roles");
 
 console.log("frontend assignment suggestion entry passed");

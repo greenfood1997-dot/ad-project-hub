@@ -19,7 +19,7 @@ export const feishuPendingHandleRoles = ["shareholder", "admin", "director", "pm
 export const supplierPaymentSubmitRoles = ["shareholder", "admin", "director", "pm", "sales", "finance"];
 export const paymentRecordRoles = ["shareholder", "admin", "director", "pm", "sales", "finance"];
 export const projectAlertHandleRoles = ["shareholder", "admin", "director", "pm", "sales", "finance"];
-export const assignmentPmCandidateRoles = ["pm", "director", "admin"];
+export const assignmentPmCandidateRoles = ["pm", "director", "admin", "member"];
 export const assignmentSalesCandidateRoles = ["sales", "director", "admin"];
 export const assignmentMemberExcludedRoles = ["shareholder", "viewer"];
 
