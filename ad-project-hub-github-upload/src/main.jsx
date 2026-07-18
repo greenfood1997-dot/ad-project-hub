@@ -23,10 +23,12 @@ import {
   MessageSquareText,
   MessagesSquare,
   PanelRightClose,
+  Palette,
   Plus,
   Search,
   Settings2,
   ShieldAlert,
+  Type,
   UploadCloud,
   UserCog,
   UsersRound,
@@ -1403,12 +1405,25 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [notificationLastAction, setNotificationLastAction] = useState(null);
   const [notice, setNotice] = useState("");
   const [personalSettingsOpen, setPersonalSettingsOpen] = useState(false);
+  const [personalPreferences, setPersonalPreferences] = useState(() => {
+    try {
+      return { language: "zh-CN", fontSize: "standard", theme: "default", ...JSON.parse(localStorage.getItem("ad-project-hub-preferences") || "{}") };
+    } catch {
+      return { language: "zh-CN", fontSize: "standard", theme: "default" };
+    }
+  });
   const [pinDialogOpen, setPinDialogOpen] = useState(false);
   const [pinForm, setPinForm] = useState({ currentPin: "", newPin: "", confirmPin: "" });
 
   useEffect(() => {
     if (projectFocus && selectedId) setExpandedProjectId(selectedId);
   }, [projectFocus, selectedId]);
+  useEffect(() => {
+    localStorage.setItem("ad-project-hub-preferences", JSON.stringify(personalPreferences));
+    document.documentElement.lang = personalPreferences.language;
+    document.body.dataset.fontSize = personalPreferences.fontSize;
+    document.body.dataset.appearance = personalPreferences.theme;
+  }, [personalPreferences]);
   const [changingPin, setChangingPin] = useState(false);
   const [exportingProjectLedger, setExportingProjectLedger] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -2036,8 +2051,8 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           <section className="personal-settings-dialog">
             <div className="personal-settings-head"><div><h2>个人设置</h2><span>{session.name} · {roleLabel(session.role)}</span></div><button type="button" className="ghost" onClick={() => setPersonalSettingsOpen(false)}>关闭</button></div>
             <div className="personal-settings-group"><strong>账号</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setPinDialogOpen(true); }}><span><LockKeyhole size={17} /><b>修改登录 PIN</b></span><em>维护自己的登录凭据</em></button></div>
-            <div className="personal-settings-group"><strong>协同</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); if (isAdmin) setView("admin:product"); else setNotice(feishuConfigured ? "飞书机器人已配置。" : "飞书未配置，请联系管理员。"); }}><span><MessageSquareText size={17} /><b>飞书机器人</b></span><em>{feishuConfigured ? "已配置" : "未配置"}</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); if (isAdmin) setView("admin:product"); else setNotice(wechatConfigured ? "企业微信已配置。" : "企业微信未配置，请联系管理员。"); }}><span><MessageSquareText size={17} /><b>企业微信</b></span><em>{wechatConfigured ? "已配置" : "未配置"}</em></button></div>
-            <div className="personal-settings-group"><strong>系统</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); if (isAdmin) setView("admin:product"); else setNotice(health?.version === BUILD_VERSION ? `当前线上版本正确：${BUILD_VERSION}` : "当前版本待管理员检查。"); }}><span><CheckCircle2 size={17} /><b>版本状态</b></span><em>{health?.version === BUILD_VERSION ? "已更新" : "待确认"}</em></button></div>
+            <div className="personal-settings-group personal-preference-group"><strong>显示与外观</strong><label><span><Type size={17} /><b>语言</b></span><select value={personalPreferences.language} onChange={(event) => setPersonalPreferences({ ...personalPreferences, language: event.target.value })}><option value="zh-CN">简体中文</option></select></label><label><span><Type size={17} /><b>字体大小</b></span><select value={personalPreferences.fontSize} onChange={(event) => setPersonalPreferences({ ...personalPreferences, fontSize: event.target.value })}><option value="compact">较小</option><option value="standard">标准</option><option value="large">较大</option></select></label><label><span><Palette size={17} /><b>外观颜色</b></span><select value={personalPreferences.theme} onChange={(event) => setPersonalPreferences({ ...personalPreferences, theme: event.target.value })}><option value="default">柔和紫</option><option value="ocean">海盐蓝</option><option value="forest">清新绿</option></select></label></div>
+            {isAdmin && <div className="personal-settings-group"><strong>协同与系统 · 仅管理员可见</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:product"); }}><span><MessageSquareText size={17} /><b>飞书机器人</b></span><em>{feishuConfigured ? "已配置" : "未配置"}</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:product"); }}><span><MessagesSquare size={17} /><b>企业微信</b></span><em>{wechatConfigured ? "已配置" : "未配置"}</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:product"); }}><span><CheckCircle2 size={17} /><b>版本状态</b></span><em>{health?.version === BUILD_VERSION ? "已更新" : "待确认"}</em></button></div>}
             {isAdmin && <div className="personal-settings-group admin-only-settings"><strong>后台管理 · 仅管理员可见</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin"); }}><span><UsersRound size={17} /><b>成员管理</b></span><em>账号、角色与权限</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:assignments"); }}><span><UserCog size={17} /><b>项目分派</b></span><em>PM、销售与执行成员</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:ai"); }}><span><Bot size={17} /><b>AI 接入</b></span><em>模型与解析服务</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:product"); }}><span><Settings2 size={17} /><b>产品设置</b></span><em>机器人、存储与业务规则</em></button></div>}
             {!isAdmin && canManageAssignments && <div className="personal-settings-group"><strong>工作权限</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:assignments"); }}><span><UserCog size={17} /><b>项目分派</b></span><em>仅开放总监分派权限</em></button></div>}
             <button type="button" className="personal-settings-logout" onClick={onLogout}><LogOut size={17} />退出登录</button>

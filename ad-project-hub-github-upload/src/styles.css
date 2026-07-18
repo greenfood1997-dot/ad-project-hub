@@ -4671,8 +4671,22 @@ main.dashboard-main {
 .personal-settings-group button:hover { background: #f8fafc; }
 .personal-settings-group button > span { gap: 9px; }
 .personal-settings-group button em { color: var(--muted); font-size: 12px; font-style: normal; }
+.personal-preference-group label { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid var(--line); border-bottom: 0; padding: 8px 13px; background: #fff; }
+.personal-preference-group label:first-of-type { border-radius: 10px 10px 0 0; }
+.personal-preference-group label:last-child { border-bottom: 1px solid var(--line); border-radius: 0 0 10px 10px; }
+.personal-preference-group label > span { display: flex; align-items: center; gap: 9px; }
+.personal-preference-group select { min-width: 126px; min-height: 36px; border: 1px solid var(--line); border-radius: 9px; padding: 0 10px; background: #fff; color: var(--text); }
 .admin-only-settings { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); }
 .admin-only-settings > strong { color: #5b4fd1; }
+
+body[data-font-size="compact"] { --user-font-adjust: 0.94; }
+body[data-font-size="standard"] { --user-font-adjust: 1; }
+body[data-font-size="large"] { --user-font-adjust: 1.08; }
+body[data-font-size] .app-shell { font-size: calc(14px * var(--user-font-adjust)); }
+body[data-font-size="compact"] .app-shell button, body[data-font-size="compact"] .app-shell input, body[data-font-size="compact"] .app-shell select { font-size: 12px; }
+body[data-font-size="large"] .app-shell button, body[data-font-size="large"] .app-shell input, body[data-font-size="large"] .app-shell select { font-size: 15px; }
+body[data-appearance="ocean"] { --brand: #2479d8; --brand-2: #43a8d8; --sky: #51b5de; }
+body[data-appearance="forest"] { --brand: #21876f; --brand-2: #4eaa78; --sky: #57b89c; }
 
 .personal-settings-logout {
   width: 100%;
