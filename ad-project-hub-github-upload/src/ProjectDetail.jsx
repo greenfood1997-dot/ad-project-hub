@@ -184,15 +184,14 @@ export default function ProjectDetail({ project, isManagement, session, files, p
 
   function primeApprovalForm(type = "reimbursement", reason = "") {
     const allowedType = approvalTypeOptions.some(([value]) => value === type) ? type : "reimbursement";
-    setForm((current) => ({
+    setApprovalForm((current) => ({
       ...current,
-      projectId: current.projectId || selected?.id || projects[0]?.id || "",
       type: allowedType,
       payee: current.payee || session.name || "",
       reason: current.reason || reason
     }));
-    setSubView(allowedType === "petty_cash" ? "项目备用金" : allowedType === "supplier_payment" ? "供应商付款" : "报销");
-    setSelectedApprovalKey("");
+    setOpenSection("approvals");
+    setLocalFocusTarget("approvals");
     onNotice(`已预填${allowedType === "petty_cash" ? "项目备用金" : allowedType === "supplier_payment" ? "供应商付款" : "报销"}申请，请补金额后提交。`);
   }
 

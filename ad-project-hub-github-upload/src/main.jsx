@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import { deployReadinessActions } from "./utils/deployReadiness.js";
+import ModuleFallback from "./ModuleFallback.jsx";
 
 const AdminShell = React.lazy(() => import("./AdminShell.jsx"));
 const ProjectDetail = React.lazy(() => import("./ProjectDetail.jsx"));
