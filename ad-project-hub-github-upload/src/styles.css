@@ -4606,6 +4606,89 @@ main.dashboard-main {
 .account-pin-dialog label span { font-size: 13px; font-weight: 700; color: #475569; }
 .account-pin-dialog input { min-height: 42px; padding: 0 12px; border: 1px solid #dbe2ea; border-radius: 10px; }
 
+.personal-settings-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
+  padding: 22px;
+}
+
+.personal-settings-head,
+.personal-settings-group button > span {
+  display: flex;
+  align-items: center;
+}
+
+.personal-settings-head {
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.personal-settings-head h2,
+.personal-settings-head span {
+  display: block;
+}
+
+.personal-settings-head span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.personal-settings-group {
+  display: grid;
+  gap: 0;
+  margin-top: 14px;
+}
+
+.personal-settings-group > strong {
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.personal-settings-group button {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  background: #fff;
+  color: var(--text);
+  padding: 10px 13px;
+  text-align: left;
+}
+
+.personal-settings-group button:first-of-type { border-radius: 10px 10px 0 0; }
+.personal-settings-group button:last-child { border-bottom: 1px solid var(--line); border-radius: 0 0 10px 10px; }
+.personal-settings-group button:only-of-type { border-radius: 10px; }
+.personal-settings-group button:hover { background: #f8fafc; }
+.personal-settings-group button > span { gap: 9px; }
+.personal-settings-group button em { color: var(--muted); font-size: 12px; font-style: normal; }
+.admin-only-settings { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); }
+.admin-only-settings > strong { color: #5b4fd1; }
+
+.personal-settings-logout {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff7f7;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
 .upload-modal {
   width: min(1120px, calc(100vw - 48px));
   inline-size: min(1120px, calc(100vw - 48px));

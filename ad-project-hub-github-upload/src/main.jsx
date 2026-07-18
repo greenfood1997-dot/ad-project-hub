@@ -1402,6 +1402,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [sendingWechatNotificationId, setSendingWechatNotificationId] = useState("");
   const [notificationLastAction, setNotificationLastAction] = useState(null);
   const [notice, setNotice] = useState("");
+  const [personalSettingsOpen, setPersonalSettingsOpen] = useState(false);
   const [pinDialogOpen, setPinDialogOpen] = useState(false);
   const [pinForm, setPinForm] = useState({ currentPin: "", newPin: "", confirmPin: "" });
 
@@ -1998,50 +1999,10 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
               </div>}
             </div>
           ))}
-          {canManageAssignments && (
-            <button
-              type="button"
-              className={`nav-admin-entry ${view === "admin" ? "active" : ""}`}
-              onClick={() => setView(isAdmin ? "admin" : "admin:assignments")}
-            >
-              <Settings2 size={18} />{isAdmin ? "后台管理" : "项目分派"}
-            </button>
-          )}
         </nav>
         <div className="integration">
           <p>{session.name} · {roleLabel(session.role)}</p>
-          <button
-            type="button"
-            className={`deploy-health ${health?.version === BUILD_VERSION ? "ok" : "warn"}`}
-            onClick={() => {
-              if (isAdmin) {
-                setView("admin:product");
-                return;
-              }
-              setNotice(health?.version === BUILD_VERSION
-                ? `当前线上版本正确：${BUILD_VERSION}`
-                : `当前线上版本可能不是最新。页面版本：${BUILD_VERSION}，服务端版本：${health?.version || "未读取"}。请重新部署或清理旧 dist。`);
-            }}
-          >
-            <CheckCircle2 size={15} />
-            <span>{health?.version === BUILD_VERSION ? "版本已更新" : "版本待确认"}</span>
-          </button>
-          <button type="button" onClick={() => {
-            if (isAdmin) {
-              setView("admin:product");
-              return;
-            }
-            setNotice(feishuConfigured ? "飞书机器人已配置，群文件会进入待确认队列。" : "飞书未配置，请联系管理员接入机器人。");
-          }}><MessageSquareText size={16} />飞书机器人</button>
-          <button type="button" onClick={() => {
-            if (isAdmin) {
-              setView("admin:product");
-              return;
-            }
-            setNotice(wechatConfigured ? "企业微信已配置，可用于通知和协同提醒。" : "企业微信未配置，请联系管理员接入。");
-          }}><MessageSquareText size={16} />企业微信</button>
-          <button type="button" onClick={() => setPinDialogOpen(true)}><LockKeyhole size={16} />修改 PIN</button>
-          <button type="button" onClick={onLogout}><LogOut size={16} />退出登录</button>
+          <button type="button" className="personal-settings-trigger" onClick={() => setPersonalSettingsOpen(true)}><Settings2 size={16} />个人设置</button>
         </div>
       </aside>
 
@@ -2061,8 +2022,6 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
               <BellRing size={16} />待办
               {systemNotifications.length > 0 && <b>{systemNotifications.length}</b>}
             </button>
-            {isAdmin && <button type="button" className="ghost" onClick={() => setView("admin")}><UserCog size={16} />成员管理</button>}
-            {isAdmin && <button type="button" className={aiConfigured ? "ghost" : "ghost warning"} onClick={() => setView("admin:ai")}><Bot size={16} />{aiConfigured ? "AI 已接入" : "接入 AI"}</button>}
             {canCreateProject && <button type="button" className="primary" onClick={() => openUpload("create-project")}><Plus size={16} />新建项目</button>}
           </div>
         </header>
@@ -2073,6 +2032,17 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           </div>
         )}
         {notice && <div className="notice-bar"><span>{notice}</span><button type="button" onClick={() => setNotice("")}>知道了</button></div>}
+        {personalSettingsOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setPersonalSettingsOpen(false)}>
+          <section className="personal-settings-dialog">
+            <div className="personal-settings-head"><div><h2>个人设置</h2><span>{session.name} · {roleLabel(session.role)}</span></div><button type="button" className="ghost" onClick={() => setPersonalSettingsOpen(false)}>关闭</button></div>
+            <div className="personal-settings-group"><strong>账号</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setPinDialogOpen(true); }}><span><LockKeyhole size={17} /><b>修改登录 PIN</b></span><em>维护自己的登录凭据</em></button></div>
+            <div className="personal-settings-group"><strong>协同</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); if (isAdmin) setView("admin:product"); else setNotice(feishuConfigured ? "飞书机器人已配置。" : "飞书未配置，请联系管理员。"); }}><span><MessageSquareText size={17} /><b>飞书机器人</b></span><em>{feishuConfigured ? "已配置" : "未配置"}</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); if (isAdmin) setView("admin:product"); else setNotice(wechatConfigured ? "企业微信已配置。" : "企业微信未配置，请联系管理员。"); }}><span><MessageSquareText size={17} /><b>企业微信</b></span><em>{wechatConfigured ? "已配置" : "未配置"}</em></button></div>
+            <div className="personal-settings-group"><strong>系统</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); if (isAdmin) setView("admin:product"); else setNotice(health?.version === BUILD_VERSION ? `当前线上版本正确：${BUILD_VERSION}` : "当前版本待管理员检查。"); }}><span><CheckCircle2 size={17} /><b>版本状态</b></span><em>{health?.version === BUILD_VERSION ? "已更新" : "待确认"}</em></button></div>
+            {isAdmin && <div className="personal-settings-group admin-only-settings"><strong>后台管理 · 仅管理员可见</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin"); }}><span><UsersRound size={17} /><b>成员管理</b></span><em>账号、角色与权限</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:assignments"); }}><span><UserCog size={17} /><b>项目分派</b></span><em>PM、销售与执行成员</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:ai"); }}><span><Bot size={17} /><b>AI 接入</b></span><em>模型与解析服务</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:product"); }}><span><Settings2 size={17} /><b>产品设置</b></span><em>机器人、存储与业务规则</em></button></div>}
+            {!isAdmin && canManageAssignments && <div className="personal-settings-group"><strong>工作权限</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:assignments"); }}><span><UserCog size={17} /><b>项目分派</b></span><em>仅开放总监分派权限</em></button></div>}
+            <button type="button" className="personal-settings-logout" onClick={onLogout}><LogOut size={17} />退出登录</button>
+          </section>
+        </div>}
         {pinDialogOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setPinDialogOpen(false)}>
           <form className="account-pin-dialog" onSubmit={changeOwnPin}>
             <div className="section-head"><div><h2>修改登录 PIN</h2><span>修改后下次登录立即使用新 PIN</span></div></div>
