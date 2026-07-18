@@ -215,7 +215,7 @@ export async function previewProjectUpload(db, body, user) {
       rows: profitBreakdown.costs.filter(([, amount]) => Number(amount || 0) > 0).map(([name, amount]) => ({
         name,
         amount,
-        status: "待入库"
+        status: costClassificationLabel(profitBreakdown.costClassifications?.find((item) => item.name === name))
       })),
       total: profitBreakdown.totalDeduction
     });
@@ -5168,7 +5168,7 @@ async function requestAiJson(ai, values, text) {
   const messages = [
     {
       role: "system",
-      content: "你是广告项目经营中台的文件解析和自动归档助手。你要把合同、报价单、执行表、排期表、供应商结算表中的关键信息归类到项目中台。只返回 JSON，不要 Markdown。字段包括 projectName, client, partyA, partyB, contract, paid, receivable, advancePayment, advanceInterest, executionCost, executionBudget, internalLabor, overhead, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, suppliers, tasks, archiveTags, confidence, missingFields, hasCostSheet。金额返回数字，日期保留原文。合同存在原价、报价合计和最终优惠总价时，contract 必须取双方最终约定的含税成交价或最终优惠总价，不得取优惠前原价；paid 只能填写文件明确说明已经实际回款的金额，付款计划不能算已回款；receivable 必须等于 contract 减 paid。遇到合同约定按季度/每季/季付/季度回款，或付款后附带承兑汇票、汇票期限、兑付周期时，必须把完整付款方式写入 paymentDue 或 summary，例如“按季度回款，项目完成并验收合格后支付6个月承兑汇票”。项目利润口径固定为：项目总金额 - 实时执行支出 - 项目垫款 - 垫款利息 - 内部人力 - 公摊费用（水电、办公室租金及其他公摊）= 项目利润。executionBudget 是项目预留预算上限，通常来自合同金额占比；执行表中的执行支出请写入 executionCost。只有文件明确是成本表、供应商结算表、费用明细表时，hasCostSheet 才为 true，并尽量返回 advancePayment、advanceInterest、executionCost、internalLabor、overhead；合同或报价单中的合同金额、服务费用、付款金额不要写入成本字段。costs 为 [科目, 金额]；suppliers 为对象数组，含 supplier,type,amount,status；tasks 为 [节点, 进度百分比]。"
+      content: "你是广告项目经营中台的文件解析和自动归档助手。你要结合文件表头、合同语义和广告行业财务常识，把合同、报价单、执行表、排期表、供应商结算表中的关键信息归类到项目中台。只返回 JSON，不要 Markdown。字段包括 projectName, client, partyA, partyB, contract, paid, receivable, advancePayment, advanceInterest, executionCost, executionBudget, internalLabor, overhead, additionalCost, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, costClassifications, suppliers, tasks, archiveTags, confidence, missingFields, hasCostSheet。金额返回数字，日期保留原文。合同存在原价、报价合计和最终优惠总价时，contract 必须取双方最终约定的含税成交价或最终优惠总价，不得取优惠前原价；paid 只能填写文件明确说明已经实际回款的金额，付款计划不能算已回款；receivable 必须等于 contract 减 paid。遇到合同约定按季度/每季/季付/季度回款，或付款后附带承兑汇票、汇票期限、兑付周期时，必须把完整付款方式写入 paymentDue 或 summary。成本表中每一个有金额的费用列都必须保留，不能因为系统没有预设字段而丢弃：costs 返回原始科目和精确金额；costClassifications 返回对象数组 {name, category, amount, reason, confidence}，category 只能为 advancePayment、advanceInterest、executionCost、internalLabor、overhead、additionalCost。结合合同约定判断投流/投放是否属于甲方资金代垫；明确属于垫款时归 advancePayment，否则归 executionCost。税费、挂靠费、中标服务费等没有固定字段但会影响利润的费用归 additionalCost。无法可靠判断时 confidence 返回 low 并在 missingFields 标记待人工确认，禁止静默忽略。项目利润口径为：项目总金额减去成本表中全部实际成本（每个科目只扣一次）；executionBudget 只是预算上限，不计入实际成本。只有文件明确是成本表、供应商结算表、费用明细表时，hasCostSheet 才为 true。suppliers 为对象数组，含 supplier,type,amount,status；tasks 为 [节点, 进度百分比]。"
     },
     {
       role: "user",
@@ -5366,7 +5366,8 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
   const executionBudget = hasCostSheet ? guessAmount(text, ["项目执行预算", "执行预算"]) || 0 : 0;
   const internalLabor = hasCostSheet ? pickTableMetric(tableMetrics, "internalLabor", guessAmount(text, ["内部人力", "人力", "人力成本", "内部工时", "工时成本"])) : 0;
   const overhead = hasCostSheet ? pickTableMetric(tableMetrics, "overhead", guessAmount(text, ["公摊费用", "公摊", "水电", "办公室租金", "房租", "租金", "其他费用", "管理公摊"])) : 0;
-  const costUsed = advancePayment + advanceInterest + executionCost + internalLabor + overhead;
+  const additionalCost = hasCostSheet ? Number(tableMetrics.additionalCost || 0) : 0;
+  const costUsed = advancePayment + advanceInterest + executionCost + internalLabor + overhead + additionalCost;
   const parties = extractParties(text);
   const servicePeriod = extractServicePeriod(text, dates);
   const client = values["客户 / 品牌"] || parties.partyA || guessText(text, ["客户", "品牌"]) || "";
@@ -5390,12 +5391,14 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
     costUsed,
     advancePayment,
     advanceInterest,
+    advanceInterestProvided: Boolean(tableMetrics?._seen?.advanceInterest),
     advanceStartDate: guessDateByLabels(text, ["垫款开始", "垫款日期", "垫款时间", "付款日期", "代垫日期"]) || "",
     advanceEndDate: guessDateByLabels(text, ["垫款结束", "归还日期", "回款日期", "结算日期", "计息截止"]) || "",
     executionCost,
     executionBudget,
     internalLabor,
     overhead,
+    additionalCost,
     hasCostSheet,
     partyA: parties.partyA,
     partyB: parties.partyB,
@@ -5408,7 +5411,8 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
       : files.length
         ? `已读取 ${files.length} 个文件，抽取到 ${amounts.length} 个金额字段、${dates.length} 个日期字段。${extractionNote ? `提取状态：${extractionNote}` : ""}`
       : "未上传文件，等待解析。",
-    costs: hasCostSheet && costUsed ? [["成本表费用", costUsed]] : [],
+    costs: hasCostSheet ? (tableMetrics.costs || []) : [],
+    costClassifications: hasCostSheet ? (tableMetrics.costClassifications || []) : [],
     suppliers,
     tasks: dates.length ? dates.slice(0, 4).map((date, index) => [`节点 ${index + 1}：${date}`, index === 0 ? 30 : 0]) : []
   }, values, files, interestRateSettings);
@@ -5439,6 +5443,7 @@ function normalizeParsedFields(parsed, values, files, interestRateSettings) {
     executionBudget: profitBreakdown?.executionBudget || 0,
     internalLabor: profitBreakdown?.internalLabor || 0,
     overhead: profitBreakdown?.overhead || 0,
+    additionalCost: profitBreakdown?.additionalCost || 0,
     projectRevenue: parseMoney(parsed.projectRevenue),
     profit: hasCostSheet ? contract - costUsed : 0,
     profitBreakdown,
@@ -5455,18 +5460,23 @@ function normalizeParsedFields(parsed, values, files, interestRateSettings) {
 
 function calculateProfitBreakdown(contract, parsed = {}, interestRateSettings) {
   const sourceCosts = Array.isArray(parsed.costs) ? parsed.costs.map(normalizePair).filter(Boolean) : [];
+  const classified = classifyCostItems(sourceCosts, parsed.costClassifications);
+  const classifiedTotal = (category) => classified
+    .filter((item) => item.category === category)
+    .reduce((sum, item) => roundCurrency(sum + item.amount), 0);
   const pick = (field, labels) => parseMoney(parsed[field]) || sumCostLabels(sourceCosts, labels);
   const executionBudgetRatio = parsePercent(parsed.executionBudgetRatio || parsed["执行预算占比"]);
   const executionBudget = parseMoney(parsed.executionBudget) || (executionBudgetRatio ? Number(contract || 0) * executionBudgetRatio : 0);
-  const advancePayment = pick("advancePayment", ["项目垫款", "垫款本金", "垫款", "代垫"]);
-  const explicitAdvanceInterest = pick("advanceInterest", ["垫款利息", "资金占用费", "利息"]);
+  const advancePayment = parseMoney(parsed.advancePayment) || classifiedTotal("advancePayment");
+  const explicitAdvanceInterest = parseMoney(parsed.advanceInterest) || classifiedTotal("advanceInterest");
   const interestMeta = calculateAdvanceInterest(advancePayment, parsed, interestRateSettings);
-  const advanceInterest = explicitAdvanceInterest || interestMeta.amount;
-  const executionCost = pick("executionCost", ["执行支出", "执行成本", "供应商", "媒介", "达人", "制作", "投放", "应结", "实付", "支出", "成本"]);
-  const internalLabor = pick("internalLabor", ["内部人力", "人力成本", "人力", "内部工时", "工时"]);
-  const overhead = pick("overhead", ["公摊费用", "公摊", "水电", "办公室租金", "房租", "租金", "其他费用", "管理公摊"]);
-  const totalDeduction = advancePayment + advanceInterest + executionCost + internalLabor + overhead;
-  const profit = Number(contract || 0) - totalDeduction;
+  const advanceInterest = parsed.advanceInterestProvided ? explicitAdvanceInterest : (explicitAdvanceInterest || interestMeta.amount);
+  const executionCost = parseMoney(parsed.executionCost) || classifiedTotal("executionCost");
+  const internalLabor = parseMoney(parsed.internalLabor) || classifiedTotal("internalLabor");
+  const overhead = parseMoney(parsed.overhead) || classifiedTotal("overhead");
+  const additionalCost = parseMoney(parsed.additionalCost) || classifiedTotal("additionalCost");
+  const totalDeduction = roundCurrency(advancePayment + advanceInterest + executionCost + internalLabor + overhead + additionalCost);
+  const profit = roundCurrency(Number(contract || 0) - totalDeduction);
   return {
     advancePayment,
     advanceInterest,
@@ -5474,21 +5484,81 @@ function calculateProfitBreakdown(contract, parsed = {}, interestRateSettings) {
     executionBudget,
     internalLabor,
     overhead,
+    additionalCost,
     totalDeduction,
     profit,
     margin: profitMargin(contract, profit),
     interestRate: interestMeta.annualRate,
     interestDays: interestMeta.days,
     interestSource: explicitAdvanceInterest ? "成本表填写" : interestMeta.source,
-    costs: [
-      ["项目垫款", advancePayment],
-      ["垫款利息", advanceInterest],
-      ["项目执行总成本", executionCost],
-      ["项目执行预算上限", executionBudget],
-      ["内部人力", internalLabor],
-      ["公摊费用", overhead]
-    ]
+    costClassifications: classified,
+    costs: sourceCosts.length ? sourceCosts : [
+      ["项目垫款", advancePayment], ["垫款利息", advanceInterest],
+      ["项目执行总成本", executionCost], ["内部人力", internalLabor],
+      ["公摊费用", overhead], ["其他项目成本", additionalCost]
+    ].filter(([, amount]) => amount)
   };
+}
+
+function roundCurrency(value) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function classifyCostItems(costs = [], supplied = []) {
+  const suppliedByName = new Map((Array.isArray(supplied) ? supplied : []).map((item) => [String(item?.name || "").trim(), item]));
+  return costs.map(([rawName, rawAmount]) => {
+    const name = String(rawName || "未命名成本").trim();
+    const amount = parseMoney(rawAmount);
+    const provided = suppliedByName.get(name);
+    const category = normalizeCostCategory(provided?.category) || costCategoryForLabel(name);
+    return {
+      name,
+      amount,
+      category,
+      reason: provided?.reason || costCategoryReason(name, category),
+      confidence: /其他|未知|杂项/.test(name) && !provided?.category ? "low" : (provided?.confidence || "high")
+    };
+  }).filter((item) => item.amount > 0);
+}
+
+function normalizeCostCategory(value) {
+  const allowed = ["advancePayment", "advanceInterest", "executionCost", "internalLabor", "overhead", "additionalCost"];
+  return allowed.includes(value) ? value : "";
+}
+
+function costCategoryForLabel(label) {
+  const text = String(label || "").replace(/\s+/g, "");
+  if (/垫款利息|资金占用|贷款利息|利息/.test(text)) return "advanceInterest";
+  if (/投流|投放|加热|推流|垫款|代垫/.test(text)) return "advancePayment";
+  if (/人力|人工|工时|薪酬/.test(text)) return "internalLabor";
+  if (/公摊|水电|办公室|房租|租金|管理费/.test(text)) return "overhead";
+  if (/税费|税金|挂靠|中标服务|招标服务|投标方案|服务费/.test(text)) return "additionalCost";
+  if (/日常支出|刷单|制作|拍摄|供应商|媒介|达人|执行|差旅|交通|餐饮|物料/.test(text)) return "executionCost";
+  return "additionalCost";
+}
+
+function costCategoryReason(name, category) {
+  const labels = {
+    advancePayment: "根据费用名称及合同资金语义归入项目垫款",
+    advanceInterest: "费用属于项目垫款或资金占用产生的利息",
+    executionCost: "费用直接用于项目执行",
+    internalLabor: "费用属于项目内部人力投入",
+    overhead: "费用属于办公室或管理公摊",
+    additionalCost: "表格存在实际金额且会影响项目利润，保留为独立成本科目"
+  };
+  return `${name}：${labels[category]}`;
+}
+
+function costClassificationLabel(item = {}) {
+  const labels = {
+    advancePayment: "自动归类：项目垫款",
+    advanceInterest: "自动归类：垫款利息",
+    executionCost: "自动归类：执行成本",
+    internalLabor: "自动归类：内部人力",
+    overhead: "自动归类：公摊费用",
+    additionalCost: "自动新增：其他项目成本"
+  };
+  return `${labels[item.category] || "待确认归类"}${item.confidence === "low" ? "（需复核）" : ""}`;
 }
 
 function parseTableLines(files = []) {
@@ -6253,36 +6323,47 @@ function extractCostTableMetrics(text) {
     const cells = line.split(/,|\t/).map((cell) => cell.trim());
     if (cells.length < 2) continue;
     const headerIndexes = cells
-      .map((cell, index) => ({ key: costColumnKey(cell), index }))
+      .map((cell, index) => ({ ...costColumnDefinition(cell), index, label: cell }))
       .filter((item) => item.key);
 
     if (headerIndexes.length >= 2) {
       headers = headerIndexes;
-      headers.forEach(({ key }) => {
+      headers.forEach(({ key, label, category }) => {
         totals._seen[key] = true;
         totals[key] = totals[key] || 0;
+        if (category) {
+          totals._labels = totals._labels || {};
+          totals._labels[label] = { category, amount: totals._labels[label]?.amount || 0 };
+        }
       });
       continue;
     }
 
     if (!headers.length) continue;
-    for (const { key, index } of headers) {
+    for (const { key, index, label, category } of headers) {
       const amount = parseMoney(cells[index]);
-      if (amount) totals[key] += amount;
+      if (amount) {
+        totals[key] = roundCurrency(totals[key] + amount);
+        if (category && totals._labels?.[label]) totals._labels[label].amount = roundCurrency(totals._labels[label].amount + amount);
+      }
     }
   }
+
+  totals.costs = Object.entries(totals._labels || {}).filter(([, item]) => item.amount > 0).map(([name, item]) => [name, item.amount]);
+  totals.costClassifications = Object.entries(totals._labels || {}).filter(([, item]) => item.amount > 0).map(([name, item]) => ({
+    name, amount: item.amount, category: item.category, reason: costCategoryReason(name, item.category), confidence: "high"
+  }));
 
   return totals;
 }
 
-function costColumnKey(label) {
+function costColumnDefinition(label) {
   const text = String(label || "").replace(/\s+/g, "");
-  if (/收入|项目收入|确认收入/.test(text)) return "projectRevenue";
-  if (/执行支出|执行成本|项目执行/.test(text)) return "executionCost";
-  if (/人力|内部人力|人力成本/.test(text)) return "internalLabor";
-  if (/垫款|项目垫款|代垫/.test(text)) return "advancePayment";
-  if (/公摊|公摊费用|水电|租金|办公室/.test(text)) return "overhead";
-  return "";
+  if (/收入|项目收入|确认收入/.test(text)) return { key: "projectRevenue", category: "" };
+  if (/利润|账号|账户|名称|季度|合计|总数/.test(text)) return { key: "", category: "" };
+  const category = costCategoryForLabel(text);
+  if (!/(支出|费用|成本|人力|人工|工时|垫款|利息|投流|投放|刷单|税|挂靠|中标|投标|公摊|水电|房租|租金|制作|拍摄|供应商|媒介|达人)/.test(text)) return { key: "", category: "" };
+  return { key: category, category };
 }
 
 function tableMetricValue(metrics, key) {
