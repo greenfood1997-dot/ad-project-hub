@@ -2584,6 +2584,54 @@ async function sendFeishuChatMessage(settings = {}, chatId, text) {
   return { messageId: payload.data?.message_id || "", receiveId: chatId, raw: payload.data || {} };
 }
 
+async function sendFeishuProjectChoiceCard(settings = {}, chatId, projects = []) {
+  if (!chatId) throw new Error("缺少飞书群 Chat ID");
+  const token = await getFeishuTenantAccessToken(settings);
+  const card = {
+    config: { wide_screen_mode: true },
+    header: { template: "blue", title: { tag: "plain_text", content: "请选择这个群对应的 OA 项目" } },
+    elements: [
+      { tag: "div", text: { tag: "lark_md", content: "选择后会自动保存群绑定，以后群里的项目文件会进入该项目的 OA 待确认队列。" } },
+      ...projects.slice(0, 8).map((project) => ({
+        tag: "action",
+        actions: [{ tag: "button", type: "primary", text: { tag: "plain_text", content: project.name }, value: { action: "bind_project", projectId: project.id, chatId } }]
+      }))
+    ]
+  };
+  const res = await fetch("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id", {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8", authorization: `Bearer ${token}` },
+    body: JSON.stringify({ receive_id: chatId, msg_type: "interactive", content: JSON.stringify(card) })
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload.code !== 0) throw new Error(`飞书项目选择卡片发送失败：${payload.msg || res.status}`);
+  return payload.data || {};
+}
+
+function feishuProjectsForUser(db, user) {
+  if (!user) return [];
+  if (["shareholder", "admin"].includes(user.role)) return db.projects || [];
+  const identity = [user.name, user.email].filter(Boolean).map((item) => String(item).toLowerCase());
+  return (db.projects || []).filter((project) => {
+    const participants = [project.owner, project.pm, project.sales, ...(project.members || [])].filter(Boolean).map((item) => String(item).toLowerCase());
+    return participants.some((participant) => identity.some((item) => participant === item || participant.includes(item) || item.includes(participant)));
+  });
+}
+
+async function handleFeishuProjectChoice(db, payload, user) {
+  const value = payload.action?.value || payload.event?.action?.value || {};
+  if (value.action !== "bind_project") return null;
+  const operatorId = payload.operator?.open_id || payload.event?.operator?.open_id || payload.open_id || "";
+  const operator = (db.users || []).find((item) => item.feishuOpenId === operatorId || item.feishuUserId === operatorId);
+  if (!operator) throw new Error("未识别点击人的 OA 身份，请管理员先同步飞书通讯录");
+  const project = feishuProjectsForUser(db, operator).find((item) => item.id === value.projectId);
+  if (!project) throw new Error("你没有权限把这个群绑定到所选项目");
+  const chatId = value.chatId || payload.context?.open_chat_id || payload.event?.context?.open_chat_id || "";
+  const binding = saveFeishuProjectBinding(db, { chatId, projectId: project.id, chatName: payload.context?.open_chat_id || "飞书项目群" }, operator);
+  await sendFeishuChatMessage(db.settings?.feishu || {}, chatId, `已绑定到「${project.name}」。以后这个群发送的项目文件会自动进入该项目的 OA 待确认队列。请重新发送刚才的文件。`);
+  return { binding, reply: `已绑定到「${project.name}」` };
+}
+
 export async function sendSystemNotificationToFeishu(db, body, user) {
   const id = String(body?.id || "").trim();
   const item = (db.systemNotifications || []).find((notice) => notice.id === id);
@@ -4724,6 +4772,8 @@ export function saveFeishuProjectBinding(db, body, user) {
 
 export async function handleFeishuEvent(db, payload, user = { id: "system", name: "飞书机器人", role: "system" }) {
   if (payload?.challenge) return { challenge: payload.challenge };
+  const cardAction = await handleFeishuProjectChoice(db, payload, user);
+  if (cardAction) return cardAction;
   const token = db.settings?.feishu?.verificationToken;
   if (token && payload?.token && payload.token !== token) throw new Error("飞书 Verification Token 不匹配");
   const event = normalizeFeishuEvent(payload);
@@ -4816,8 +4866,15 @@ export async function handleFeishuEvent(db, payload, user = { id: "system", name
     reply = `已把消息记录到「${project.name}」项目动态。`;
   } else {
     status = "待匹配项目";
-    reply = "已收到，但还没匹配到项目。请在后台把飞书群 Chat ID 绑定项目，或在消息里写清项目/客户名称。";
-    shouldReply = true;
+    const candidates = feishuProjectsForUser(db, sender);
+    if (event.chatId && candidates.length) {
+      await sendFeishuProjectChoiceCard(db.settings?.feishu || {}, event.chatId, candidates);
+      reply = "已发送项目选择卡片，请群成员选择项目完成永久绑定。";
+      shouldReply = false;
+    } else {
+      reply = "已收到，但还没匹配到项目。请先同步飞书通讯录，或让管理员在 OA 后台绑定项目群。";
+      shouldReply = true;
+    }
   }
 
   const record = {
