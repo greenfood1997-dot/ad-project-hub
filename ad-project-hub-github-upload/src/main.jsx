@@ -1382,6 +1382,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [activeSubView, setActiveSubView] = useState("项目大盘");
   const [openNav, setOpenNav] = useState({ dashboard: true });
   const [selectedId, setSelectedId] = useState("");
+  const [expandedProjectId, setExpandedProjectId] = useState("");
   const [projectFocus, setProjectFocus] = useState("");
   const [supplierFocusName, setSupplierFocusName] = useState("");
   const [clientFocusName, setClientFocusName] = useState("");
@@ -1403,6 +1404,10 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [notice, setNotice] = useState("");
   const [pinDialogOpen, setPinDialogOpen] = useState(false);
   const [pinForm, setPinForm] = useState({ currentPin: "", newPin: "", confirmPin: "" });
+
+  useEffect(() => {
+    if (projectFocus && selectedId) setExpandedProjectId(selectedId);
+  }, [projectFocus, selectedId]);
   const [changingPin, setChangingPin] = useState(false);
   const [exportingProjectLedger, setExportingProjectLedger] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -2362,9 +2367,12 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
               {visibleProjects.map((project) => (
                 <button
                   type="button"
-                  className={`project-row ${project.id === selectedId ? "selected" : ""}`}
+                  className={`project-row ${project.id === expandedProjectId ? "selected" : ""}`}
                   key={project.id}
-                  onClick={() => setSelectedId(project.id)}
+                  onClick={() => {
+                    setSelectedId(project.id);
+                    setExpandedProjectId((current) => current === project.id ? "" : project.id);
+                  }}
                 >
                   <div>
                     <strong>{project.name}</strong>
@@ -2373,13 +2381,13 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
                   <div className="row-right">
                     <RiskBadge risk={project.risk} />
                     <span>{project.progress}%</span>
-                    <ChevronRight size={16} />
+                    <ChevronRight className={project.id === expandedProjectId ? "expanded" : ""} size={16} />
                   </div>
                 </button>
               ))}
             </div>
 
-            <React.Suspense fallback={<ModuleFallback title="项目详情加载中" variant="detail" />}><ProjectDetail
+            {expandedProjectId === selected?.id && <React.Suspense fallback={<ModuleFallback title="项目详情加载中" variant="detail" />}><ProjectDetail
               project={selected}
               isManagement={isManagement}
               session={session}
@@ -2421,7 +2429,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
               }}
               onDone={() => loadState()}
               onNotice={setNotice}
-            /></React.Suspense>
+            /></React.Suspense>}
           </section>
         )}
         {uploadOpen && <UploadDialog

@@ -5551,6 +5551,14 @@ select {
   margin-top: 0;
 }
 
+.project-accordion-workspace .project-row svg {
+  transition: transform 0.2s ease;
+}
+
+.project-accordion-workspace .project-row svg.expanded {
+  transform: rotate(90deg);
+}
+
 @media (min-width: 1181px) {
   .topbar > :first-child {
     flex: 0 0 280px;

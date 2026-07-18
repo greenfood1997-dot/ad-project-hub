@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import {
   Bot,
   CheckCircle2,
@@ -119,6 +119,11 @@ export default function DashboardContent({
   setUploadOpen,
   setUploadTargetProject
 }) {
+  const [expandedProjectId, setExpandedProjectId] = useState("");
+
+  useEffect(() => {
+    if (projectFocus && selectedId) setExpandedProjectId(selectedId);
+  }, [projectFocus, selectedId]);
   const setApprovalFocusId = onSetApprovalFocusId;
   const setActiveView = onSetActiveView;
 
@@ -410,9 +415,12 @@ export default function DashboardContent({
             {visibleProjects.map((project) => (
               <button
                 type="button"
-                className={`project-row ${project.id === selectedId ? "selected" : ""}`}
+                className={`project-row ${project.id === expandedProjectId ? "selected" : ""}`}
                 key={project.id}
-                onClick={() => onSetSelectedId(project.id)}
+                onClick={() => {
+                  onSetSelectedId(project.id);
+                  setExpandedProjectId((current) => current === project.id ? "" : project.id);
+                }}
               >
                 <div>
                   <strong>{project.name}</strong>
@@ -421,13 +429,13 @@ export default function DashboardContent({
                 <div className="row-right">
                   <RiskBadge risk={project.risk} />
                   <span>{project.progress}%</span>
-                  <ChevronRight size={16} />
+                  <ChevronRight className={project.id === expandedProjectId ? "expanded" : ""} size={16} />
                 </div>
               </button>
             ))}
           </div>
 
-          <ProjectDetail
+          {expandedProjectId === selected?.id && <ProjectDetail
             project={selected}
             isManagement={isManagement}
             session={session}
@@ -469,7 +477,7 @@ export default function DashboardContent({
             }}
             onDone={() => loadState()}
             onNotice={onSetNotice}
-          />
+          />}
         </section>
       )}
 
