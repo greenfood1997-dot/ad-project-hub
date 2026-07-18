@@ -5501,17 +5501,27 @@ select {
 
 @media (min-width: 1900px) {
   .topbar .actions {
+    display: flex;
     flex-wrap: nowrap;
   }
 }
 
 @media (min-width: 1181px) and (max-width: 1899px) {
   .topbar .actions {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 10px;
   }
 
   .topbar .search {
-    flex-basis: 100%;
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .topbar .actions > button {
+    width: 100%;
+    justify-content: center;
   }
 }
 

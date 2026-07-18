@@ -748,3 +748,80 @@ button.material-card:hover {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+.project-detail-section {
+  overflow: hidden;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.project-detail-section.open {
+  border-color: #c7d7ff;
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.07);
+}
+
+.project-detail-section-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 0;
+  background: #fff;
+  color: var(--text);
+  padding: 16px 18px;
+  text-align: left;
+}
+
+.project-detail-section-trigger:hover,
+.project-detail-section.open > .project-detail-section-trigger {
+  background: #f7f9ff;
+}
+
+.project-detail-section-trigger > span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.project-detail-section-trigger strong {
+  font-size: var(--font-section-title);
+  line-height: 1.4;
+}
+
+.project-detail-section-trigger em {
+  color: var(--muted);
+  font-size: var(--font-caption);
+  line-height: 1.5;
+  font-style: normal;
+}
+
+.project-detail-section-trigger svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform 0.2s ease;
+}
+
+.project-detail-section.open > .project-detail-section-trigger svg {
+  transform: rotate(180deg);
+  color: var(--brand);
+}
+
+.project-detail-section-body {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding: 18px;
+}
+
+.project-detail-section-body > :first-child {
+  margin-top: 0;
+}
+
+@media (max-width: 720px) {
+  .project-detail-section-trigger,
+  .project-detail-section-body {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}

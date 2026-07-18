@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useRef, useState } from "react";
-import { Bot, CheckCircle2, FileSpreadsheet, MessageSquareText, UploadCloud } from "lucide-react";
+import { Bot, CheckCircle2, ChevronDown, FileSpreadsheet, MessageSquareText, UploadCloud } from "lucide-react";
 import { apiRequest, uploadedFileKey } from "./utils/api.js";
 import { downloadCsv, fileSize, money } from "./utils/format.js";
 import { activityLedgerRows, paymentLedgerRows, taskLedgerRows } from "./utils/ledgerRows.js";
@@ -27,6 +27,17 @@ function Mini({ label, value }) {
 
 function RiskBadge({ risk }) {
   return <b className={`risk risk-${risk}`}>{risk}风险</b>;
+}
+
+function ProjectDetailSection({ id, title, description, openSection, setOpenSection, children }) {
+  const open = openSection === id;
+  return <section className={`project-detail-section ${open ? "open" : ""}`}>
+    <button type="button" className="project-detail-section-trigger" aria-expanded={open} onClick={() => setOpenSection(open ? "" : id)}>
+      <span><strong>{title}</strong><em>{description}</em></span>
+      <ChevronDown size={20} />
+    </button>
+    {open && <div className="project-detail-section-body">{children}</div>}
+  </section>;
 }
 
 export default function ProjectDetail({ project, isManagement, session, files, parseJobs, approvals, suppliers = [], clients = [], payments = [], collectionScripts = [], feishuPendingFiles = [], comments, alertUpdates = [], auditLogs, focusTarget = "", onFocusConsumed, onOpenApproval, onOpenSupplier, onOpenClient, onDone, onNotice }) {
@@ -76,6 +87,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
   const [approvalForm, setApprovalForm] = useState({ type: "reimbursement", amount: "", payee: "", reason: "" });
   const [submittingApproval, setSubmittingApproval] = useState(false);
   const [withdrawingProjectApprovalId, setWithdrawingProjectApprovalId] = useState("");
+  const [openSection, setOpenSection] = useState("overview");
   const approvalTypeOptions = approvalTypeOptionsFor(session);
   const focusRefs = {
     advice: useRef(null),
@@ -100,17 +112,25 @@ export default function ProjectDetail({ project, isManagement, session, files, p
       paymentDue: project.paymentDue || ""
     });
     setEditing(false);
+    setOpenSection("overview");
   }, [project.id]);
 
   useEffect(() => {
     const target = localFocusTarget || focusTarget;
-    if (!target || !focusRefs[target]?.current) return;
+    if (!target) return;
+    const sectionByTarget = { advice: "overview", client: "overview", progress: "progress", files: "files", payments: "payments", approvals: "approvals", activity: "activity" };
+    const nextSection = sectionByTarget[target];
+    if (nextSection && openSection !== nextSection) {
+      setOpenSection(nextSection);
+      return;
+    }
+    if (!focusRefs[target]?.current) return;
     window.setTimeout(() => {
       focusRefs[target]?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       if (localFocusTarget) setLocalFocusTarget("");
       if (focusTarget) onFocusConsumed?.();
     }, 120);
-  }, [focusTarget, localFocusTarget, project.id]);
+  }, [focusTarget, localFocusTarget, openSection, project.id]);
 
   const projectFiles = [
     ...(project.files || []).map((file) => ({ ...file, source: "project" })),
@@ -188,6 +208,8 @@ export default function ProjectDetail({ project, isManagement, session, files, p
 
   function goProjectSection(target, message) {
     if (!target || !focusRefs[target]) return;
+    const sectionByTarget = { advice: "overview", client: "overview", progress: "progress", files: "files", payments: "payments", approvals: "approvals", activity: "activity" };
+    if (sectionByTarget[target]) setOpenSection(sectionByTarget[target]);
     setLocalFocusTarget(target);
     if (message) onNotice(message);
   }
@@ -818,6 +840,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
 
   return (
     <div className="detail">
+      <ProjectDetailSection id="overview" title="项目概览" description="客户交接、关键财务与 AI 建议" openSection={openSection} setOpenSection={setOpenSection}>
       <Suspense fallback={<ModuleFallback title="项目概览加载中" variant="detail" />}>
         <ProjectOverviewPanel
           project={project}
@@ -844,7 +867,9 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           onRunAdviceAction={runAdviceAction}
         />
       </Suspense>
+      </ProjectDetailSection>
 
+      <ProjectDetailSection id="command" title="项目工作台" description="材料状态、行动项与快捷操作" openSection={openSection} setOpenSection={setOpenSection}>
       <Suspense fallback={<ModuleFallback title="项目工作台加载中" variant="detail" />}>
         <ProjectCommandPanel
           materialStatus={materialStatus}
@@ -861,7 +886,9 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           onHandleActionItem={handleActionItem}
         />
       </Suspense>
+      </ProjectDetailSection>
 
+      <ProjectDetailSection id="progress" title="进度与成本" description="任务节点、执行成本与预算使用" openSection={openSection} setOpenSection={setOpenSection}>
       <Suspense fallback={<ModuleFallback title="项目进度加载中" variant="detail" />}>
         <ProjectProgressCostPanel
           progressRef={focusRefs.progress}
@@ -888,7 +915,9 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           onPrepareCostAction={prepareCostAction}
         />
       </Suspense>
+      </ProjectDetailSection>
 
+      <ProjectDetailSection id="files" title="文件与 AI 解析" description={`${uniqueFiles.length} 个文件 · ${projectJobs.length} 个解析任务`} openSection={openSection} setOpenSection={setOpenSection}>
       <Suspense fallback={<ModuleFallback title="文件与 AI 解析加载中" variant="detail" />}>
         <ProjectFilesPanel
           filesRef={focusRefs.files}
@@ -919,7 +948,9 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           onRefreshParseJob={refreshParseJob}
         />
       </Suspense>
+      </ProjectDetailSection>
 
+      <ProjectDetailSection id="approvals" title="审批与成本记录" description={`${projectApprovals.length} 条项目审批`} openSection={openSection} setOpenSection={setOpenSection}>
       <Suspense fallback={<ModuleFallback title="审批与成本记录加载中" variant="detail" />}>
         <ProjectApprovalPanel
           approvalRef={focusRefs.approvals}
@@ -940,7 +971,9 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           onPrepareProjectApproval={prepareProjectApproval}
         />
       </Suspense>
+      </ProjectDetailSection>
 
+      <ProjectDetailSection id="payments" title="回款与催收" description={`${projectPayments.length} 条回款记录 · 待回款 ${money(project.receivable || 0)}`} openSection={openSection} setOpenSection={setOpenSection}>
       <Suspense fallback={<ModuleFallback title="回款记录加载中" variant="detail" />}>
         <ProjectPaymentPanel
           paymentRef={focusRefs.payments}
@@ -972,7 +1005,9 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           onUploadVerification={() => setQuickUploadType("verification-sheet")}
         />
       </Suspense>
+      </ProjectDetailSection>
 
+      <ProjectDetailSection id="suppliers" title="供应商结算" description={`${projectSuppliers.length} 条项目供应商记录`} openSection={openSection} setOpenSection={setOpenSection}>
       <Suspense fallback={<ModuleFallback title="供应商结算加载中" variant="detail" />}>
         <ProjectSupplierPanel
           projectSuppliers={projectSuppliers}
@@ -983,7 +1018,9 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           onUploadCostSheet={() => setQuickUploadType("cost-sheet")}
         />
       </Suspense>
+      </ProjectDetailSection>
 
+      <ProjectDetailSection id="activity" title="项目动态" description="评论、审计与最近操作记录" openSection={openSection} setOpenSection={setOpenSection}>
       <Suspense fallback={<ModuleFallback title="项目动态加载中" variant="detail" />}>
         <ProjectActivityPanel
           activityRef={focusRefs.activity}
@@ -1005,6 +1042,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           onPrepareActivityTemplate={prepareActivityTemplate}
         />
       </Suspense>
+      </ProjectDetailSection>
 
       <div className="timeline">
         <div>
