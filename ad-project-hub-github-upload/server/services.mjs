@@ -4553,9 +4553,25 @@ function normalizeFeishuEvent(payload = {}) {
     senderId: sender.sender_id?.open_id || sender.sender_id?.user_id || sender.open_id || payload.senderId || "",
     senderName: sender.sender_name || sender.name || payload.senderName || "",
     messageType,
+    mentionedBot: Array.isArray(message.mentions) && message.mentions.length > 0 || /@_user_|@机器人|@项目助手/.test(normalizeFeishuTextContent(message)),
     text: normalizeFeishuTextContent(message),
     fileName: normalizeFeishuFileName(message),
     fileKey: message.file_key || message.fileKey || payload.fileKey || ""
+  };
+}
+
+function feishuScopedSnapshot(db, user) {
+  const projects = feishuProjectsForUser(db, user);
+  const projectIds = new Set(projects.map((project) => project.id));
+  const projectNames = new Set(projects.map((project) => project.name));
+  return {
+    ...db,
+    projects,
+    approvals: (db.approvals || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)),
+    payments: (db.payments || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)),
+    files: (db.files || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName)),
+    comments: (db.comments || []).filter((item) => projectNames.has(item.project)),
+    settings: db.settings || {}
   };
 }
 
@@ -4854,16 +4870,27 @@ export async function handleFeishuEvent(db, payload, user = { id: "system", name
       shouldReply = true;
     }
   } else if (project) {
-    db.comments.unshift({
-      project: project.name,
-      body: `飞书群消息：${text || "无文本内容"}`,
-      mentions: "",
-      user: sender.name || event.senderName || "飞书成员",
-      at
-    });
-    action = "record-comment";
-    status = "已记录到项目动态";
-    reply = `已把消息记录到「${project.name}」项目动态。`;
+    if (event.mentionedBot && sender?.id && sender.role !== "bot") {
+      const cleanQuery = text.replace(/@_user_\w+|@机器人|@项目助手/g, "").trim();
+      const aiResult = await answerAiAssistant(db, { query: cleanQuery, selectedProjectId: project.id }, sender, feishuScopedSnapshot(db, sender));
+      action = aiResult.pendingAction ? "ai-confirmation-required" : "ai-answer";
+      status = aiResult.pendingAction ? "待确认" : "AI 已回答";
+      reply = aiResult.pendingAction
+        ? `${aiResult.reply}\n\n这项操作会修改 OA 数据，请到 OA 的 AI 助手中确认提交。`
+        : aiResult.reply;
+      shouldReply = true;
+    } else {
+      db.comments.unshift({
+        project: project.name,
+        body: `飞书群消息：${text || "无文本内容"}`,
+        mentions: "",
+        user: sender.name || event.senderName || "飞书成员",
+        at
+      });
+      action = "record-comment";
+      status = "已记录到项目动态";
+      reply = `已把消息记录到「${project.name}」项目动态。`;
+    }
   } else {
     status = "待匹配项目";
     const candidates = feishuProjectsForUser(db, sender);
