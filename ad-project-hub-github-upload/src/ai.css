@@ -3,8 +3,10 @@
   grid-template-columns: minmax(0, 1fr) 330px;
   gap: 22px;
   align-items: start;
-  height: calc(100vh - 174px);
+  flex: 1 1 auto;
+  height: auto;
   min-height: 0;
+  overflow: hidden;
 }
 
 .overview-layout.ai-collapsed {

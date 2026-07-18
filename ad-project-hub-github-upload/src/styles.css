@@ -2777,7 +2777,15 @@ main {
 }
 
 main.dashboard-main {
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+}
+
+main.dashboard-main > .topbar,
+main.dashboard-main > .production-risk-bar,
+main.dashboard-main > .notice-bar {
+  flex: 0 0 auto;
 }
 
 .overview-layout {
@@ -2785,8 +2793,10 @@ main.dashboard-main {
   grid-template-columns: minmax(0, 1fr) 330px;
   gap: 22px;
   align-items: start;
-  height: calc(100vh - 174px);
+  flex: 1 1 auto;
+  height: auto;
   min-height: 0;
+  overflow: hidden;
 }
 
 .overview-layout.ai-collapsed {
