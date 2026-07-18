@@ -1,8 +1,19 @@
 .collection-workbench {
   display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: 18px;
   align-items: start;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.collection-workbench > *,
+.collection-generator,
+.collection-generator label,
+.collection-generator input,
+.collection-generator select {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .collection-workbench .wide-feature {
@@ -165,7 +176,8 @@
 }
 
 .collection-script-card pre {
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
