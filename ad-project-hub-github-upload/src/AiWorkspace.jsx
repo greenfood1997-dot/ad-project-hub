@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Bot, ChevronRight, FileText, Minimize2, UploadCloud } from "lucide-react";
+import { Bot, ChevronRight, FileText, PanelRightClose, UploadCloud } from "lucide-react";
 import { apiRequest, fileToPayload } from "./utils/api.js";
 import { money } from "./utils/format.js";
 import { canCreateProjectRole, canSeeManagement, canUseCollectionRole } from "./utils/permissions.js";
@@ -436,8 +436,7 @@ export function DashboardAiPanel({ session, projects, approvals = [], settings =
           <span>{roleLabel(session.role)} · AI 项目伙伴</span>
         </div>
         <button type="button" className="ai-panel-toggle" onClick={onToggleCollapsed} aria-label="收起 AI 助手">
-          <Minimize2 size={15} />
-          <span>收起</span>
+          <PanelRightClose size={17} />
         </button>
       </div>
 
@@ -447,6 +446,12 @@ export function DashboardAiPanel({ session, projects, approvals = [], settings =
           <strong>{weatherText}</strong>
         </div>
         <Bot size={18} />
+      </div>
+
+      <div className="ai-project-context">
+        <span>当前项目</span>
+        <strong>{selected?.name || "等待第一个项目"}</strong>
+        <span>{projects.length ? `${projects.length} 个可见项目 · 当前 ${projectHealth(selected).label}` : "可先拖入合同创建项目；票据将在项目建立后归档"}</span>
       </div>
 
       <div className="ai-quick-tags">
@@ -472,11 +477,6 @@ export function DashboardAiPanel({ session, projects, approvals = [], settings =
             {message.navActions && <AiNavigationActions actions={message.navActions} onOpen={onNavigate} />}
           </div>
         ))}
-      </div>
-
-      <div className="ai-project-context">
-        <strong>{selected?.name || "等待第一个项目"}</strong>
-        <span>{projects.length ? `${projects.length} 个可见项目 · 当前 ${projectHealth(selected).label}` : "可先拖入合同创建项目；票据将在项目建立后归档"}</span>
       </div>
 
       <div className="ai-compose">

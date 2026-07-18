@@ -48,7 +48,7 @@
 .ai-activity-panel {
   position: relative;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto;
   align-self: stretch;
   height: 100%;
   min-height: 0;
@@ -61,7 +61,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .ai-profile > div:nth-child(2) {
@@ -101,10 +101,13 @@
 
 .ai-panel-toggle {
   flex: 0 0 auto;
-  min-height: 34px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 12px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 10px;
 }
 
 .ai-collapsed-button {
@@ -149,6 +152,9 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px 12px;
 }
 
 .ai-activity-head span,
@@ -161,16 +167,17 @@
 
 .ai-activity-head strong {
   display: block;
-  margin-top: 5px;
+  margin-top: 3px;
   color: #1f2937;
   font-size: 13px;
   line-height: 1.45;
 }
 
 .ai-quick-tags {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin: 18px 0;
+  margin: 12px 0;
 }
 
 .ai-quick-tags button {
@@ -178,8 +185,8 @@
   border-radius: 8px;
   background: #f3f5fb;
   color: #586174;
-  min-height: 32px;
-  padding: 0 12px;
+  min-height: 38px;
+  padding: 0 10px;
   font-size: 12px;
   font-weight: 700;
 }
@@ -193,20 +200,20 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
-  margin-bottom: 14px;
+  min-height: 54px;
+  margin-bottom: 12px;
   border: 1px dashed #c7d2fe;
   border-radius: 8px;
   background: #f8fbff;
   color: #526176;
-  padding: 0 12px;
+  padding: 9px 12px;
   font-size: 12px;
 }
 
 .ai-feed {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   min-height: 0;
   overflow: auto;
   padding-right: 3px;
@@ -288,14 +295,18 @@
 }
 
 .ai-project-context {
-  margin: 18px 0 12px;
-  border-top: 1px solid #eef1f7;
-  padding-top: 14px;
+  display: grid;
+  gap: 3px;
+  margin: 12px 0 0;
+  border: 1px solid #e7ebf3;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 10px 12px;
 }
 
 .ai-project-context strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 1px;
   color: #1f2937;
   font-size: 13px;
   line-height: 1.4;

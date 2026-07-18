@@ -22,6 +22,7 @@ import {
   Minimize2,
   MessageSquareText,
   MessagesSquare,
+  PanelRightClose,
   Plus,
   Search,
   Settings2,
@@ -2909,8 +2910,7 @@ function DashboardAiPanel({ session, projects, approvals = [], settings = {}, st
           <span>{roleLabel(session.role)} · AI 项目伙伴</span>
         </div>
         <button type="button" className="ai-panel-toggle" onClick={onToggleCollapsed} aria-label="收起 AI 助手">
-          <Minimize2 size={15} />
-          <span>收起</span>
+          <PanelRightClose size={17} />
         </button>
       </div>
 
@@ -2920,6 +2920,12 @@ function DashboardAiPanel({ session, projects, approvals = [], settings = {}, st
           <strong>{weatherText}</strong>
         </div>
         <Bot size={18} />
+      </div>
+
+      <div className="ai-project-context">
+        <span>当前项目</span>
+        <strong>{selected.name}</strong>
+        <span>{projects.length} 个可见项目 · 当前 {projectHealth(selected).label}</span>
       </div>
 
       <div className="ai-quick-tags">
@@ -2943,11 +2949,6 @@ function DashboardAiPanel({ session, projects, approvals = [], settings = {}, st
             {message.navActions && <AiNavigationActions actions={message.navActions} onOpen={onNavigate} />}
           </div>
         ))}
-      </div>
-
-      <div className="ai-project-context">
-        <strong>{selected.name}</strong>
-        <span>{projects.length} 个可见项目 · 当前 {projectHealth(selected).label}</span>
       </div>
 
       <div className="ai-compose">

@@ -1909,6 +1909,59 @@ label span {
   }
 }
 
+/* Dashboard AI panel: profile -> status -> project -> actions -> upload -> chat. */
+.ai-activity-panel:not(.collapsed) {
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto;
+}
+
+.ai-activity-panel .ai-profile {
+  margin-bottom: 14px;
+}
+
+.ai-activity-panel .ai-panel-toggle {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  border-radius: 10px;
+  padding: 0;
+}
+
+.ai-activity-panel .ai-activity-head {
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
+.ai-activity-panel .ai-project-context {
+  display: grid;
+  gap: 3px;
+  margin: 12px 0 0;
+  border: 1px solid #e7ebf3;
+  border-radius: 8px;
+  background: #fbfcff;
+  padding: 10px 12px;
+}
+
+.ai-activity-panel .ai-quick-tags {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.ai-activity-panel .ai-quick-tags button {
+  justify-content: center;
+  min-height: 38px;
+}
+
+.ai-activity-panel .ai-drop-hint {
+  min-height: 54px;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+}
+
 /* Soft creative workspace theme */
 :root {
   --bg: #f7f6ff;
