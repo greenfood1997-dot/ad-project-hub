@@ -140,8 +140,10 @@ export async function readPostgresDb() {
   ]);
 
   const settings = { ...defaultDb.settings };
+  let uploadPreviews = [];
   settingsRows.rows.forEach((row) => {
-    settings[row.type] = row.values;
+    if (row.type === "__uploadPreviews") uploadPreviews = Array.isArray(row.values?.items) ? row.values.items : [];
+    else settings[row.type] = row.values;
   });
   const fileUploads = groupProjectFileUploads(files.rows);
 
@@ -166,7 +168,8 @@ export async function readPostgresDb() {
     parseJobs: parseJobs.rows,
     alertUpdates: alertUpdates.rows,
     comments: comments.rows,
-    auditLogs: auditLogs.rows
+    auditLogs: auditLogs.rows,
+    uploadPreviews
   };
 }
 
@@ -342,6 +345,12 @@ export async function writePostgresDbFromSnapshot(snapshot) {
           [type, values, values.savedBy || null, values.savedAt || new Date().toISOString()]
         );
       }
+    }
+    if (Array.isArray(snapshot.uploadPreviews) && snapshot.uploadPreviews.length) {
+      await db.query(
+        "insert into settings (type, config_values, saved_by, saved_at) values ($1, $2, $3, $4)",
+        ["__uploadPreviews", { items: snapshot.uploadPreviews }, null, new Date().toISOString()]
+      );
     }
 
     for (const project of snapshot.projects || []) {

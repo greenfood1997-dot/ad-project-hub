@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 const postgres = await readFile(new URL("../server/db-postgres.mjs", import.meta.url), "utf8");
 const schema = await readFile(new URL("../db/schema.postgres.sql", import.meta.url), "utf8");
+const services = await readFile(new URL("../server/services.mjs", import.meta.url), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -38,6 +39,8 @@ assert(postgres.includes("insert into project_files (") && postgres.includes("lo
 assert(postgres.includes("groupProjectFileUploads(files.rows)") && postgres.includes("files: fileUploads"), "Postgres read should restore global upload batches, not only flat file rows");
 assert(postgres.includes("collectProjectFilesForPostgres(snapshot)") && postgres.includes("for (const upload of snapshot.files || [])"), "Postgres write should persist global upload ledger files as project files");
 assert(postgres.includes("fileIdentity(merged, project.id, project.name)") && postgres.includes("if (seen.has(key)) return"), "Postgres file persistence should dedupe project files and upload ledger files");
+assert(postgres.includes('row.type === "__uploadPreviews"') && postgres.includes('"__uploadPreviews", { items: snapshot.uploadPreviews }'), "Postgres should persist upload previews under an internal settings key and keep them out of public settings");
+assert(services.includes("db.uploadPreviews") && services.includes("body.previewId"), "project confirmation should reuse the persisted preview record");
 assert(postgres.includes('voided_at as "voidedAt"') && postgres.includes('void_reason as "voidReason"'), "Postgres read should restore voided payment metadata");
 assert(postgres.includes("insert into payments (") && postgres.includes("voided_by_name") && postgres.includes("void_reason"), "Postgres write should persist voided payment metadata");
 assert(postgres.includes('idempotency_key as "idempotencyKey"') && postgres.includes("item.idempotencyKey || null"), "Postgres should round-trip financial idempotency keys");
