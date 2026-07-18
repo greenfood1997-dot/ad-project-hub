@@ -2569,6 +2569,21 @@ async function sendFeishuTextMessage(settings = {}, openId, text) {
   return { messageId: payload.data?.message_id || "", receiveId: openId, raw: payload.data || {} };
 }
 
+async function sendFeishuChatMessage(settings = {}, chatId, text) {
+  if (!chatId) throw new Error("缺少飞书群 Chat ID");
+  const mockSend = settings.mockSend === true || settings.mockSend === "true";
+  if (mockSend) return { mocked: true, receiveId: chatId, messageId: `mock-chat-${Date.now()}` };
+  const token = await getFeishuTenantAccessToken(settings);
+  const res = await fetch("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id", {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8", authorization: `Bearer ${token}` },
+    body: JSON.stringify({ receive_id: chatId, msg_type: "text", content: JSON.stringify({ text }) })
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload.code !== 0) throw new Error(`飞书群回复失败：${payload.msg || res.status}`);
+  return { messageId: payload.data?.message_id || "", receiveId: chatId, raw: payload.data || {} };
+}
+
 export async function sendSystemNotificationToFeishu(db, body, user) {
   const id = String(body?.id || "").trim();
   const item = (db.systemNotifications || []).find((notice) => notice.id === id);
@@ -4812,6 +4827,14 @@ export async function handleFeishuEvent(db, payload, user = { id: "system", name
   };
   db.feishuEvents = db.feishuEvents || [];
   db.feishuEvents.unshift(record);
+  if (event.chatId) {
+    try {
+      const delivery = await sendFeishuChatMessage(db.settings?.feishu || {}, event.chatId, reply);
+      record.replyDelivery = { ok: true, messageId: delivery.messageId, mocked: Boolean(delivery.mocked), sentAt: new Date().toISOString() };
+    } catch (error) {
+      record.replyDelivery = { ok: false, error: error.message, sentAt: new Date().toISOString() };
+    }
+  }
   db.auditLogs.unshift({
     type: "feishu",
     target: project?.name || event.chatName || event.chatId || "飞书事件",
