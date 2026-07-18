@@ -793,6 +793,15 @@ export async function handleApi(req, res) {
     return;
   }
 
+  // Feishu calls this endpoint from its own servers, so it must precede OA login authentication.
+  if (req.method === "POST" && url.pathname === "/api/integrations/feishu/events") {
+    const body = await readBody(req);
+    const data = await mutateDb(async (db) => handleFeishuEvent(db, body, { id: "feishu-bot", name: "飞书机器人", role: "bot" }));
+    if (data.challenge) sendJson(res, 200, { challenge: data.challenge });
+    else sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
   const user = getCurrentUser(req, snapshot);
   if (!user) {
     sendJson(res, 401, { ok: false, error: "登录已失效，请重新登录" });
@@ -1079,14 +1088,6 @@ export async function handleApi(req, res) {
     const body = await readBody(req);
     const data = await mutateDb((db) => saveFeishuProjectBinding(db, body, user));
     sendJson(res, 200, { ok: true, data });
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/integrations/feishu/events") {
-    const body = await readBody(req);
-    const data = await mutateDb(async (db) => handleFeishuEvent(db, body, { id: "feishu-bot", name: "飞书机器人", role: "bot" }));
-    if (data.challenge) sendJson(res, 200, { challenge: data.challenge });
-    else sendJson(res, 200, { ok: true, data });
     return;
   }
 
