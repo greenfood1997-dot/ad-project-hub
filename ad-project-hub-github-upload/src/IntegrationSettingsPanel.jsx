@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 function SettingsSection({ id, title, description, openSection, setOpenSection, children }) {
@@ -34,9 +34,19 @@ export default function IntegrationSettingsPanel({
   automaticNotificationStatus,
   onSaveTypedSetting,
   onSyncFeishuContacts,
-  onTestStorageUpload
+  onTestStorageUpload,
+  focusFeishuField
 }) {
   const [openSection, setOpenSection] = useState("feishu");
+  useEffect(() => {
+    if (!focusFeishuField?.field) return;
+    setOpenSection("feishu");
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const input = document.querySelector(`[data-feishu-field="${focusFeishuField.field}"]`);
+      input?.scrollIntoView({ behavior: "smooth", block: "center" });
+      input?.focus({ preventScroll: true });
+    }));
+  }, [focusFeishuField]);
   return (
     <div className="integration-settings-accordion">
       <SettingsSection id="feishu" title="飞书机器人" description="通讯录、事件订阅、文件接收与消息发送" openSection={openSection} setOpenSection={setOpenSection}>
@@ -57,7 +67,7 @@ export default function IntegrationSettingsPanel({
             <span>{label}</span>
             {key === "mockContactsJson"
               ? <textarea rows={4} value={feishuSettings[key]} onChange={(event) => setFeishuSettings({ ...feishuSettings, [key]: event.target.value })} placeholder='[{"name":"张三","email":"zhangsan@company.com","open_id":"ou_xxx","department":"项目部"}]' />
-              : <input value={feishuSettings[key]} onChange={(event) => setFeishuSettings({ ...feishuSettings, [key]: event.target.value })} />}
+              : <input data-feishu-field={key} type={key === "appSecret" || key === "verificationToken" ? "password" : "text"} value={feishuSettings[key]} onChange={(event) => setFeishuSettings({ ...feishuSettings, [key]: event.target.value })} />}
           </label>
         ))}
         <label>

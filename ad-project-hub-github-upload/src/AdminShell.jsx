@@ -94,6 +94,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
     mockFileType: "",
   });
   const [feishuSyncResult, setFeishuSyncResult] = useState(null);
+  const [focusFeishuField, setFocusFeishuField] = useState(null);
   const [wechatSettings, setWechatSettings] = useState({
     webhookUrl: "",
     corpId: "",
@@ -820,6 +821,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
                 automaticNotificationStatus={automaticNotificationStatus}
                 onSaveTypedSetting={saveTypedSetting}
                 onSyncFeishuContacts={syncFeishuContacts}
+                focusFeishuField={focusFeishuField}
                 onTestStorageUpload={testStorageUpload}
               />
             </Suspense>
@@ -836,6 +838,10 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
                 pendingFiles={feishuPendingFiles}
                 notifications={systemNotifications}
                 onReload={loadFeishuBindings}
+                onConfigureField={(field) => {
+                  setFocusFeishuField({ field, requestedAt: Date.now() });
+                  setOpenProductSection("collaboration");
+                }}
               />
             </Suspense>
           </ProductSettingsSection>

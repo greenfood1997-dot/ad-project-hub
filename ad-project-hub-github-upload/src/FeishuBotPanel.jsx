@@ -4,7 +4,7 @@ import { downloadCsv } from "./utils/format.js";
 import { feishuPendingLedgerRows } from "./utils/ledgerRows.js";
 import "./feishu.css";
 
-export default function FeishuBotPanel({ api, settings = {}, projects = [], members = [], bindings = [], events = [], pendingFiles = [], notifications = [], onReload }) {
+export default function FeishuBotPanel({ api, settings = {}, projects = [], members = [], bindings = [], events = [], pendingFiles = [], notifications = [], onReload, onConfigureField }) {
   const [form, setForm] = useState({
     projectId: projects[0]?.id || "",
     chatId: "",
@@ -218,7 +218,8 @@ export default function FeishuBotPanel({ api, settings = {}, projects = [], memb
   async function handleSetupCheckAction(item) {
     if (!item) return;
     if (["App ID", "App Secret", "Verification Token"].includes(item.label)) {
-      pushOperation("请在上方飞书配置表单补齐对应字段，然后点击保存飞书配置。", "warn");
+      const field = item.label === "App ID" ? "appId" : item.label === "App Secret" ? "appSecret" : "verificationToken";
+      onConfigureField?.(field);
       return;
     }
     if (item.label === "事件订阅 URL") {
