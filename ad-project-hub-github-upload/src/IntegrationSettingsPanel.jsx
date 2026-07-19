@@ -51,12 +51,14 @@ export default function IntegrationSettingsPanel({
     <div className="integration-settings-accordion">
       <SettingsSection id="feishu" title="飞书机器人" description="通讯录、事件订阅、文件接收与消息发送" openSection={openSection} setOpenSection={setOpenSection}>
         <p className="settings-next-step">{settingNextStep("feishu")}</p>
+        <p className="settings-next-step">自动开户需要飞书通讯录成员与部门只读权限；飞书登录需要“获取用户身份”权限，并在飞书安全设置中登记 OA 回调地址。敏感 OA 角色仍只能由管理员手工授予。</p>
         {[
           ["appId", "App ID"],
           ["appSecret", "App Secret"],
           ["eventUrl", "事件订阅 URL"],
           ["verificationToken", "Verification Token"],
           ["tenantAccessToken", "Tenant Access Token（可选）"],
+          ["oauthRedirectUrl", "飞书登录回调地址（可选）"],
           ["mockSend", "模拟发送通知（true/false）"],
           ["mockContactsJson", "测试通讯录 JSON（可选）"],
           ["mockFileBase64", "测试文件 Base64（可选）"],
@@ -70,6 +72,7 @@ export default function IntegrationSettingsPanel({
               : <input data-feishu-field={key} type={key === "appSecret" || key === "verificationToken" ? "password" : "text"} value={feishuSettings[key]} onChange={(event) => setFeishuSettings({ ...feishuSettings, [key]: event.target.value })} />}
           </label>
         ))}
+        <label className="setting-check"><input type="checkbox" checked={feishuSettings.hrAuthoritative === true || feishuSettings.hrAuthoritative === "true"} onChange={(event) => setFeishuSettings({ ...feishuSettings, hrAuthoritative: event.target.checked })} /><span>将飞书人事作为 OA 人员权威源（入职开户、离职停用）</span></label>
         <label>
           <span>OA 事件地址</span>
           <input value="/api/integrations/feishu/events" readOnly />

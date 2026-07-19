@@ -1,6 +1,7 @@
 import { mutateDb, readDb } from "./db.mjs";
 import { scanSystemNotifications } from "./services.mjs";
 import { purgeExpiredCloudRecycleBin } from "./cloud-recycle-service.mjs";
+import { syncAuthoritativeFeishuUsers } from "./feishu-identity-service.mjs";
 
 const DEFAULT_INTERVAL_MS = 15 * 60 * 1000;
 const MIN_INTERVAL_MS = 60 * 1000;
@@ -35,10 +36,12 @@ async function runScheduledScan() {
   try {
     const result = await mutateDb(async (db) => ({
       notifications: scanSystemNotifications(db, { id: "system-scheduler", name: "后台定时巡检" }),
-      recycle: await purgeExpiredCloudRecycleBin(db)
+      recycle: await purgeExpiredCloudRecycleBin(db),
+      feishuHr: await syncAuthoritativeFeishuUsers(db)
     }));
     status.activeNotifications = (result.notifications || []).filter((item) => item.status === "待处理").length;
     status.recycle = result.recycle;
+    status.feishuHr = result.feishuHr;
     status.runCount += 1;
     status.lastError = "";
   } catch (error) {

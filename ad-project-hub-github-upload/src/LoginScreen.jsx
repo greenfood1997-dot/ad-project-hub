@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { LockKeyhole, Mail } from "lucide-react";
+import { LockKeyhole, Mail, MessageSquare } from "lucide-react";
 import "./login.css";
 
 export default function LoginScreen({ onLogin, sessionKey }) {
@@ -7,6 +7,18 @@ export default function LoginScreen({ onLogin, sessionKey }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const encoded = params.get("feishu_session");
+    if (encoded) {
+      try {
+        const data = JSON.parse(decodeURIComponent(escape(atob(encoded.replace(/-/g, "+").replace(/_/g, "/")))));
+        localStorage.setItem(sessionKey, JSON.stringify(data));
+        window.history.replaceState({}, "", window.location.pathname + window.location.search);
+        onLogin(data);
+      } catch { setError("飞书登录结果无法读取，请重试"); }
+    } else if (params.get("feishu_error")) setError(params.get("feishu_error"));
+  }, [onLogin, sessionKey]);
 
   async function submit(event) {
     event.preventDefault();
@@ -51,6 +63,8 @@ export default function LoginScreen({ onLogin, sessionKey }) {
           {error && <p className="form-error">{error}</p>}
           <button type="submit" className="primary" disabled={loading}>{loading ? "登录中" : "进入系统"}</button>
         </form>
+        <div className="login-divider"><span>或</span></div>
+        <a className="feishu-login-button" href="/api/auth/feishu"><MessageSquare size={17} />使用飞书账号登录</a>
         <p className="login-hint">请使用管理员分配的内部账号登录。</p>
       </section>
     </main>

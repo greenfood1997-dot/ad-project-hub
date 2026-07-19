@@ -50,3 +50,8 @@
   font-size: 13px;
   line-height: 1.5;
 }
+
+.login-divider { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: #94a3b8; font-size: 12px; }
+.login-divider::before, .login-divider::after { content: ""; flex: 1; height: 1px; background: #e2e8f0; }
+.feishu-login-button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; border: 1px solid #3370ff; border-radius: 9px; color: #245bdb; font-weight: 700; text-decoration: none; }
+.feishu-login-button:hover { background: #f2f6ff; }

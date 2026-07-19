@@ -102,6 +102,8 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
     mockFileBase64: "",
     mockFileName: "",
     mockFileType: "",
+    oauthRedirectUrl: "",
+    hrAuthoritative: false,
   });
   const [feishuSyncResult, setFeishuSyncResult] = useState(null);
   const [focusFeishuField, setFocusFeishuField] = useState(null);

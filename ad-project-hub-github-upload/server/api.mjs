@@ -5,6 +5,7 @@ import { getSchedulerStatus, reloadSystemScheduler } from "./scheduler.mjs";
 import { objectStorageReady, resolveStorageSettings } from "./storage-settings.mjs";
 import { compensationOverview, generateLaborAllocation, saveCompensationMember, saveProjectDividend } from "./compensation-service.mjs";
 import { listCloudRecycleBin, restoreRecycledProject } from "./cloud-recycle-service.mjs";
+import { exchangeFeishuLoginCode, feishuLoginUrl, upsertFeishuIdentity } from "./feishu-identity-service.mjs";
 import {
   addComment,
   actOnApproval,
@@ -758,6 +759,33 @@ export async function handleApi(req, res) {
   }
 
   const snapshot = await readDb();
+
+  if (req.method === "GET" && url.pathname === "/api/auth/feishu") {
+    try {
+      const origin = `${req.headers["x-forwarded-proto"] || "http"}://${req.headers["x-forwarded-host"] || req.headers.host}`;
+      res.writeHead(302, { location: feishuLoginUrl(snapshot.settings?.feishu || {}, origin) });
+      res.end();
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: error.message });
+    }
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/auth/feishu/callback") {
+    try {
+      const contact = await exchangeFeishuLoginCode(snapshot.settings?.feishu || {}, url.searchParams.get("code") || "");
+      const account = await mutateDb((db) => upsertFeishuIdentity(db, contact, "飞书授权登录").member);
+      if (account.status === "disabled") throw new Error("该员工账号已停用");
+      const session = { ...publicUser(account), token: issueAuthToken(account) };
+      // Keep the OA session in the URL fragment so it is never sent in subsequent HTTP requests or proxy logs.
+      res.writeHead(302, { location: `/#feishu_session=${encodeURIComponent(Buffer.from(JSON.stringify(session)).toString("base64url"))}` });
+      res.end();
+    } catch (error) {
+      res.writeHead(302, { location: `/#feishu_error=${encodeURIComponent(error.message)}` });
+      res.end();
+    }
+    return;
+  }
 
   if (req.method === "POST" && url.pathname === "/api/auth/login") {
     const body = await readBody(req);
