@@ -21,6 +21,7 @@ import {
   Mail,
   Minimize2,
   MessageSquareText,
+  MessageSquare,
   MessagesSquare,
   PanelRightClose,
   Palette,
@@ -7007,6 +7008,24 @@ function LoginScreen({ onLogin }) {
   const [resetToken, setResetToken] = useState("");
   const [newPin, setNewPin] = useState("");
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const encoded = params.get("feishu_session");
+    if (encoded) {
+      try {
+        const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/");
+        const data = JSON.parse(decodeURIComponent(escape(atob(normalized))));
+        localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+        window.history.replaceState({}, "", window.location.pathname + window.location.search);
+        onLogin(data);
+      } catch {
+        setError("飞书登录结果无法读取，请重新扫码登录");
+      }
+    } else if (params.get("feishu_error")) {
+      setError(params.get("feishu_error"));
+    }
+  }, [onLogin]);
+
   async function submit(event) {
     event.preventDefault();
     setLoading(true);
@@ -7053,8 +7072,9 @@ function LoginScreen({ onLogin }) {
           {resetToken && <p className="login-hint">这是临时 PIN，请先设置新的 6-12 位数字 PIN。</p>}
           {!resetToken && <>
           <label>
-            <span>邮箱</span>
-            <div className="input-row"><Mail size={16} /><input value={email} onChange={(event) => setEmail(event.target.value)} /></div>
+            <span>账号名</span>
+            <div className="input-row"><Mail size={16} /><input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="例如 linquan" autoComplete="username" /></div>
+            <small className="login-field-help">直接输入名字拼音，系统会自动补全 @feishu.local</small>
           </label>
           </>}
           <label>
@@ -7064,7 +7084,9 @@ function LoginScreen({ onLogin }) {
           {error && <p className="form-error">{error}</p>}
           <button type="submit" className="primary" disabled={loading}>{loading ? "处理中" : resetToken ? "保存新 PIN 并进入系统" : "进入系统"}</button>
         </form>
-        <p className="login-hint">请使用管理员分配的内部账号登录。</p>
+        <div className="login-divider"><span>或</span></div>
+        <a className="feishu-login-button" href="/api/auth/feishu"><MessageSquare size={17} />使用飞书扫码登录</a>
+        <p className="login-hint">可以输入 OA 账号名和 PIN，也可以直接使用飞书授权登录。</p>
       </section>
     </main>
   );

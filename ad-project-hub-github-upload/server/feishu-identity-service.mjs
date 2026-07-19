@@ -9,6 +9,8 @@ function nextUserId() {
 }
 
 function normalizeContact(raw = {}, department = "") {
+  const loginName = String(raw.en_name || raw.username || raw.user_id || raw.userId || "")
+    .trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "").slice(0, 64);
   return {
     name: String(raw.name || raw.en_name || raw.nickname || raw.user_id || raw.open_id || "").trim(),
     email: normalizeEmail(raw.email || raw.enterprise_email || ""),
@@ -16,6 +18,7 @@ function normalizeContact(raw = {}, department = "") {
     feishuOpenId: String(raw.open_id || raw.openId || "").trim(),
     feishuUserId: String(raw.user_id || raw.userId || "").trim(),
     status: raw.status?.is_activated === false || raw.status?.is_resigned ? "disabled" : "active"
+    ,loginName
   };
 }
 
@@ -51,7 +54,7 @@ export function upsertFeishuIdentity(db, contact, actor = "飞书人事同步") 
   const at = new Date().toISOString();
   const member = existing || { id: nextUserId(), role: "member", createdAt: at };
   member.name = contact.name || member.name || contact.email || contact.feishuOpenId;
-  member.email = contact.email || member.email || `${contact.feishuUserId || contact.feishuOpenId}@feishu.local`;
+  member.email = contact.email || member.email || `${contact.loginName || contact.feishuUserId || contact.feishuOpenId}@feishu.local`;
   member.department = contact.department || member.department || "";
   member.feishuOpenId = contact.feishuOpenId || member.feishuOpenId || "";
   member.feishuUserId = contact.feishuUserId || member.feishuUserId || "";

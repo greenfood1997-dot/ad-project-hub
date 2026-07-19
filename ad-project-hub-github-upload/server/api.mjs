@@ -168,6 +168,11 @@ function normalizeEmail(email = "") {
   return String(email).trim().toLowerCase();
 }
 
+function normalizeLoginAccount(value = "") {
+  const account = normalizeEmail(value);
+  return account && !account.includes("@") ? `${account}@feishu.local` : account;
+}
+
 function nextUserId(db) {
   return `u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -794,7 +799,7 @@ export async function handleApi(req, res) {
 
   if (req.method === "POST" && url.pathname === "/api/auth/login") {
     const body = await readBody(req);
-    const email = normalizeEmail(body.email);
+    const email = normalizeLoginAccount(body.email || body.account);
     const pin = String(body.pin || "");
     const limitKey = loginLimitKey(req, email);
     if (isLoginLimited(limitKey)) {
