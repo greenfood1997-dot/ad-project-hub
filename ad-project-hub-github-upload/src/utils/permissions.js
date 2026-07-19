@@ -9,7 +9,8 @@ export const roleOptions = [
   ["viewer", "只读成员"],
 ];
 
-export const managementRoles = ["shareholder", "admin", "director", "finance"];
+// Company-wide operating and cash data is limited to owners, admins, and finance.
+export const managementRoles = ["shareholder", "admin", "finance"];
 export const adminRoles = ["shareholder", "admin"];
 export const assignmentManageRoles = ["shareholder", "admin", "director"];
 export const projectCreateRoles = ["shareholder", "admin", "director", "pm", "sales"];

@@ -62,6 +62,7 @@ import {
 } from "./services.mjs";
 
 const OWNER_ROLES = ["shareholder"];
+const COCKPIT_ROLES = ["shareholder", "admin", "finance"];
 const ADMIN_ROLES = ["shareholder", "admin"];
 const DIRECTOR_ROLES = ["shareholder", "admin", "director"];
 const MANAGEMENT_ROLES = ["shareholder", "admin", "director", "finance"];
@@ -645,10 +646,12 @@ function visibleSystemNotificationsFor(db, user) {
   const projectIds = new Set(projects.map((project) => project.id));
   const projectNames = new Set(projects.map((project) => project.name));
   const adminLike = ADMIN_ROLES.includes(actor.role);
-  const managementLike = MANAGEMENT_ROLES.includes(actor.role);
+  const managementLike = COCKPIT_ROLES.includes(actor.role);
   return (db.systemNotifications || [])
     .filter((item) => {
       if (item.status !== "待处理") return false;
+      const companyFinanceNotice = item.type === "company-cash-runway" || item.actionView === "management:cash";
+      if (companyFinanceNotice) return COCKPIT_ROLES.includes(actor.role);
       if (adminLike) return true;
       const hasProjectAccess = item.projectId ? projectIds.has(item.projectId) : projectNames.has(item.projectName);
       if (hasProjectAccess) return true;
@@ -661,6 +664,7 @@ function visibleSystemNotificationsFor(db, user) {
 
 function canAccessSystemNotification(db, user, item = {}) {
   const actor = ensureMemberFields(user);
+  if (item.type === "company-cash-runway" || item.actionView === "management:cash") return COCKPIT_ROLES.includes(actor.role);
   if (ADMIN_ROLES.includes(actor.role)) return true;
   const projects = visibleProjectsForUser(db, actor);
   const projectIds = new Set(projects.map((project) => project.id));
@@ -668,7 +672,7 @@ function canAccessSystemNotification(db, user, item = {}) {
   if (item.projectId || item.projectName) {
     return item.projectId ? projectIds.has(item.projectId) : projectNames.has(item.projectName);
   }
-  return MANAGEMENT_ROLES.includes(actor.role) && Array.isArray(item.recipients) && item.recipients.includes(actor.role);
+  return COCKPIT_ROLES.includes(actor.role) && Array.isArray(item.recipients) && item.recipients.includes(actor.role);
 }
 
 function scopedSettings(settings = {}, user) {
@@ -690,7 +694,7 @@ function scopedSettings(settings = {}, user) {
       configured: Boolean(settings.aiService["API Key"])
     };
   }
-  if (MANAGEMENT_ROLES.includes(user.role)) {
+  if (COCKPIT_ROLES.includes(user.role)) {
     result.companyFinance = settings.companyFinance || settings.product?.companyFinance || {};
   }
   if (ADMIN_ROLES.includes(user.role)) {
@@ -1076,7 +1080,7 @@ export async function handleApi(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/company-finance") {
-    if (!requireRole(user, MANAGEMENT_ROLES, res)) return;
+    if (!requireRole(user, COCKPIT_ROLES, res)) return;
     const body = await readBody(req);
     const data = await mutateDb((db) => saveCompanyFinance(db, body.values || body, ensureMemberFields(user)));
     sendJson(res, 200, { ok: true, data });

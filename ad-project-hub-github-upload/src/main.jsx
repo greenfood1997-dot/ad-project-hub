@@ -36,6 +36,7 @@ import {
 import "./styles.css";
 import { deployReadinessActions } from "./utils/deployReadiness.js";
 import { useLocalWeather } from "./utils/localWeather.js";
+import { canSeeManagement } from "./utils/permissions.js";
 import ModuleFallback from "./ModuleFallback.jsx";
 
 const AdminShell = React.lazy(() => import("./AdminShell.jsx"));
@@ -54,7 +55,6 @@ const roleOptions = [
   ["viewer", "只读成员"],
 ];
 
-const managementRoles = ["shareholder", "admin", "director", "finance"];
 const projectCreateRoles = ["shareholder", "admin", "director", "pm", "sales"];
 const projectWriteRoles = ["shareholder", "admin", "director", "pm", "sales"];
 const collectionRoles = ["shareholder", "admin", "director", "pm", "sales", "finance"];
@@ -65,10 +65,6 @@ const expenseCategoryValues = expenseCategories.filter((item) => item !== "自�
 
 function roleLabel(role) {
   return roleOptions.find(([value]) => value === role)?.[1] || role;
-}
-
-function canSeeManagement(session) {
-  return managementRoles.includes(session?.role);
 }
 
 function canCreateProjectRole(session) {

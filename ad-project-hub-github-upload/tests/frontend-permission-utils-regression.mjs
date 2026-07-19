@@ -24,6 +24,9 @@ assert.equal(roleLabel("member"), "普通成员");
 assert.equal(roleLabel("unknown"), "unknown");
 assert.equal(roleOptions.some(([role]) => role === "finance"), true);
 
+assert.equal(canSeeManagement({ role: "shareholder" }), true);
+assert.equal(canSeeManagement({ role: "admin" }), true);
+assert.equal(canSeeManagement({ role: "director" }), false);
 assert.equal(canSeeManagement({ role: "finance" }), true);
 assert.equal(canSeeManagement({ role: "member" }), false);
 assert.equal(canUseAdminRole({ role: "admin" }), true);
