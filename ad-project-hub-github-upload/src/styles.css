@@ -1512,7 +1512,7 @@ label span {
 
 .member-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 92px 78px 72px 72px;
+  grid-template-columns: minmax(180px, 1fr) 92px 78px 72px 72px 64px;
   align-items: center;
   gap: 10px;
   min-height: 64px;
@@ -1529,6 +1529,18 @@ label span {
 .member-table .section-head span {
   color: #66758a;
   font-size: 13px;
+}
+
+.member-delete-button {
+  min-width: 64px;
+  color: #b42318;
+  border-color: #f1c1bc;
+  background: #fff;
+}
+
+.member-delete-button:hover:not(:disabled) {
+  border-color: #dc776d;
+  background: #fff5f4;
 }
 
 .member-sync-status {

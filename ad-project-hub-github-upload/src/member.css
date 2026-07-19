@@ -1,6 +1,6 @@
 .member-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 92px 78px 72px 72px;
+  grid-template-columns: minmax(180px, 1fr) 92px 78px 72px 72px 64px;
   align-items: center;
   gap: 10px;
   min-height: 64px;
@@ -17,8 +17,15 @@
 }
 
 .member-delete-button {
-  min-width: 72px;
-  padding: 10px 14px;
+  min-width: 64px;
+  color: #b42318;
+  border-color: #f1c1bc;
+  background: #fff;
+}
+
+.member-delete-button:hover:not(:disabled) {
+  border-color: #dc776d;
+  background: #fff5f4;
 }
 
 .member-row strong,

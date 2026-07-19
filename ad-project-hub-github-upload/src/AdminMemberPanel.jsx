@@ -65,7 +65,7 @@ export default function AdminMemberPanel({
             <b className={`status-pill ${member.status}`}>{member.status === "disabled" ? "已停用" : "启用中"}</b>
             <button type="button" className="ghost" aria-pressed={editingId === member.id} disabled={savingMember || togglingMemberId === member.id || deletingMemberId === member.id} onClick={() => onEdit(member)}>{editingId === member.id ? "编辑中" : "编辑"}</button>
             <button type="button" className="ghost" disabled={togglingMemberId === member.id || deletingMemberId === member.id} onClick={() => onToggle(member)}>{togglingMemberId === member.id ? "处理中" : member.status === "disabled" ? "启用" : "停用"}</button>
-            <button type="button" className="danger-button member-delete-button" disabled={deletingMemberId === member.id || togglingMemberId === member.id} onClick={() => onDelete(member)}>{deletingMemberId === member.id ? "删除中" : "删除"}</button>
+            <button type="button" className="ghost member-delete-button" disabled={deletingMemberId === member.id || togglingMemberId === member.id} onClick={() => onDelete(member)}>{deletingMemberId === member.id ? "删除中" : "删除"}</button>
           </div>
         ))}
       </div>

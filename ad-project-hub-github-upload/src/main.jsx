@@ -7716,7 +7716,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
                 <b className={`status-pill ${member.status}`}>{member.status === "disabled" ? "已停用" : "启用中"}</b>
                 <button type="button" className="ghost" disabled={savingMember || togglingMemberId === member.id || deletingMemberId === member.id} onClick={() => edit(member)}>编辑</button>
                 <button type="button" className="ghost" disabled={togglingMemberId === member.id || deletingMemberId === member.id} onClick={() => toggle(member)}>{togglingMemberId === member.id ? "处理中" : member.status === "disabled" ? "启用" : "停用"}</button>
-                <button type="button" className="danger-button member-delete-button" disabled={deletingMemberId === member.id || togglingMemberId === member.id} onClick={() => removeMember(member)}>{deletingMemberId === member.id ? "删除中" : "删除"}</button>
+                <button type="button" className="ghost member-delete-button" disabled={deletingMemberId === member.id || togglingMemberId === member.id} onClick={() => removeMember(member)}>{deletingMemberId === member.id ? "删除中" : "删除"}</button>
               </div>
             ))}
           </div>
