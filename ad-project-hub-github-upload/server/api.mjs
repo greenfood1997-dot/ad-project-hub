@@ -274,7 +274,12 @@ function currentMemberBlockers(db, member) {
     }
   }
 
-  for (const binding of settingMembers(db)) {
+  const activeProjects = db.projects || [];
+  const bindingHasActiveProject = (binding) => activeProjects.some((project) => (
+    (binding.projectId && binding.projectId === project.id)
+    || (!binding.projectId && binding.project && binding.project === project.name)
+  ));
+  for (const binding of settingMembers(db).filter(bindingHasActiveProject)) {
     if (matches(binding.userId) || matches(binding.contact) || matches(binding.email) || matches(binding.name)) {
       blockers.push(`项目“${binding.project || binding.projectName || "未命名项目"}”的当前分派`);
     }
@@ -311,6 +316,13 @@ function deleteMember(db, body, actor) {
   if (member.id === actor.id) throw new Error("不能删除当前登录账号");
   const blockers = currentMemberBlockers(db, member);
   if (blockers.length) throw new Error(`该成员仍在使用：${blockers.slice(0, 3).join("、")}${blockers.length > 3 ? `等 ${blockers.length} 处` : ""}。请先解除这些当前绑定`);
+  if (db.settings?.members?.items) {
+    const projects = db.projects || [];
+    db.settings.members.items = db.settings.members.items.filter((binding) => projects.some((project) => (
+      (binding.projectId && binding.projectId === project.id)
+      || (!binding.projectId && binding.project && binding.project === project.name)
+    )));
+  }
   detachDeletedMemberHistory(db, member.id);
   db.users.splice(index, 1);
   db.auditLogs.unshift({

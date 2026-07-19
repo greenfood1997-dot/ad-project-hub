@@ -4,12 +4,13 @@ import { listCloudRecycleBin, restoreRecycledProject } from "../server/cloud-rec
 
 const project = { id: "P-RECYCLE", name: "回收站测试项目", files: [{ id: "f1", name: "合同.pdf", storagePath: "hub/f1.pdf", storageProvider: "s3-compatible" }] };
 const db = {
-  settings: {}, projects: [project], parseJobs: [], files: [], suppliers: [], payments: [], approvals: [], collectionScripts: [], comments: [], alertUpdates: [], systemNotifications: [], feishuProjectBindings: [], feishuPendingFiles: [], feishuEvents: [], auditLogs: []
+  settings: { members: { items: [{ userId: "member-1", name: "执行成员", projectId: project.id, project: project.name }] } }, projects: [project], parseJobs: [], files: [], suppliers: [], payments: [], approvals: [], collectionScripts: [], comments: [], alertUpdates: [], systemNotifications: [], feishuProjectBindings: [], feishuPendingFiles: [], feishuEvents: [], auditLogs: []
 };
 const actor = { id: "admin", name: "管理员" };
 const deleted = deleteProject(db, { id: project.id }, actor);
 assert.equal(deleted.retainedDays, 30);
 assert.equal(db.projects.length, 0);
+assert.equal(db.settings.members.items.length, 0);
 const [item] = listCloudRecycleBin(db);
 assert.equal(item.projectName, project.name);
 assert.equal(item.fileCount, 1);

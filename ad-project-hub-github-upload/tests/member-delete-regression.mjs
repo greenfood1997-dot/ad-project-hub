@@ -36,7 +36,7 @@ try {
     approvals: [{ id: "a1", applicantId: "historical", applicantName: "历史人员" }],
     payments: [{ id: "pay1", recordedBy: "historical", recordedByName: "历史人员" }],
     comments: [{ id: "c1", userId: "historical", user: "历史人员" }],
-    settings: {}, auditLogs: [], systemNotifications: []
+    settings: { members: { items: [{ userId: "historical", name: "历史人员", contact: "historical@test.local", projectId: "deleted-project", project: "已删除北京项目" }] } }, auditLogs: [], systemNotifications: []
   };
   await writeFile(dbFile, JSON.stringify(db, null, 2));
 
@@ -64,6 +64,7 @@ try {
   assert.equal(saved.approvals[0].applicantId, null);
   assert.equal(saved.payments[0].recordedBy, null);
   assert.equal(saved.comments[0].userId, null);
+  assert.equal(saved.settings.members.items.length, 0);
   assert.equal(saved.auditLogs[0].action, "delete");
   console.log("member delete regression passed");
 } finally {

@@ -1089,6 +1089,11 @@ export function deleteProject(db, body, user) {
   db.feishuProjectBindings = (db.feishuProjectBindings || []).filter((item) => !isProjectRecord(item));
   db.feishuPendingFiles = (db.feishuPendingFiles || []).filter((item) => !isProjectRecord(item));
   db.feishuEvents = (db.feishuEvents || []).filter((item) => !isProjectRecord(item));
+  if (db.settings?.members?.items) {
+    db.settings.members.items = db.settings.members.items.filter((item) => !isProjectRecord(item));
+    db.settings.members.savedAt = at;
+    db.settings.members.savedBy = user.id;
+  }
   db.auditLogs.unshift({ type: "project", target: project.name, action: "recycle", user: user.name, at });
   return { id: project.id, name: project.name, retainedDays: 30 };
 }

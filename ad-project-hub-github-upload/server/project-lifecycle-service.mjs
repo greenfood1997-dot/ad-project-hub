@@ -21,6 +21,9 @@ export function deleteProject(db, body, user) {
   db.feishuProjectBindings = (db.feishuProjectBindings || []).filter((item) => !isProjectRecord(item));
   db.feishuPendingFiles = (db.feishuPendingFiles || []).filter((item) => !isProjectRecord(item));
   db.feishuEvents = (db.feishuEvents || []).filter((item) => !isProjectRecord(item));
+  if (db.settings?.members?.items) {
+    db.settings.members.items = db.settings.members.items.filter((item) => !isProjectRecord(item));
+  }
   const at = new Date().toISOString();
   db.auditLogs.unshift({ type: "project", target: project.name, action: "delete", user: user.name, at });
   return { id: project.id, name: project.name };
