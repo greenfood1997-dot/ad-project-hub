@@ -7094,6 +7094,7 @@ function LoginScreen({ onLogin }) {
 }
 
 function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
+  const memberDeleteQueueRef = useRef(Promise.resolve());
   const isAdmin = ["shareholder", "admin"].includes(session?.role);
   const canManageAssignments = ["shareholder", "admin", "director"].includes(session?.role);
   const [adminTab, setAdminTab] = useState(initialTab);
@@ -7320,20 +7321,21 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     }
   }
 
-  async function removeMember(member) {
+  function removeMember(member) {
     if (!window.confirm(`确认永久删除成员“${member.name}”？\n\n只有没有业务记录的误建账号可以删除；已有记录的成员请停用。`)) return;
     setDeletingMemberIds((ids) => [...new Set([...ids, member.id])]);
-    try {
-      await api("/api/members/delete", { method: "POST", body: JSON.stringify({ id: member.id }) });
-      const nextMembers = await api("/api/members");
-      setMembers(nextMembers);
-      if (editingId === member.id) resetForm();
-      setMessage(`${member.name} 已永久删除。`);
-    } catch (err) {
-      setMessage(err.message);
-    } finally {
-      setDeletingMemberIds((ids) => ids.filter((id) => id !== member.id));
-    }
+    memberDeleteQueueRef.current = memberDeleteQueueRef.current.catch(() => undefined).then(async () => {
+      try {
+        await api("/api/members/delete", { method: "POST", body: JSON.stringify({ id: member.id }) });
+        setMembers((items) => items.filter((item) => item.id !== member.id));
+        if (editingId === member.id) resetForm();
+        setMessage((current) => [current, `${member.name} 已永久删除。`].filter(Boolean).join(" "));
+      } catch (err) {
+        setMessage((current) => [current, `${member.name} 删除失败：${err.message}`].filter(Boolean).join(" "));
+      } finally {
+        setDeletingMemberIds((ids) => ids.filter((id) => id !== member.id));
+      }
+    });
   }
 
   async function cleanDefaultAccounts() {

@@ -20,5 +20,11 @@ assert(shell.includes("ids.filter((id) => id !== member.id)"), "each split admin
 assert(panel.includes("deletingMemberIds.includes(member.id)"), "split member rows should derive independent deleting state");
 assert(main.includes("const [deletingMemberIds, setDeletingMemberIds] = useState([])"), "production admin should track concurrent member deletions");
 assert(main.includes("const deleting = deletingMemberIds.includes(member.id)"), "production member rows should derive independent deleting state");
+assert(shell.includes("memberDeleteQueueRef = useRef(Promise.resolve())"), "split admin should serialize confirmed member deletes");
+assert(main.includes("memberDeleteQueueRef = useRef(Promise.resolve())"), "production admin should serialize confirmed member deletes");
+assert(shell.includes("setMembers((items) => items.filter((item) => item.id !== member.id))"), "split admin should remove only the confirmed member without a racing full refresh");
+assert(main.includes("setMembers((items) => items.filter((item) => item.id !== member.id))"), "production admin should remove only the confirmed member without a racing full refresh");
+assert(shell.includes("${member.name} 删除失败：${err.message}"), "split admin should preserve the failed member identity");
+assert(main.includes("${member.name} 删除失败：${err.message}"), "production admin should preserve the failed member identity");
 
 console.log("frontend member edit regression passed");
