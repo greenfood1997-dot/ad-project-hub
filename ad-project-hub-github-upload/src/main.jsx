@@ -582,6 +582,14 @@ function taskLedgerRows(project = {}, tasks = []) {
   return [headers, ...body];
 }
 
+function memberExecutionCostRows(project = {}, rows = [], month = "") {
+  return [["月份", "项目", "费用类别", "金额", "占比", "笔数"], ...rows.map((row) => [month, project.name || "", row.name, Number(row.value || 0), `${row.percent || 0}%`, row.count || 0])];
+}
+
+function monthlyProjectCostRows(rows = []) {
+  return [["月份", "项目", "客户", "员工执行报销", "供应商付款", "垫付款", "垫资利息", "既有人力成本", "管理公摊", "其他成本/税费", "当月人力分摊", "实时已用成本", "管理全成本", "合同金额", "管理利润"], ...rows.map((row) => [row.month, row.projectName, row.client, row.reimbursements, row.supplierPayments, row.advance, row.interest, row.internalLabor, row.overhead, row.other, row.laborAllocation, row.realtimeCost, row.fullCost, row.contract, row.managementProfit])];
+}
+
 function activityLedgerRows(project = {}, items = []) {
   const headers = [
     "项目名称",
@@ -1553,6 +1561,15 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     }
   }
 
+  async function exportMonthlyProjectCosts() {
+    const month = new Date().toISOString().slice(0, 7);
+    try {
+      const rows = await apiRequest(`/api/reports/monthly-project-costs?month=${month}`, session);
+      downloadCsv(`${month}-项目全成本月报.csv`, monthlyProjectCostRows(rows));
+      setNotice(`已导出 ${month} 项目全成本月报：${rows.length} 个项目。`);
+    } catch (error) { setNotice(error.message || "项目全成本月报导出失败"); }
+  }
+
   function openNotificationQuickAction(action = "") {
     if (action === "assignments" && canManageAssignments) {
       setView("admin:assignments");
@@ -2032,6 +2049,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             <button type="button" className="ghost" disabled={exportingProjectLedger || !visibleProjects.length} onClick={exportProjectLedger}>
               <FileSpreadsheet size={16} />{exportingProjectLedger ? "导出中" : "导出台账"}
             </button>
+            {["shareholder", "admin", "director", "finance"].includes(session.role) && <button type="button" className="ghost" onClick={exportMonthlyProjectCosts}><FileSpreadsheet size={16} />导出本月全成本</button>}
             <button type="button" className={`ghost notification-trigger ${systemNotifications.length ? "has-items" : ""}`} onClick={() => setNotificationsOpen(true)}>
               <BellRing size={16} />待办
               {systemNotifications.length > 0 && <b>{systemNotifications.length}</b>}

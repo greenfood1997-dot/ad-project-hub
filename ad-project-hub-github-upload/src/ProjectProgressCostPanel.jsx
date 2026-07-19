@@ -11,6 +11,7 @@ export default function ProjectProgressCostPanel({
   costRows = [],
   executionOnly = false,
   executionCostTotal = 0,
+  onExportExecutionCosts,
   isManagement,
   approvalTypeOptions = [],
   exportingTaskLedger,
@@ -79,7 +80,7 @@ export default function ProjectProgressCostPanel({
         )}
       </div>
       <div>
-        <h3>{executionOnly ? "我的本月执行支出" : isManagement ? "成本与利润" : "成本构成"}</h3>
+        <div className="section-head compact"><h3>{executionOnly ? "我的本月执行支出" : isManagement ? "成本与利润" : "成本构成"}</h3>{executionOnly && <button type="button" className="ghost tiny" onClick={onExportExecutionCosts}><FileSpreadsheet size={14} />导出月报</button>}</div>
         {executionOnly && <p className="execution-cost-note">仅统计你本月已审批完成的报销，不展示项目整体成本和利润。</p>}
         {costRows.length ? costRows.map(({ name, value, percent, count }) => (
           <div className="cost-row" key={name}>

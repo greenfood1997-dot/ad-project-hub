@@ -2,7 +2,7 @@ import React, { Suspense, useEffect, useRef, useState } from "react";
 import { Bot, CheckCircle2, ChevronDown, FileSpreadsheet, MessageSquareText, UploadCloud } from "lucide-react";
 import { apiRequest, uploadedFileKey } from "./utils/api.js";
 import { downloadCsv, fileSize, money } from "./utils/format.js";
-import { activityLedgerRows, paymentLedgerRows, taskLedgerRows } from "./utils/ledgerRows.js";
+import { activityLedgerRows, memberExecutionCostRows, paymentLedgerRows, taskLedgerRows } from "./utils/ledgerRows.js";
 import { approvalTypeOptionsFor, canHandleFeishuPendingRole, canHandleProjectAlertRole, canRecordPaymentRole, canUseCollectionRole, canWriteProjectRole } from "./utils/permissions.js";
 import { canWithdrawApproval, currentApprovalStepInfo } from "./utils/approvalFlow.js";
 import { normalizeCostRow, normalizeTask, projectHealth, taskDueInfo } from "./utils/projectMetrics.js";
@@ -171,6 +171,10 @@ export default function ProjectDetail({ project, isManagement, session, files, p
     return map;
   }, new Map()).values()).sort((a, b) => b.value - a.value).map((row) => ({ ...row, percent: ownMonthlyTotal ? Math.round(row.value / ownMonthlyTotal * 100) : 0 }));
   const costRows = executionOnly ? executionCostRows : (project.costs || []).map(normalizeCostRow).filter((row) => row.name);
+  const exportExecutionCosts = () => {
+    downloadCsv(`${project.name}-${monthKey}-我的执行费用.csv`, memberExecutionCostRows(project, executionCostRows, monthKey));
+    onNotice(`已导出 ${monthKey} 我的执行费用报表。`);
+  };
   const materialStatus = projectMaterialStatus(project, uniqueFiles, projectJobs);
   const actionItems = projectActionItems({ project, files: uniqueFiles, jobs: projectJobs, approvals: projectApprovals, health, isManagement, feishuPending: projectFeishuPendingFiles });
   const aiAdvice = projectAiAdvice({ project, materialStatus, approvals: projectApprovals, health, isManagement, feishuPending: projectFeishuPendingFiles });
@@ -936,6 +940,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           costRows={costRows}
           executionOnly={executionOnly}
           executionCostTotal={ownMonthlyTotal}
+          onExportExecutionCosts={exportExecutionCosts}
           isManagement={isManagement}
           approvalTypeOptions={approvalTypeOptions}
           exportingTaskLedger={exportingTaskLedger}

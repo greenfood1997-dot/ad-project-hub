@@ -748,6 +748,26 @@ function canAccessProject(db, user, projectId) {
   return visibleProjectsForUser(db, ensureMemberFields(user)).some((project) => project.id === projectId);
 }
 
+function monthlyProjectCostReport(db, month) {
+  const selectedMonth = /^\d{4}-\d{2}$/.test(month) ? month : new Date().toISOString().slice(0, 7);
+  const completed = (db.approvals || []).filter((item) => item.status === "已完成" && String(item.completedAt || item.updatedAt || "").slice(0, 7) === selectedMonth);
+  const allocations = (db.settings?.compensation?.allocations || []).filter((item) => item.month === selectedMonth && item.projectId !== "company-overhead");
+  return (db.projects || []).map((project) => {
+    const projectApprovals = completed.filter((item) => item.projectId === project.id || item.projectName === project.name);
+    const reimbursements = projectApprovals.filter((item) => item.type === "reimbursement").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const supplierPayments = projectApprovals.filter((item) => item.type === "supplier_payment").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const labor = allocations.filter((item) => item.projectId === project.id).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const breakdown = project.extractedFields?.profitBreakdown || {};
+    const advance = Number(breakdown.advancePayment || project.extractedFields?.advancePayment || 0);
+    const interest = Number(breakdown.advanceInterest || project.extractedFields?.advanceInterest || 0);
+    const internalLabor = Number(breakdown.internalLabor || project.extractedFields?.internalLabor || 0);
+    const overhead = Number(breakdown.overhead || project.extractedFields?.overhead || 0);
+    const other = Number(breakdown.additionalCost || project.extractedFields?.additionalCost || 0);
+    const realtimeCost = Number(project.costUsed || 0);
+    return { month: selectedMonth, projectId: project.id, projectName: project.name, client: project.client || "", reimbursements, supplierPayments, advance, interest, internalLabor, overhead, other, laborAllocation: labor, realtimeCost, fullCost: realtimeCost + labor, contract: Number(project.contract || 0), managementProfit: Number(project.contract || 0) - realtimeCost - labor };
+  });
+}
+
 function visibleProjectForBody(db, user, body = {}) {
   const projectId = String(body.projectId || body.id || "").trim();
   const projectName = String(body.projectName || body.project || "").trim();
@@ -1126,6 +1146,12 @@ export async function handleApi(req, res) {
     if (!requireRole(user, DIRECTOR_ROLES, res)) return;
     const scoped = scopedSnapshot(snapshot, ensureMemberFields(user));
     sendJson(res, 200, { ok: true, data: projectAssignments(scoped) });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/reports/monthly-project-costs") {
+    if (!requireRole(user, ["shareholder", "admin", "director", "finance"], res)) return;
+    sendJson(res, 200, { ok: true, data: monthlyProjectCostReport(snapshot, url.searchParams.get("month") || "") });
     return;
   }
 

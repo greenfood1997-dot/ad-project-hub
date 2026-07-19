@@ -296,7 +296,7 @@ try {
 
   const ownApproval = await ok("POST", "/api/approvals", "u-member", {
     projectId: "p-visible",
-    type: "reimbursement",
+    type: "reimbursement", voucherType: "none",
     amount: 66,
     reason: "自己项目交通费",
     payee: "执行小伙伴"
@@ -306,7 +306,7 @@ try {
   await denied("POST", "/api/projects/upload-preview", "u-member", { type: "cost-sheet", id: "p-hidden", files: [costFile()] }, "普通员工不应预览非自己项目文件");
   await denied("POST", "/api/projects/cost-sheet", "u-member", { id: "p-hidden", files: [costFile()] }, "普通员工不应向非自己项目上传成本表");
   await denied("POST", "/api/project-tasks", "u-member", { projectId: "p-hidden", title: "越权任务" }, "普通员工不应更新非自己项目任务");
-  await denied("POST", "/api/approvals", "u-member", { projectId: "p-hidden", type: "reimbursement", amount: 1, reason: "越权" }, "普通员工不应提交非自己项目审批");
+  await denied("POST", "/api/approvals", "u-member", { projectId: "p-hidden", type: "reimbursement", voucherType: "none", amount: 1, reason: "越权" }, "普通员工不应提交非自己项目审批");
   await denied("POST", "/api/payments", "u-member", { projectId: "p-visible", amount: 1 }, "普通员工不应记录回款");
   await denied("POST", "/api/collections/suggest", "u-member", { projectId: "p-visible", style: "越权催收" }, "普通员工不应生成催收话术");
   await denied("POST", "/api/suppliers/rate", "u-member", { supplier: "隐藏供应商", score: 5 }, "普通员工不应评价不可见供应商");
