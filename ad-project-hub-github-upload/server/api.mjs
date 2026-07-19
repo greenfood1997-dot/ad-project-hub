@@ -257,6 +257,39 @@ function setMemberStatus(db, body, actor) {
   return publicUser(member);
 }
 
+function memberReferencePaths(db, member) {
+  const matches = [];
+  const identities = new Set([member.id, member.email, member.name].map((value) => String(value || "").trim().toLowerCase()).filter(Boolean));
+  const visit = (value, path) => {
+    if (typeof value === "string" && identities.has(value.trim().toLowerCase())) matches.push(path);
+    else if (Array.isArray(value)) value.forEach((item, index) => visit(item, `${path}[${index}]`));
+    else if (value && typeof value === "object") Object.entries(value).forEach(([key, item]) => visit(item, `${path}.${key}`));
+  };
+  Object.entries(db).forEach(([key, value]) => {
+    if (["users", "auditLogs"].includes(key)) return;
+    visit(value, key);
+  });
+  return matches;
+}
+
+function deleteMember(db, body, actor) {
+  const index = db.users.findIndex((item) => item.id === body.id);
+  if (index < 0) throw new Error("成员不存在");
+  const member = db.users[index];
+  if (member.id === actor.id) throw new Error("不能删除当前登录账号");
+  const references = memberReferencePaths(db, member);
+  if (references.length) throw new Error("该成员已有项目、审批或其他业务记录，不能永久删除，请改用停用");
+  db.users.splice(index, 1);
+  db.auditLogs.unshift({
+    type: "member",
+    target: member.email || member.name,
+    action: "delete",
+    user: actor.name,
+    at: new Date().toISOString()
+  });
+  return { id: member.id, name: member.name };
+}
+
 function disableInsecureDefaultAccounts(db, actor) {
   const current = db.users.find((item) => item.id === actor.id);
   if (!current || current.pin === "123456" || !current.pinHash) {
@@ -998,6 +1031,14 @@ export async function handleApi(req, res) {
     if (!requireRole(user, ADMIN_ROLES, res)) return;
     const body = await readBody(req);
     const data = await mutateDb((db) => setMemberStatus(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/members/delete") {
+    if (!requireRole(user, ADMIN_ROLES, res)) return;
+    const body = await readBody(req);
+    const data = await mutateDb((db) => deleteMember(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }

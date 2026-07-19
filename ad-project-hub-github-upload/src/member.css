@@ -16,6 +16,11 @@
   box-shadow: inset 3px 0 #6d5bd0;
 }
 
+.member-delete-button {
+  min-width: 72px;
+  padding: 10px 14px;
+}
+
 .member-row strong,
 .member-row span {
   display: block;
