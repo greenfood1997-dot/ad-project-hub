@@ -6,6 +6,7 @@ import { objectStorageReady, resolveStorageSettings } from "./storage-settings.m
 import { compensationOverview, generateLaborAllocation, saveCompensationMember, saveProjectDividend } from "./compensation-service.mjs";
 import { listCloudRecycleBin, restoreRecycledProject } from "./cloud-recycle-service.mjs";
 import { exchangeFeishuLoginCode, feishuLoginUrl, upsertFeishuIdentity } from "./feishu-identity-service.mjs";
+import { notifyApprovalInFeishu } from "./approval-feishu-service.mjs";
 import {
   addComment,
   actOnApproval,
@@ -1500,7 +1501,12 @@ export async function handleApi(req, res) {
       sendJson(res, 403, { ok: false, error: "无权限为该项目提交审批" });
       return;
     }
-    const data = await mutateDb((db) => createApproval(db, body, user));
+    const origin = `${req.headers["x-forwarded-proto"] || "http"}://${req.headers["x-forwarded-host"] || req.headers.host}`;
+    const data = await mutateDb(async (db) => {
+      const approval = createApproval(db, body, user);
+      await notifyApprovalInFeishu(db, approval, "submitted", { origin, actorName: user.name });
+      return approval;
+    });
     sendJson(res, 200, { ok: true, data });
     return;
   }
@@ -1517,7 +1523,12 @@ export async function handleApi(req, res) {
       sendJson(res, 403, { ok: false, error: "无权限处理该项目审批" });
       return;
     }
-    const data = await mutateDb((db) => actOnApproval(db, body, user));
+    const origin = `${req.headers["x-forwarded-proto"] || "http"}://${req.headers["x-forwarded-host"] || req.headers.host}`;
+    const data = await mutateDb(async (db) => {
+      const approval = actOnApproval(db, body, user);
+      await notifyApprovalInFeishu(db, approval, body.action === "reject" ? "rejected" : approval.status === "已完成" ? "completed" : "advanced", { origin, actorName: user.name, note: body.note });
+      return approval;
+    });
     sendJson(res, 200, { ok: true, data });
     return;
   }

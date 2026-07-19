@@ -504,7 +504,7 @@ export async function writePostgresDbFromSnapshot(snapshot) {
           item.applicantRole || "",
           JSON.stringify(item.steps || []),
           JSON.stringify(item.logs || []),
-          JSON.stringify({ voucher: item.voucher || null, invoiceGap: Number(item.invoiceGap || 0), voucherSupplementedAt: item.voucherSupplementedAt || "", voucherSupplementedBy: item.voucherSupplementedBy || "" }),
+          JSON.stringify({ voucher: item.voucher || null, invoiceGap: Number(item.invoiceGap || 0), voucherSupplementedAt: item.voucherSupplementedAt || "", voucherSupplementedBy: item.voucherSupplementedBy || "", feishuDelivery: item.feishuDelivery || null, feishuDeliveries: item.feishuDeliveries || [] }),
           item.appliedAt || null,
           item.completedAt || null,
           item.completedBy || null,
