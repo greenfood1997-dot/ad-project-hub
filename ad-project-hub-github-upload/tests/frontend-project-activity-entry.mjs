@@ -82,7 +82,7 @@ assert(source.includes("已打开文件与 AI 解析区，可以继续上传或�
 assert(source.includes("const [copyingFileKey") && source.includes("async function copyFileInfo(file)") && source.includes("文件信息已复制："), "project file rows should allow copying file metadata");
 assert(source.includes("复制信息") && source.includes("复制中") && source.includes("复制失败，请手动选中文件信息复制。"), "file copy action should expose loading and failure feedback");
 assert(source.includes("file.storageStatus") && source.includes("已持久化") && source.includes("仅记录"), "project file rows should show whether files are persisted or only recorded");
-assert(source.includes("file.storageUrl") && source.includes("打开文件") && source.includes('target="_blank"'), "project file rows should expose a storage link when available");
+assert(source.includes("file.storageUrl") && source.includes("downloadProjectFile") && source.includes("/api/files/download"), "project file rows should download office files through the authenticated backend");
 assert(source.includes('apiRequest("/api/files/archive"') && source.includes("async function archiveProjectFile(file)"), "project file rows should archive mistaken file records through backend");
 assert(source.includes(".filter((file) => !file.archivedAt)") && source.includes("归档文件") && source.includes("归档中"), "archived files should disappear from active rows with per-file loading copy");
 assert(source.includes("文件已归档：${file.name || \"项目文件\"}") && source.includes("审计记录仍保留"), "file archive feedback should explain visible list and audit behavior");

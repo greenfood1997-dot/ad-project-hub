@@ -638,6 +638,32 @@ export default function ProjectDetail({ project, isManagement, session, files, p
     }
   }
 
+  async function downloadProjectFile(file) {
+    try {
+      const response = await fetch("/api/files/download", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${session.token || ""}`, "x-user-id": session.id },
+        body: JSON.stringify({ projectId: project.id, fileId: file.id || "", name: file.name, storageUrl: file.storageUrl })
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "文件下载失败");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.name || "项目文件";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      onNotice(`已下载「${file.name || "项目文件"}」，请使用 WPS、Word 或 Excel 打开。`);
+    } catch (error) {
+      onNotice(error.message);
+    }
+  }
+
   async function handleActionItem(item, action) {
     const key = actionItemKey(item);
     setHandlingActionKey(key);
@@ -945,6 +971,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           onUploadType={setQuickUploadType}
           onPrepareActivityTemplate={prepareActivityTemplate}
           onRefreshParseJob={refreshParseJob}
+          onDownloadProjectFile={downloadProjectFile}
         />
       </Suspense>
       </ProjectDetailSection>

@@ -70,13 +70,24 @@ async function uploadToS3CompatibleStorage(file = {}, buffer, category = "file",
     if (process.env.NODE_ENV === "production") throw new Error("生产环境禁止模拟对象存储上传");
     return { storageUrl: publicUrl || `s3://${settings.bucket}/${objectKey}`, storagePath: objectKey, storageProvider: settings.provider || "s3-compatible", storageStatus: "已上传对象存储", storageMocked: true };
   }
-  const { url, headers } = s3SignedHeaders({ settings, objectKey, buffer, contentType: file.type || "application/octet-stream" });
+  const contentType = fileContentType(file);
+  const { url, headers } = s3SignedHeaders({ settings, objectKey, buffer, contentType });
   const res = await fetch(url, { method: "PUT", headers, body: buffer });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`对象存储上传失败：${res.status} ${text.slice(0, 160)}`);
   }
   return { storageUrl: publicUrl || url, storagePath: objectKey, storageProvider: settings.provider || "s3-compatible", storageStatus: "已上传对象存储" };
+}
+
+function fileContentType(file = {}) {
+  const extension = extname(String(file.name || "")).toLowerCase();
+  const types = {
+    ".pdf": "application/pdf", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xls": "application/vnd.ms-excel",
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".csv": "text/csv; charset=utf-8"
+  };
+  return types[extension] || file.type || "application/octet-stream";
 }
 
 export async function persistLocalUploadFile(file = {}, category = "file", now = new Date().toISOString(), storageSettings = {}) {

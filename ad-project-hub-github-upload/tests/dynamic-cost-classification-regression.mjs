@@ -32,6 +32,7 @@ globalThis.fetch = async () => new Response(JSON.stringify({ choices: [{ message
   executionCost: 526316.96,
   internalLabor: 754553.29,
   additionalCost: 220211.13,
+  suppliers: [{ supplier: "纵横", type: "项目收入", amount: 2070583, status: "待结算" }],
   costs: [["项目垫款", 307751.38], ["垫款利息", 26800], ["项目执行总成本", 526316.96], ["内部人力", 754553.29], ["其他项目成本", 220211.13]],
   costClassifications: [{ name: "挂靠费", category: "advancePayment", reason: "AI 错误合并到垫款", confidence: "high" }]
 }) } }] }), { status: 200, headers: { "content-type": "application/json" } });
@@ -53,6 +54,7 @@ assert.equal(rows.get("人力"), 754553.29);
 assert.equal(rows.has("项目执行总成本"), false, "AI 聚合名称不得覆盖原始表头");
 assert.equal(preview.fields["项目垫款"], 154867.6, "投流应按该合同资金语义归入垫款");
 assert.equal(preview.fields["垫款利息"], 0, "表格明确贷款利息为 0 时不得由 AI 填入其他费用");
+assert.equal(preview.sections.some((item) => item.title === "供应商支出"), false, "账号名和收入不得进入供应商库");
 assert.equal(preview.fields["总成本影响"], 1808832.76, "利润必须扣除所有动态成本科目且不得重复计算");
 assert.equal(Number((project.contract - preview.fields["总成本影响"]).toFixed(2)), 261167.24);
 

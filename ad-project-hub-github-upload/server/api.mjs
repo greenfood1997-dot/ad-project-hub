@@ -1336,6 +1336,36 @@ export async function handleApi(req, res) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/files/download") {
+    const body = await readBody(req);
+    const visibleProject = visibleProjectForBody(snapshot, user, body);
+    if (!visibleProject) {
+      sendJson(res, 403, { ok: false, error: "无权限下载该项目文件" });
+      return;
+    }
+    const candidates = [...(snapshot.files || []), ...(visibleProject.files || [])];
+    const file = candidates.find((item) => (body.fileId && item.id === body.fileId) || (item.name === body.name && item.storageUrl === body.storageUrl));
+    if (!file?.storageUrl || !/^https?:\/\//i.test(file.storageUrl)) {
+      sendJson(res, 404, { ok: false, error: "该文件没有可下载的对象存储地址，请重新上传原文件" });
+      return;
+    }
+    const remote = await fetch(file.storageUrl);
+    if (!remote.ok) {
+      sendJson(res, 502, { ok: false, error: `对象存储读取失败：${remote.status}` });
+      return;
+    }
+    const buffer = Buffer.from(await remote.arrayBuffer());
+    const safeName = encodeURIComponent(file.name || "project-file");
+    res.writeHead(200, {
+      "content-type": file.type || remote.headers.get("content-type") || "application/octet-stream",
+      "content-disposition": `attachment; filename*=UTF-8''${safeName}`,
+      "content-length": buffer.length,
+      "cache-control": "private, no-store"
+    });
+    res.end(buffer);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/alerts/update") {
     if (!requireRole(user, ["shareholder", "admin", "director", "pm", "sales", "finance"], res)) return;
     const body = await readBody(req);

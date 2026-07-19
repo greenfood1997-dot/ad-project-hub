@@ -18,6 +18,18 @@ export function fileSize(value) {
   return `${number} B`;
 }
 
+export function fileDate(value) {
+  if (!value) return "时间待记录";
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? "时间待记录" : date.toLocaleString("zh-CN");
+}
+
+export function fileOpenMode(file = {}) {
+  const name = String(file.name || "").toLowerCase();
+  if (/\.(pdf|png|jpe?g|webp|gif|bmp)$/.test(name) || /^(application\/pdf|image\/)/.test(String(file.type || ""))) return "preview";
+  return "download";
+}
+
 export function csvCell(value) {
   const text = value === undefined || value === null ? "" : String(value);
   return `"${text.replace(/"/g, '""')}"`;

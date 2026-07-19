@@ -194,7 +194,7 @@ export function applyParsedFields(db, project, job, parsed, rawDeps = {}) {
   job.updatedAt = new Date().toISOString();
   job.steps = job.steps.map((step) => ({ ...step, status: "完成" }));
 
-  for (const supplier of hasCostSheet ? (parsed.suppliers || []) : []) {
+  for (const supplier of hasCostSheet ? validSupplierRows(parsed.suppliers) : []) {
     db.suppliers.unshift({
       supplier: supplier.supplier || supplier.name || "未命名供应商",
       project: project.name,
@@ -209,6 +209,16 @@ export function applyParsedFields(db, project, job, parsed, rawDeps = {}) {
   }
 }
 
+function validSupplierRows(rows = []) {
+  return (Array.isArray(rows) ? rows : []).filter((item) => {
+    const name = String(item?.supplier || item?.name || "").trim();
+    const amount = Number(item?.amount || 0);
+    if (!name || amount <= 0 || /^(纵横|账号|账户|项目|客户|收入|利润|人力|税费|挂靠费|垫款|投流|日常支出|中标服务费)$/i.test(name)) return false;
+    return /(公司|有限|工作室|中心|传媒|文化|科技|制作|供应商|服务商|场地|酒店|个人|先生|女士)/.test(name)
+      || /供应商|服务商|收款方|结算/.test(String(item.source || item.reason || item.type || ""));
+  });
+}
+
 export function mergeProjectExtractedFields(existing = {}, parsed = {}, options = {}) {
   const revenueRecognition = {
     ...(existing.revenueRecognition || {}),
@@ -221,4 +231,3 @@ export function mergeProjectExtractedFields(existing = {}, parsed = {}, options 
   if (Object.keys(revenueRecognition).length) merged.revenueRecognition = revenueRecognition;
   return merged;
 }
-

@@ -2005,13 +2005,24 @@ async function uploadToS3CompatibleStorage(file = {}, buffer, category = "file",
     if (process.env.NODE_ENV === "production") throw new Error("生产环境禁止模拟对象存储上传");
     return { storageUrl: publicUrl || `s3://${settings.bucket}/${objectKey}`, storagePath: objectKey, storageProvider: settings.provider || "s3-compatible", storageStatus: "已上传对象存储", storageMocked: true };
   }
-  const { url, headers } = s3SignedHeaders({ settings, objectKey, buffer, contentType: file.type || "application/octet-stream" });
+  const contentType = storedFileContentType(file);
+  const { url, headers } = s3SignedHeaders({ settings, objectKey, buffer, contentType });
   const res = await fetch(url, { method: "PUT", headers, body: buffer });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`对象存储上传失败：${res.status} ${text.slice(0, 160)}`);
   }
   return { storageUrl: publicUrl || url, storagePath: objectKey, storageProvider: settings.provider || "s3-compatible", storageStatus: "已上传对象存储" };
+}
+
+function storedFileContentType(file = {}) {
+  const extension = extname(String(file.name || "")).toLowerCase();
+  const types = {
+    ".pdf": "application/pdf", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xls": "application/vnd.ms-excel",
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".csv": "text/csv; charset=utf-8"
+  };
+  return types[extension] || file.type || "application/octet-stream";
 }
 
 async function persistLocalUploadFile(file = {}, category = "file", now = new Date().toISOString(), storageSettings = {}) {
@@ -5473,7 +5484,7 @@ function normalizeParsedFields(parsed, values, files, interestRateSettings) {
     risk: parsed.risk || inferRisk({ contract, costBudget: hasCostSheet ? parsed.costBudget : 0, costUsed, receivable }),
     summary: parsed.summary || `已完成 ${files.length} 个文件的结构化解析。`,
     costs: hasCostSheet ? profitBreakdown.costs : [],
-    suppliers: hasCostSheet && Array.isArray(parsed.suppliers) ? parsed.suppliers : [],
+    suppliers: hasCostSheet ? sanitizeSupplierRows(parsed.suppliers) : [],
     tasks: Array.isArray(parsed.tasks) ? parsed.tasks.map(normalizePair).filter(Boolean) : [],
     archiveTags: Array.isArray(parsed.archiveTags) ? parsed.archiveTags : [],
     confidence: parsed.confidence || "",
@@ -6646,17 +6657,35 @@ function extractSuppliers(text) {
   const rows = [];
   const lines = text.split(/\r?\n/).slice(0, 200);
   for (const line of lines) {
-    if (!/(供应商|服务商|制作|媒介|达人|场地|投放|结算|费用)/.test(line)) continue;
+    if (!/(供应商|服务商|收款方|结算单位|乙方)/.test(line)) continue;
+    if (!/(应结|实付|待结算|结算金额|付款金额|供应商费用|服务商费用)/.test(line)) continue;
+    if (/(收入|利润|合同金额|回款|人力|税费|挂靠|垫款)/.test(line)) continue;
     const amount = extractAmounts(line)[0];
     if (!amount) continue;
+    const supplier = guessText(line, ["供应商", "服务商", "收款方", "结算单位", "乙方"]);
+    if (!supplier) continue;
     rows.push({
-      supplier: guessText(line, ["供应商", "服务商"]) || line.slice(0, 16),
+      supplier,
       type: /(媒介|投放)/.test(line) ? "媒介投放" : /(达人|KOL|博主)/i.test(line) ? "达人合作" : "项目费用",
       amount,
       status: "待结算"
     });
   }
   return rows.slice(0, 10);
+}
+
+function sanitizeSupplierRows(rows = []) {
+  return (Array.isArray(rows) ? rows : []).map((item) => ({
+    ...item,
+    supplier: String(item?.supplier || item?.name || "").trim(),
+    amount: parseMoney(item?.amount)
+  })).filter((item) => {
+    if (!item.supplier || item.amount <= 0) return false;
+    if (/^(纵横|账号|账户|项目|客户|收入|利润|人力|税费|挂靠费|垫款|投流|日常支出|中标服务费)$/i.test(item.supplier)) return false;
+    if (/(收入|利润|合同金额|回款|人力成本)/.test(String(item.type || ""))) return false;
+    return /(公司|有限|工作室|中心|传媒|文化|科技|制作|供应商|服务商|场地|酒店|个人|先生|女士)/.test(item.supplier)
+      || /供应商|服务商|收款方|结算/.test(String(item.source || item.reason || item.type || ""));
+  });
 }
 
 function isReimbursementSheet(files = [], text = "") {

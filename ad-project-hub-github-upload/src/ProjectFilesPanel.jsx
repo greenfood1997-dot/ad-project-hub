@@ -1,4 +1,5 @@
 import React from "react";
+import { fileDate, fileOpenMode } from "./utils/format.js";
 
 export default function ProjectFilesPanel({
   filesRef,
@@ -27,6 +28,7 @@ export default function ProjectFilesPanel({
   onUploadType,
   onPrepareActivityTemplate,
   onRefreshParseJob,
+  onDownloadProjectFile,
 }) {
   return (
     <section className="detail-section" ref={filesRef} id="project-files-section">
@@ -84,10 +86,13 @@ export default function ProjectFilesPanel({
         {uniqueFiles.length ? uniqueFiles.slice(0, 8).map((file, index) => (
           <div key={`${file.name}-${index}`}>
             <strong>{file.name}</strong>
-            <span>{file.source || file.category || "文件"} · {fileSize(file.size)} · {file.storageStatus || (file.storageUrl ? "已持久化" : "仅记录")} · {file.uploadedByName || file.uploadedBy || "未知上传人"} · {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString("zh-CN") : "时间待记录"}</span>
+            <span>{file.source || file.category || "文件"} · {fileSize(file.size)} · {file.storageStatus || (file.storageUrl ? "已持久化" : "仅记录")} · {file.uploadedByName || file.uploadedBy || "未知上传人"} · {fileDate(file.uploadedAt)}</span>
             {file.storageUrl && !String(file.storageUrl).startsWith("/uploads/")
-              ? <a className="ghost tiny file-link" href={file.storageUrl} target="_blank" rel="noreferrer">打开文件</a>
+              ? fileOpenMode(file) === "preview"
+                ? <a className="ghost tiny file-link" href={file.storageUrl} target="_blank" rel="noreferrer">预览文件</a>
+                : <button type="button" className="ghost tiny file-link" onClick={() => onDownloadProjectFile(file)}>下载文件</button>
               : file.storageProvider === "local" && <span className="muted">本地暂存不可公开访问，需配置对象存储</span>}
+            {!file.storageUrl && <span className="muted">历史文件仅保留记录，需重新上传原文件后才能查看</span>}
             <button type="button" className="ghost tiny" disabled={copyingFileKey === uploadedFileKey(file)} onClick={() => onCopyFileInfo(file)}>
               {copyingFileKey === uploadedFileKey(file) ? "复制中" : "复制信息"}
             </button>
