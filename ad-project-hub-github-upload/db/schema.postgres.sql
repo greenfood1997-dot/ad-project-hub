@@ -396,7 +396,7 @@ alter table approvals add column if not exists metadata jsonb not null default '
 create unique index if not exists approvals_idempotency_key_unique on approvals (idempotency_key) where idempotency_key is not null;
 
 insert into users (id, name, email, role, department, status, pin, must_change_pin)
-values
+select * from (values
   ('u-shareholder', '公司股东', 'owner@company.local', 'shareholder', '管理层', 'disabled', null, true),
   ('u-admin', '中台管理员', 'admin@company.local', 'admin', '中台', 'disabled', null, true),
   ('u-director', '项目总监', 'director@company.local', 'director', '项目部', 'disabled', null, true),
@@ -404,4 +404,6 @@ values
   ('u-sales', '销售成员', 'sales@company.local', 'sales', '销售部', 'disabled', null, true),
   ('u-finance', '财务成员', 'finance@company.local', 'finance', '财务部', 'disabled', null, true),
   ('u-member', '普通员工', 'member@company.local', 'member', '执行部', 'disabled', null, true)
+) as seed(id, name, email, role, department, status, pin, must_change_pin)
+where not exists (select 1 from users)
 on conflict (id) do nothing;

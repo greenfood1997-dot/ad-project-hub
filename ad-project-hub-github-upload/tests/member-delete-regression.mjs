@@ -61,6 +61,9 @@ try {
   assert.equal(saved.users.some((item) => item.id === "linked"), true);
   assert.equal(saved.users.some((item) => item.id === "historical"), false);
   assert.equal(saved.approvals[0].applicantName, "历史人员");
+  assert.equal(saved.approvals[0].applicantId, null);
+  assert.equal(saved.payments[0].recordedBy, null);
+  assert.equal(saved.comments[0].userId, null);
   assert.equal(saved.auditLogs[0].action, "delete");
   console.log("member delete regression passed");
 } finally {

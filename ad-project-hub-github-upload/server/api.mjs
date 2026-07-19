@@ -285,6 +285,25 @@ function currentMemberBlockers(db, member) {
   return [...new Set(blockers)];
 }
 
+function detachDeletedMemberHistory(db, memberId) {
+  const clear = (items, fields) => (items || []).forEach((item) => {
+    fields.forEach((field) => { if (item?.[field] === memberId) item[field] = null; });
+  });
+  clear(db.projects, ["createdBy"]);
+  clear(db.projectFiles, ["uploadedBy", "archivedBy"]);
+  clear(db.suppliers, ["updatedBy", "costAppliedBy", "costRolledBackBy", "approvalStoppedBy"]);
+  clear(db.payments, ["recordedBy", "voidedBy"]);
+  clear(db.collectionScripts, ["salesId"]);
+  clear(db.feishuProjectBindings, ["boundBy"]);
+  clear(db.feishuPendingFiles, ["handledBy"]);
+  clear(db.systemNotifications, ["handledBy"]);
+  clear(db.comments, ["userId", "archivedBy"]);
+  clear(db.approvals, ["applicantId"]);
+  Object.values(db.settings || {}).forEach((setting) => {
+    if (setting?.savedBy === memberId) setting.savedBy = null;
+  });
+}
+
 function deleteMember(db, body, actor) {
   const index = db.users.findIndex((item) => item.id === body.id);
   if (index < 0) throw new Error("成员不存在");
@@ -292,6 +311,7 @@ function deleteMember(db, body, actor) {
   if (member.id === actor.id) throw new Error("不能删除当前登录账号");
   const blockers = currentMemberBlockers(db, member);
   if (blockers.length) throw new Error(`该成员仍在使用：${blockers.slice(0, 3).join("、")}${blockers.length > 3 ? `等 ${blockers.length} 处` : ""}。请先解除这些当前绑定`);
+  detachDeletedMemberHistory(db, member.id);
   db.users.splice(index, 1);
   db.auditLogs.unshift({
     type: "member",
