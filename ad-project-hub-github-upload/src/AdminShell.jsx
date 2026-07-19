@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
 import { Bot, ChevronDown, LayoutDashboard, LogOut, Plus, Settings2, UserCog, UsersRound } from "lucide-react";
 import { downloadFile } from "./utils/api.js";
 import { money } from "./utils/format.js";
@@ -34,6 +34,7 @@ function ProductSettingsSection({ id, title, description, openSection, setOpenSe
 }
 
 export default function AdminShell({ session, setView, onLogout, initialTab = "members", buildVersion }) {
+  const memberEditorRef = useRef(null);
   const isAdmin = canUseAdminRole(session);
   const canManageAssignments = canManageAssignmentsRole(session);
   const [adminTab, setAdminTab] = useState(initialTab);
@@ -228,6 +229,10 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
       pin: "",
     });
     setMessage("");
+    requestAnimationFrame(() => {
+      memberEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      memberEditorRef.current?.querySelector('input[name="member-name"]')?.focus({ preventScroll: true });
+    });
   }
 
   function resetForm() {
@@ -701,6 +706,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
               onToggle={toggle}
               onCleanDefaultAccounts={cleanDefaultAccounts}
               onUpdateForm={setForm}
+              editorRef={memberEditorRef}
             />
           </Suspense>
         )}

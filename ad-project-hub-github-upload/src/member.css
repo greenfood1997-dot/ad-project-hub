@@ -8,6 +8,14 @@
   padding: 10px 0;
 }
 
+.member-row.editing {
+  margin-inline: -8px;
+  padding-inline: 8px;
+  border-radius: 10px;
+  background: #f3f0ff;
+  box-shadow: inset 3px 0 #6d5bd0;
+}
+
 .member-row strong,
 .member-row span {
   display: block;

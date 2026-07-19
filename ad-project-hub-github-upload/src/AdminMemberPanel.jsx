@@ -19,12 +19,13 @@ export default function AdminMemberPanel({
   onToggle,
   onCleanDefaultAccounts,
   onUpdateForm,
+  editorRef,
 }) {
   return (
     <section className="admin-grid">
-      <form className="member-form" onSubmit={onSave}>
+      <form className="member-form" onSubmit={onSave} ref={editorRef}>
         <div className="section-head"><h2>{editingId ? "编辑成员" : "新增成员"}</h2></div>
-        <label><span>姓名</span><input value={form.name} onChange={(event) => onUpdateForm({ ...form, name: event.target.value })} /></label>
+        <label><span>姓名</span><input name="member-name" value={form.name} onChange={(event) => onUpdateForm({ ...form, name: event.target.value })} /></label>
         <label><span>邮箱</span><input value={form.email} onChange={(event) => onUpdateForm({ ...form, email: event.target.value })} /></label>
         <label>
           <span>角色</span>
@@ -53,14 +54,14 @@ export default function AdminMemberPanel({
           <span>{feishuMissingMembers.length ? `还差 ${feishuMissingMembers.slice(0, 5).map((member) => member.name || member.email).join("、")}${feishuMissingMembers.length > 5 ? `等 ${feishuMissingMembers.length} 人` : ""}，这些成员暂时收不到 OA 私聊提醒。` : "启用中的成员都已绑定飞书，可以接收 OA 私聊提醒。"}</span>
         </div>
         {members.map((member) => (
-          <div className="member-row" key={member.id}>
+          <div className={`member-row ${editingId === member.id ? "editing" : ""}`} key={member.id}>
             <div>
               <strong>{member.name}</strong>
               <span>{member.email} · {member.department || "未分组"}{member.feishuOpenId || member.feishuUserId ? " · 已绑飞书" : " · 未绑飞书"}</span>
             </div>
             <b className={`role-pill ${member.role}`}>{roleLabel(member.role)}</b>
             <b className={`status-pill ${member.status}`}>{member.status === "disabled" ? "已停用" : "启用中"}</b>
-            <button type="button" className="ghost" disabled={savingMember || togglingMemberId === member.id} onClick={() => onEdit(member)}>编辑</button>
+            <button type="button" className="ghost" aria-pressed={editingId === member.id} disabled={savingMember || togglingMemberId === member.id} onClick={() => onEdit(member)}>{editingId === member.id ? "编辑中" : "编辑"}</button>
             <button type="button" className="ghost" disabled={togglingMemberId === member.id} onClick={() => onToggle(member)}>{togglingMemberId === member.id ? "处理中" : member.status === "disabled" ? "启用" : "停用"}</button>
           </div>
         ))}
