@@ -29,10 +29,14 @@ try {
     users: [
       { id: "admin", name: "管理员", email: "admin@test.local", role: "admin", status: "active", pin: "654321" },
       { id: "unused", name: "误建人员", email: "unused@test.local", role: "member", status: "disabled", pin: "654321" },
-      { id: "linked", name: "历史人员", email: "linked@test.local", role: "member", status: "disabled", pin: "654321" }
+      { id: "linked", name: "当前人员", email: "linked@test.local", role: "member", status: "disabled", pin: "654321" },
+      { id: "historical", name: "历史人员", email: "historical@test.local", role: "member", status: "disabled", pin: "654321" }
     ],
-    projects: [{ id: "p1", name: "历史项目", owner: "历史人员" }],
-    approvals: [], payments: [], comments: [], settings: {}, auditLogs: [], systemNotifications: []
+    projects: [{ id: "p1", name: "当前项目", owner: "当前人员" }],
+    approvals: [{ id: "a1", applicantId: "historical", applicantName: "历史人员" }],
+    payments: [{ id: "pay1", recordedBy: "historical", recordedByName: "历史人员" }],
+    comments: [{ id: "c1", userId: "historical", user: "历史人员" }],
+    settings: {}, auditLogs: [], systemNotifications: []
   };
   await writeFile(dbFile, JSON.stringify(db, null, 2));
 
@@ -42,7 +46,11 @@ try {
 
   const linked = await call("admin", "linked");
   assert.equal(linked.status, 400);
-  assert.match(linked.payload.error, /不能永久删除/);
+  assert.match(linked.payload.error, /当前项目.*负责人/);
+
+  const historical = await call("admin", "historical");
+  assert.equal(historical.status, 200);
+  assert.equal(historical.payload.data.id, "historical");
 
   const self = await call("admin", "admin");
   assert.equal(self.status, 400);
@@ -51,6 +59,8 @@ try {
   const saved = JSON.parse(await readFile(dbFile, "utf8"));
   assert.equal(saved.users.some((item) => item.id === "unused"), false);
   assert.equal(saved.users.some((item) => item.id === "linked"), true);
+  assert.equal(saved.users.some((item) => item.id === "historical"), false);
+  assert.equal(saved.approvals[0].applicantName, "历史人员");
   assert.equal(saved.auditLogs[0].action, "delete");
   console.log("member delete regression passed");
 } finally {

@@ -257,19 +257,32 @@ function setMemberStatus(db, body, actor) {
   return publicUser(member);
 }
 
-function memberReferencePaths(db, member) {
-  const matches = [];
-  const identities = new Set([member.id, member.email, member.name].map((value) => String(value || "").trim().toLowerCase()).filter(Boolean));
-  const visit = (value, path) => {
-    if (typeof value === "string" && identities.has(value.trim().toLowerCase())) matches.push(path);
-    else if (Array.isArray(value)) value.forEach((item, index) => visit(item, `${path}[${index}]`));
-    else if (value && typeof value === "object") Object.entries(value).forEach(([key, item]) => visit(item, `${path}.${key}`));
-  };
-  Object.entries(db).forEach(([key, value]) => {
-    if (["users", "auditLogs"].includes(key)) return;
-    visit(value, key);
-  });
-  return matches;
+function currentMemberBlockers(db, member) {
+  const values = new Set([member.id, member.email, member.name, member.feishuName]
+    .map((value) => String(value || "").trim().toLowerCase()).filter(Boolean));
+  const matches = (value) => values.has(String(value || "").trim().toLowerCase());
+  const blockers = [];
+
+  for (const project of db.projects || []) {
+    if (/已删除|已取消/.test(String(project.status || ""))) continue;
+    const roles = [["负责人", project.owner], ["PM", project.pm], ["销售", project.sales]];
+    roles.forEach(([label, value]) => { if (matches(value)) blockers.push(`项目“${project.name}”的${label}`); });
+    const fields = project.extractedFields || {};
+    if ((fields.assignedMemberIds || []).some(matches)
+      || (fields.assignedMembers || []).some((item) => matches(item?.id) || matches(item?.email) || matches(item?.name))) {
+      blockers.push(`项目“${project.name}”的执行成员`);
+    }
+  }
+
+  for (const binding of settingMembers(db)) {
+    if (matches(binding.userId) || matches(binding.contact) || matches(binding.email) || matches(binding.name)) {
+      blockers.push(`项目“${binding.project || binding.projectName || "未命名项目"}”的当前分派`);
+    }
+  }
+
+  const compensation = db.settings?.compensation?.members || [];
+  if (compensation.some((item) => matches(item.userId))) blockers.push("人力成本与分红中的成员成本配置");
+  return [...new Set(blockers)];
 }
 
 function deleteMember(db, body, actor) {
@@ -277,8 +290,8 @@ function deleteMember(db, body, actor) {
   if (index < 0) throw new Error("成员不存在");
   const member = db.users[index];
   if (member.id === actor.id) throw new Error("不能删除当前登录账号");
-  const references = memberReferencePaths(db, member);
-  if (references.length) throw new Error("该成员已有项目、审批或其他业务记录，不能永久删除，请改用停用");
+  const blockers = currentMemberBlockers(db, member);
+  if (blockers.length) throw new Error(`该成员仍在使用：${blockers.slice(0, 3).join("、")}${blockers.length > 3 ? `等 ${blockers.length} 处` : ""}。请先解除这些当前绑定`);
   db.users.splice(index, 1);
   db.auditLogs.unshift({
     type: "member",
