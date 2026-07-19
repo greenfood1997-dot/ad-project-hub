@@ -172,6 +172,7 @@ try {
   });
   assert(reimbursement.action === "approval-confirmation-required", "AI 助手应先要求确认，不能直接创建报销审批");
   assert(reimbursement.pendingAction?.amount === 500, "AI 待确认动作金额应正确");
+  assert(reimbursement.pendingAction?.requiresVoucher === true, "AI 报销必须先要求选择凭证");
 
   const stateBeforeConfirm = await api("GET", "/api/state", "u-member");
   assert(stateBeforeConfirm.approvals.length === 0, "AI 未确认前不应创建审批");
@@ -179,7 +180,7 @@ try {
   const confirmedReimbursement = await api("POST", "/api/ai/assistant", "u-member", {
     query: "帮我提交500元报销到AI助手项目",
     selectedProjectId: "p-ai-1",
-    confirmAction: reimbursement.pendingAction
+    confirmAction: { ...reimbursement.pendingAction, voucherType: "none" }
   });
   assert(confirmedReimbursement.action === "approval-created", "用户确认后 AI 助手应创建报销审批");
   assert(confirmedReimbursement.approval?.amount === 500, "AI 创建的审批金额应正确");
@@ -202,11 +203,12 @@ try {
   const confirmedTaxiExpense = await api("POST", "/api/ai/assistant", "u-member", {
     query: "帮我登记21块打车费到AI助手项目",
     selectedProjectId: "p-ai-1",
-    confirmAction: taxiExpense.pendingAction
+    confirmAction: { ...taxiExpense.pendingAction, voucherType: "payment-screenshot" }
   });
   assert(confirmedTaxiExpense.action === "approval-created", "口语费用登记确认后应创建报销审批");
   assert(confirmedTaxiExpense.approval?.amount === 21, "口语费用登记创建的审批金额应正确");
   assert(confirmedTaxiExpense.approval?.expenseCategory === "拍摄交通", "确认后的口语费用审批应保留报销类目");
+  assert(confirmedTaxiExpense.approval?.voucher?.type === "payment-screenshot", "AI 报销应保留用户选择的支付截图凭证");
 
   const taskDraft = await api("POST", "/api/ai/assistant", "u-member", {
     query: "帮我新增任务脚本初稿确认到AI助手项目，负责人执行同事，截止明天",

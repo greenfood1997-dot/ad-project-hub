@@ -504,3 +504,22 @@
     grid-template-columns: 1fr;
   }
 }
+.ai-voucher-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.ai-voucher-choice span {
+  width: 100%;
+  color: #66758a;
+  font-size: 12px;
+}
+
+.ai-voucher-choice button.selected {
+  border-color: #6d5bd0;
+  background: #f1edff;
+  color: #5b45c6;
+}

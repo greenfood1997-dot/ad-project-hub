@@ -214,7 +214,7 @@ try {
 
   const reimbursement = await ok("POST", "/api/approvals", "u-member", {
     projectId: "p-approval",
-    type: "reimbursement",
+    type: "reimbursement", voucherType: "none",
     amount: 600,
     payee: "执行成员",
     reason: "交通报销"
@@ -233,7 +233,7 @@ try {
 
   const manualCategoryReimbursement = await ok("POST", "/api/approvals", "u-member", {
     projectId: "p-approval",
-    type: "reimbursement",
+    type: "reimbursement", voucherType: "none",
     amount: 320,
     payee: "执行成员",
     reason: "项目杂项采购",
@@ -328,7 +328,7 @@ try {
 
   const ownerApproval = await ok("POST", "/api/approvals", "u-member", {
     projectId: "p-approval",
-    type: "reimbursement",
+    type: "reimbursement", voucherType: "none",
     amount: 12000,
     payee: "执行成员",
     reason: "大额制作报销"
@@ -338,7 +338,7 @@ try {
 
   const rejected = await ok("POST", "/api/approvals", "u-member", {
     projectId: "p-approval",
-    type: "reimbursement",
+    type: "reimbursement", voucherType: "none",
     amount: 500,
     payee: "执行成员",
     reason: "不合规票据"
@@ -358,7 +358,7 @@ try {
 
   await denied("POST", "/api/approvals", "u-other-member", {
     projectId: "p-approval",
-    type: "reimbursement",
+    type: "reimbursement", voucherType: "none",
     amount: 1,
     reason: "越权报销"
   }, "无关成员不应为非自己项目提交审批");

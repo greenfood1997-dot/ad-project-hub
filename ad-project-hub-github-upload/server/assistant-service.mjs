@@ -83,16 +83,24 @@ function answerAiAssistantByRules(db, body, user, scopedDb, deps = {}) {
         amount,
         payee: user.name,
         reason: query,
-        expenseCategory: category?.category || ""
+        expenseCategory: category?.category || "",
+        requiresVoucher: type === "reimbursement"
       };
       if (!assistantPendingActionMatches(body?.confirmAction, pendingAction, ["projectId", "type", "amount"])) {
         return {
-          reply: `我理解你要给「${target.name}」提交${pendingAction.typeLabel}申请，金额 ${money(amount)}${pendingAction.expenseCategory ? `，类目 ${pendingAction.expenseCategory}` : ""}。这会进入审批流程，还不会直接影响成本；请确认后我再提交。`,
+          reply: `我理解你要给「${target.name}」提交${pendingAction.typeLabel}申请，金额 ${money(amount)}${pendingAction.expenseCategory ? `，类目 ${pendingAction.expenseCategory}` : ""}。${type === "reimbursement" ? "请先选择提供发票、支付截图或暂未提供凭证，" : ""}确认后我再提交。`,
           action: "approval-confirmation-required",
           pendingAction
         };
       }
-      const approval = requireAssistantDep(deps, "createApproval")(db, pendingAction, user);
+      const confirmedAction = body.confirmAction || {};
+      const approval = requireAssistantDep(deps, "createApproval")(db, {
+        ...pendingAction,
+        voucherType: confirmedAction.voucherType,
+        invoiceNo: confirmedAction.invoiceNo,
+        transactionNo: confirmedAction.transactionNo,
+        voucherNote: confirmedAction.voucherNote
+      }, user);
       return {
         reply: `已帮你提交「${target.name}」的${pendingAction.typeLabel}申请，金额 ${money(amount)}${approval.expenseCategory ? `，类目 ${approval.expenseCategory}` : ""}。当前状态：${approval.status}。`,
         action: "approval-created",

@@ -3292,16 +3292,24 @@ function answerAiAssistantByRules(db, body, user, scopedDb) {
         amount,
         payee: user.name,
         reason: query,
-        expenseCategory: category?.category || ""
+        expenseCategory: category?.category || "",
+        requiresVoucher: type === "reimbursement"
       };
       if (!body?.confirmAction || body.confirmAction.kind !== pendingAction.kind) {
         return {
-          reply: `我理解你要给「${target.name}」提交${pendingAction.typeLabel}申请，金额 ${money(amount)}${pendingAction.expenseCategory ? `，类目 ${pendingAction.expenseCategory}` : ""}。这会进入审批流程，还不会直接影响成本；请确认后我再提交。`,
+          reply: `我理解你要给「${target.name}」提交${pendingAction.typeLabel}申请，金额 ${money(amount)}${pendingAction.expenseCategory ? `，类目 ${pendingAction.expenseCategory}` : ""}。${type === "reimbursement" ? "请先选择提供发票、支付截图或暂未提供凭证，" : ""}确认后我再提交。`,
           action: "approval-confirmation-required",
           pendingAction
         };
       }
-      const approval = createApproval(db, pendingAction, user);
+      const confirmedAction = body.confirmAction || {};
+      const approval = createApproval(db, {
+        ...pendingAction,
+        voucherType: confirmedAction.voucherType,
+        invoiceNo: confirmedAction.invoiceNo,
+        transactionNo: confirmedAction.transactionNo,
+        voucherNote: confirmedAction.voucherNote
+      }, user);
       return {
         reply: `已帮你提交「${target.name}」的${pendingAction.typeLabel}申请，金额 ${money(amount)}${approval.expenseCategory ? `，类目 ${approval.expenseCategory}` : ""}。当前状态：${approval.status}。`,
         action: "approval-created",
@@ -3458,6 +3466,9 @@ export function createApproval(db, body, user) {
   if (!project) throw new Error("项目不存在");
   const type = body.type || "reimbursement";
   if (!APPROVAL_LABELS[type]) throw new Error("不支持的审批类型");
+  if (type === "reimbursement" && !["vat-special", "invoice", "payment-screenshot", "none"].includes(body.voucherType)) {
+    throw new Error("提交报销前请选择发票、支付截图或暂未提供凭证");
+  }
   const amount = Number(body.amount || 0);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error("请填写正确的审批金额");
   const idempotencyKey = scopedIdempotencyKey("approval", user, project, body.idempotencyKey || body.requestId);

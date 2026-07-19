@@ -469,7 +469,8 @@ export function DashboardAiPanel({ session, projects, approvals = [], settings =
             <span>{message.title}</span>
             <p>{message.text}</p>
             {message.pendingAction && <div className="ai-confirm-actions">
-              <button type="button" className="primary" onClick={() => confirmPending(message)} disabled={sending}>确认提交</button>
+              {message.pendingAction.requiresVoucher && <div className="ai-voucher-choice"><span>本次报销凭证</span>{[["invoice", "提供发票"], ["payment-screenshot", "支付截图"], ["none", "暂未提供"]].map(([value, label]) => <button type="button" className={message.pendingAction.voucherType === value ? "selected" : "ghost"} onClick={() => setMessages((items) => items.map((item) => item === message ? { ...item, pendingAction: { ...item.pendingAction, voucherType: value } } : item))} key={value}>{label}</button>)}</div>}
+              <button type="button" className="primary" onClick={() => confirmPending(message)} disabled={sending || (message.pendingAction.requiresVoucher && !message.pendingAction.voucherType)}>确认提交</button>
               <button type="button" className="ghost" onClick={() => setMessages((items) => items.map((item) => item === message ? { ...item, pendingAction: null, text: `${item.text}\n已取消，未提交。` } : item))}>取消</button>
             </div>}
             {message.filingAction && <AiFilingActions action={message.filingAction} onOpen={handleFilingAction} />}
@@ -536,7 +537,8 @@ export function AiWorkbench({ session, projects, approvals = [], settings = {}, 
               <span>{message.title}</span>
               <p>{message.text}</p>
               {message.pendingAction && <div className="ai-confirm-actions">
-                <button type="button" className="primary" onClick={() => confirmPending(message)} disabled={sending}>确认提交</button>
+                {message.pendingAction.requiresVoucher && <div className="ai-voucher-choice"><span>本次报销凭证</span>{[["invoice", "提供发票"], ["payment-screenshot", "支付截图"], ["none", "暂未提供"]].map(([value, label]) => <button type="button" className={message.pendingAction.voucherType === value ? "selected" : "ghost"} onClick={() => setMessages((items) => items.map((item) => item === message ? { ...item, pendingAction: { ...item.pendingAction, voucherType: value } } : item))} key={value}>{label}</button>)}</div>}
+                <button type="button" className="primary" onClick={() => confirmPending(message)} disabled={sending || (message.pendingAction.requiresVoucher && !message.pendingAction.voucherType)}>确认提交</button>
                 <button type="button" className="ghost" onClick={() => setMessages((items) => items.map((item) => item === message ? { ...item, pendingAction: null, text: `${item.text}\n已取消，未提交。` } : item))}>取消</button>
               </div>}
               {message.filingAction && <AiFilingActions action={message.filingAction} onOpen={handleFilingAction} />}

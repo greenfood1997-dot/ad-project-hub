@@ -16,6 +16,8 @@ assert(source.includes("function amountFromText(text)") && source.includes("报�
 assert(source.includes("function DashboardAiPanel") && source.includes("function AiWorkbench"), "both AI entry surfaces should exist");
 assert(source.includes("确认提交") && source.includes("已取消，未提交"), "AI assistant should show confirm/cancel actions before writing");
 assert(source.includes("confirmPending(message)") && source.includes("AI 已按你的确认提交审批，审批列表已刷新。"), "AI assistant should submit only after explicit confirmation and report refreshed approvals");
+assert(source.includes("本次报销凭证") && source.includes("提供发票") && source.includes("支付截图") && source.includes("暂未提供"), "AI reimbursement confirmation should require an explicit voucher choice");
+assert(source.includes("message.pendingAction.requiresVoucher && !message.pendingAction.voucherType"), "AI reimbursement submit should stay disabled before voucher selection");
 assert(source.includes("const [approvalFocusId, setApprovalFocusId]"), "dashboard should keep an approval focus target after AI creates approval");
 assert(source.includes("onApprovalCreated={(approval) => {"), "AI surfaces should receive an approval-created navigation callback");
 assert(source.includes('setActiveView("approvals")') && source.includes('setActiveSubView("待我审批")'), "AI-created approvals should navigate into approval workbench");
