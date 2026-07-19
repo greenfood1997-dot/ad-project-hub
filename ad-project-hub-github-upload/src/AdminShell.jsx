@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useRef, useState } from "react";
-import { Bot, ChevronDown, LayoutDashboard, LogOut, Plus, Settings2, UserCog, UsersRound } from "lucide-react";
+import { Bot, ChevronRight, Cloud, Coins, DatabaseBackup, HeartPulse, LayoutDashboard, LogOut, Plus, Settings2, Trash2, UserCog, UsersRound, WalletCards } from "lucide-react";
 import { downloadFile } from "./utils/api.js";
 import { money } from "./utils/format.js";
 import { canManageAssignmentsRole, canUseAdminRole, roleLabel, roleOptions } from "./utils/permissions.js";
@@ -20,15 +20,23 @@ const InterestRatePanel = React.lazy(() => import("./InterestRatePanel.jsx"));
 const ProjectCleanupPanel = React.lazy(() => import("./ProjectCleanupPanel.jsx"));
 const CompensationSettingsPanel = React.lazy(() => import("./CompensationSettingsPanel.jsx"));
 
-function ProductSettingsSection({ id, title, description, openSection, setOpenSection, children }) {
-  const open = openSection === id;
+const PRODUCT_SETTING_SECTIONS = [
+  { id: "basics", title: "基础参数", short: "产品名称与运行规则", icon: Settings2 },
+  { id: "interest", title: "利率与垫资", short: "LPR 与资金成本", icon: Coins },
+  { id: "compensation", title: "人力与分红", short: "工资分摊与股东分红", icon: WalletCards },
+  { id: "collaboration", title: "协同与存储", short: "飞书、微信与对象存储", icon: Cloud },
+  { id: "feishu-bot", title: "飞书机器人", short: "绑定、文件与消息记录", icon: Bot },
+  { id: "health", title: "上线健康检查", short: "部署与服务状态", icon: HeartPulse },
+  { id: "backup", title: "备份与恢复", short: "业务数据安全恢复", icon: DatabaseBackup },
+  { id: "cleanup", title: "项目回收站", short: "误建项目与云端文件", icon: Trash2 },
+];
+
+function ProductSettingsSection({ id, title, description, openSection, children }) {
+  if (openSection !== id) return null;
   return (
-    <section className={`product-settings-section ${open ? "open" : ""}`}>
-      <button type="button" className="product-settings-trigger" aria-expanded={open} onClick={() => setOpenSection(open ? "" : id)}>
-        <span><strong>{title}</strong><em>{description}</em></span>
-        <ChevronDown size={20} />
-      </button>
-      {open && <div className="product-settings-body">{children}</div>}
+    <section className="product-settings-section open">
+      <header className="product-settings-page-head"><strong>{title}</strong><span>{description}</span></header>
+      <div className="product-settings-body">{children}</div>
     </section>
   );
 }
@@ -745,7 +753,14 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
           </Suspense>
         )}
 
-        {isAdmin && adminTab === "product" && <section className="admin-grid product-settings-center">
+        {isAdmin && adminTab === "product" && <section className="product-settings-layout">
+          <nav className="product-settings-nav" aria-label="产品设置分类">
+            <div className="product-settings-nav-head"><strong>设置分类</strong><span>每次只处理一类设置</span></div>
+            {PRODUCT_SETTING_SECTIONS.map(({ id, title, short, icon: Icon }) => <button type="button" key={id} className={openProductSection === id ? "active" : ""} aria-current={openProductSection === id ? "page" : undefined} onClick={() => setOpenProductSection(id)}>
+              <Icon size={18} /><span><strong>{title}</strong><em>{short}</em></span><ChevronRight size={16} />
+            </button>)}
+          </nav>
+          <div className="product-settings-content">
           <ProductSettingsSection id="basics" title="基础参数" description="公司名称、默认预算比例和自动巡检频率" openSection={openProductSection} setOpenSection={setOpenProductSection}>
             <Suspense fallback={<ModuleFallback title="基础参数加载中" />}>
             <ProductSettingsForm
@@ -876,6 +891,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
               />
             </Suspense>
           </ProductSettingsSection>
+          </div>
         </section>}
       </main>
     </div>

@@ -579,7 +579,7 @@
   overflow-wrap: anywhere;
 }
 
-/* Product settings are a linear checklist, not a masonry dashboard. */
+/* Admin pages use one readable content column; product settings add their own category navigation. */
 .admin-grid {
   grid-template-columns: minmax(0, 1fr);
   width: min(100%, 1180px);
@@ -631,6 +631,61 @@
   gap: 12px;
 }
 
+.product-settings-layout {
+  width: min(100%, 1280px);
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.product-settings-nav {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.product-settings-nav-head {
+  display: grid;
+  gap: 3px;
+  padding: 10px 10px 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+
+.product-settings-nav-head strong { font-size: 15px; }
+.product-settings-nav-head span { color: var(--muted); font-size: 12px; }
+
+.product-settings-nav > button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+}
+
+.product-settings-nav > button > span { display: grid; gap: 2px; min-width: 0; }
+.product-settings-nav > button strong { color: var(--text); font-size: 13px; }
+.product-settings-nav > button em { overflow: hidden; color: var(--muted); font-size: 11px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.product-settings-nav > button > svg:last-child { opacity: .45; }
+.product-settings-nav > button:hover { background: #f6f8fc; }
+.product-settings-nav > button.active { background: #eef3ff; color: var(--primary); }
+.product-settings-nav > button.active strong { color: var(--primary); }
+.product-settings-content { min-width: 0; }
+
 .product-settings-section,
 .settings-accordion {
   overflow: hidden;
@@ -645,6 +700,16 @@
   border-color: #c7d7ff;
   box-shadow: 0 14px 34px rgba(37, 99, 235, 0.08);
 }
+
+.product-settings-page-head {
+  display: grid;
+  gap: 5px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f7f9ff, #fff);
+}
+
+.product-settings-page-head strong { font-size: 18px; }
+.product-settings-page-head span { color: var(--muted); font-size: 13px; }
 
 .product-settings-trigger,
 .settings-accordion-trigger {
@@ -765,6 +830,14 @@
     padding-left: 14px;
     padding-right: 14px;
   }
+}
+
+@media (max-width: 900px) {
+  .product-settings-layout { grid-template-columns: 1fr; gap: 12px; }
+  .product-settings-nav { position: static; display: flex; overflow-x: auto; padding: 8px; scrollbar-width: thin; }
+  .product-settings-nav-head { display: none; }
+  .product-settings-nav > button { flex: 0 0 auto; width: auto; grid-template-columns: 18px auto; padding: 10px 12px; }
+  .product-settings-nav > button em, .product-settings-nav > button > svg:last-child { display: none; }
 }
 
 .storage-test-result a {
