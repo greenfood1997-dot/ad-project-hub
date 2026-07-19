@@ -3295,6 +3295,22 @@ main.dashboard-main > .notice-bar {
   .ai-compose { min-height: 54px; }
 }
 
+@media (max-height: 900px) and (min-width: 1181px) {
+  .ai-activity-panel:not(.collapsed) { grid-template-rows: auto auto auto auto auto minmax(160px, 1fr) auto; padding: 12px; }
+  .ai-activity-panel .ai-profile { margin-bottom: 6px; }
+  .ai-activity-panel .ai-avatar { width: 42px; height: 42px; border-width: 3px; font-size: 17px; }
+  .ai-activity-panel .ai-profile strong { font-size: 15px; }
+  .ai-activity-panel .ai-profile span { font-size: 11px; }
+  .ai-activity-panel .ai-activity-head { padding: 7px 9px; }
+  .ai-activity-panel .ai-project-context { margin-top: 6px; padding: 7px 9px; }
+  .ai-activity-panel .ai-project-context strong { max-height: 38px; overflow: hidden; }
+  .ai-activity-panel .ai-quick-tags { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; margin: 6px 0; }
+  .ai-activity-panel .ai-quick-tags button { min-height: 32px; padding: 0 4px; font-size: 11px; }
+  .ai-activity-panel .ai-drop-hint { min-height: 34px; margin-bottom: 6px; padding: 5px 8px; }
+  .ai-activity-panel .ai-feed { min-height: 160px; }
+  .ai-activity-panel .ai-compose { min-height: 52px; padding: 6px; }
+}
+
 .ai-compose input {
   min-width: 0;
   border: 0;

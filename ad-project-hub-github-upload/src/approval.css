@@ -486,6 +486,39 @@
   scrollbar-gutter: stable;
 }
 
+.approval-card {
+  grid-template-columns: minmax(180px, 1fr) minmax(92px, auto) minmax(96px, auto) minmax(82px, auto) !important;
+}
+
+.approval-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 82px;
+}
+
+.approval-card-actions button {
+  flex: 0 0 auto;
+  min-width: 68px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1500px) {
+  .approval-card {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: start;
+  }
+  .approval-card > b,
+  .approval-card > em {
+    justify-self: end;
+  }
+  .approval-card-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
 .reimbursement-summary-grid > *,
 .approval-summary-row > *,
 .approval-card > * {

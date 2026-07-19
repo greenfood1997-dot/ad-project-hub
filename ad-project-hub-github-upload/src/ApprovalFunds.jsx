@@ -385,10 +385,12 @@ export default function ApprovalFunds({ projects, approvals, selected, session, 
               </div>
               <b>{money(item.amount)}</b>
               <em>{item.status}</em>
-              <button type="button" onClick={() => setSelectedApprovalKey(item.id)}>查看</button>
-              {canWithdrawApproval(session, item) && <button type="button" className="ghost" onClick={() => withdraw(item)} disabled={withdrawingApprovalId === item.id}>
-                {withdrawingApprovalId === item.id ? "撤回中" : "撤回"}
-              </button>}
+              <div className="approval-card-actions">
+                <button type="button" onClick={() => setSelectedApprovalKey(item.id)}>查看</button>
+                {canWithdrawApproval(session, item) && <button type="button" className="ghost" onClick={() => withdraw(item)} disabled={withdrawingApprovalId === item.id}>
+                  {withdrawingApprovalId === item.id ? "撤回中" : "撤回"}
+                </button>}
+              </div>
             </div>
           )) : <div className="empty-state action-empty approval-empty-actions">
             <strong>{activeCategory === "待我审批" ? "当前没有需要你处理的审批" : `暂无${activeCategory}记录`}</strong>
