@@ -3461,6 +3461,10 @@ export function createApproval(db, body, user) {
   const steps = approvalSteps(type, amount, rules);
   const current = steps.find((step) => step.status === "current");
   const expenseCategory = type === "reimbursement" ? inferExpenseCategory(body) : null;
+  const voucher = type === "reimbursement" ? normalizeReimbursementVoucher(body) : null;
+  if (voucher?.uniqueKey && (db.approvals || []).some((item) => item.type === "reimbursement" && item.voucher?.uniqueKey === voucher.uniqueKey && item.status !== "已撤回")) {
+    throw new Error("该发票号码或支付交易号已提交过，请勿重复报销");
+  }
   const approval = {
     id: nextApprovalId(),
     type,
@@ -3474,6 +3478,8 @@ export function createApproval(db, body, user) {
     expenseCategory: expenseCategory?.category || "",
     expenseCategorySource: expenseCategory?.source || "",
     expenseCategoryConfidence: expenseCategory?.confidence || 0,
+    voucher,
+    invoiceGap: type === "reimbursement" && voucher?.status !== "valid-invoice" ? amount : 0,
     status: `待${current?.label || "PM确认"}`,
     currentRole: current?.role || "pm",
     applicantId: user.id,
@@ -3494,6 +3500,39 @@ export function createApproval(db, body, user) {
   db.approvals = db.approvals || [];
   db.approvals.unshift(approval);
   db.auditLogs.unshift({ type: "approval", target: project.name, action: "submit", user: user.name, meta: { approvalId: approval.id, approvalType: type, amount }, at });
+  return approval;
+}
+
+function normalizeReimbursementVoucher(body = {}) {
+  const type = ["vat-special", "invoice", "payment-screenshot", "none"].includes(body.voucherType) ? body.voucherType : "none";
+  const invoiceNo = String(body.invoiceNo || "").replace(/\s+/g, "");
+  const transactionNo = String(body.transactionNo || "").replace(/\s+/g, "");
+  const taxRate = Math.max(0, Number(body.taxRate || 0));
+  const status = type === "vat-special" || type === "invoice" ? "valid-invoice" : "awaiting-invoice";
+  return {
+    type,
+    invoiceNo,
+    transactionNo,
+    taxRate,
+    status,
+    deductible: type === "vat-special" && taxRate > 0,
+    uniqueKey: invoiceNo ? `invoice:${invoiceNo}` : transactionNo ? `payment:${transactionNo}` : "",
+    note: String(body.voucherNote || "").trim()
+  };
+}
+
+export function supplementReimbursementVoucher(db, body = {}, user = {}) {
+  const approval = (db.approvals || []).find((item) => item.id === body.approvalId && item.type === "reimbursement");
+  if (!approval) throw new Error("报销记录不存在");
+  const voucher = normalizeReimbursementVoucher(body);
+  if (!voucher.invoiceNo || !["vat-special", "invoice"].includes(voucher.type)) throw new Error("补票必须填写发票号码和发票类型");
+  if ((db.approvals || []).some((item) => item.id !== approval.id && item.voucher?.uniqueKey === voucher.uniqueKey && item.status !== "已撤回")) throw new Error("该发票号码已用于其他报销");
+  approval.voucher = voucher;
+  approval.invoiceGap = 0;
+  approval.voucherSupplementedAt = new Date().toISOString();
+  approval.voucherSupplementedBy = user.id;
+  approval.updatedAt = approval.voucherSupplementedAt;
+  db.auditLogs.unshift({ type: "finance", target: approval.projectName, action: "supplement-reimbursement-invoice", user: user.name, meta: { approvalId: approval.id, invoiceNo: voucher.invoiceNo }, at: approval.updatedAt });
   return approval;
 }
 

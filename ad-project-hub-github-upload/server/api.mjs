@@ -41,6 +41,7 @@ import {
   supplierCsv,
   supplierLibrary,
   suggestCollectionScript,
+  supplementReimbursementVoucher,
   scanSystemNotifications,
   testAiSettings,
   testObjectStorage,
@@ -1047,6 +1048,19 @@ export async function handleApi(req, res) {
     if (!requireRole(user, MANAGEMENT_ROLES, res)) return;
     const body = await readBody(req);
     const data = await mutateDb((db) => saveCompanyFinance(db, body.values || body, ensureMemberFields(user)));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/reimbursements/supplement-voucher") {
+    if (!requireRole(user, PROJECT_UPLOAD_ROLES, res)) return;
+    const body = await readBody(req);
+    const approval = (snapshot.approvals || []).find((item) => item.id === body.approvalId);
+    if (!approval || !canAccessProject(snapshot, user, approval.projectId)) {
+      sendJson(res, 403, { ok: false, error: "无权限为该报销补票" });
+      return;
+    }
+    const data = await mutateDb((db) => supplementReimbursementVoucher(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }

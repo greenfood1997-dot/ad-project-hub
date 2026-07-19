@@ -91,7 +91,7 @@ export async function readPostgresDb() {
       project_name as "projectName", amount::float, reason, payee, category,
       status, approval_role as "currentRole", idempotency_key as "idempotencyKey", applicant_id as "applicantId",
       applicant_name as "applicantName", applicant_role as "applicantRole",
-      steps, logs, applied_at as "appliedAt", completed_at as "completedAt",
+      steps, logs, metadata, applied_at as "appliedAt", completed_at as "completedAt",
       completed_by as "completedBy", created_at as "createdAt", updated_at as "updatedAt"
       from approvals order by created_at desc`),
     db.query(`select id, project_id as "projectId", project_name as "projectName",
@@ -157,7 +157,7 @@ export async function readPostgresDb() {
     clientProfiles: clientProfiles.rows,
     suppliers: suppliers.rows,
     supplierProfiles: supplierProfiles.rows,
-    approvals: approvals.rows,
+    approvals: approvals.rows.map((item) => ({ ...item, ...(item.metadata || {}) })),
     payments: payments.rows,
     collectionScripts: collectionScripts.rows,
     feishuProjectBindings: feishuProjectBindings.rows,
@@ -484,8 +484,8 @@ export async function writePostgresDbFromSnapshot(snapshot) {
         `insert into approvals (
           id, type, type_label, project_id, project_name, amount, reason, payee,
           category, status, approval_role, idempotency_key, applicant_id, applicant_name, applicant_role,
-          steps, logs, applied_at, completed_at, completed_by, created_at, updated_at
-        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
+          steps, logs, metadata, applied_at, completed_at, completed_by, created_at, updated_at
+        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
         [
           item.id,
           item.type,
@@ -504,6 +504,7 @@ export async function writePostgresDbFromSnapshot(snapshot) {
           item.applicantRole || "",
           JSON.stringify(item.steps || []),
           JSON.stringify(item.logs || []),
+          JSON.stringify({ voucher: item.voucher || null, invoiceGap: Number(item.invoiceGap || 0), voucherSupplementedAt: item.voucherSupplementedAt || "", voucherSupplementedBy: item.voucherSupplementedBy || "" }),
           item.appliedAt || null,
           item.completedAt || null,
           item.completedBy || null,

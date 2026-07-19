@@ -392,6 +392,7 @@ create table if not exists audit_logs (
 );
 
 alter table approvals add column if not exists idempotency_key text;
+alter table approvals add column if not exists metadata jsonb not null default '{}'::jsonb;
 create unique index if not exists approvals_idempotency_key_unique on approvals (idempotency_key) where idempotency_key is not null;
 
 insert into users (id, name, email, role, department, status, pin, must_change_pin)

@@ -25,7 +25,8 @@ export default function ApprovalFunds({ projects, approvals, selected, session, 
     amount: "",
     payee: "",
     reason: "",
-    expenseCategory: "自动识别"
+    expenseCategory: "自动识别",
+    voucherType: "none", invoiceNo: "", transactionNo: "", taxRate: "", voucherNote: ""
   });
   const [submitting, setSubmitting] = useState(false);
   const [actingApprovalId, setActingApprovalId] = useState("");
@@ -166,7 +167,7 @@ export default function ApprovalFunds({ projects, approvals, selected, session, 
         method: "POST",
         body: JSON.stringify(form)
       });
-      setForm({ projectId: form.projectId, type: "reimbursement", amount: "", payee: "", reason: "", expenseCategory: "自动识别" });
+      setForm({ projectId: form.projectId, type: "reimbursement", amount: "", payee: "", reason: "", expenseCategory: "自动识别", voucherType: "none", invoiceNo: "", transactionNo: "", taxRate: "", voucherNote: "" });
       const targetCategory = form.type === "petty_cash" ? "项目备用金" : form.type === "supplier_payment" ? "供应商付款" : "报销";
       setSubView(targetCategory);
       setSelectedApprovalKey(approval.id || "");
@@ -328,6 +329,12 @@ export default function ApprovalFunds({ projects, approvals, selected, session, 
             {expenseCategories.map((category) => <option value={category} key={category}>{category}</option>)}
           </select>
         </label>}
+        {form.type === "reimbursement" && <>
+          <label><span>凭证类型（优先提供发票）</span><select value={form.voucherType} onChange={(event) => updateForm("voucherType", event.target.value)}><option value="none">暂未提供凭证</option><option value="vat-special">增值税专用发票</option><option value="invoice">普通/电子发票</option><option value="payment-screenshot">支付截图</option></select></label>
+          {["vat-special", "invoice"].includes(form.voucherType) && <><label><span>发票号码</span><input value={form.invoiceNo} onChange={(event) => updateForm("invoiceNo", event.target.value)} placeholder="用于查重和补票关联" /></label><label><span>票面税率</span><input value={form.taxRate} onChange={(event) => updateForm("taxRate", event.target.value)} placeholder="例如 1 或 6" /></label></>}
+          {form.voucherType === "payment-screenshot" && <label><span>支付交易号</span><input value={form.transactionNo} onChange={(event) => updateForm("transactionNo", event.target.value)} placeholder="用于防止支付截图重复报销" /></label>}
+          <label><span>凭证说明</span><input value={form.voucherNote} onChange={(event) => updateForm("voucherNote", event.target.value)} placeholder="未开票原因、补票时间或票据说明" /></label>
+        </>}
         <button type="submit" className="primary" disabled={submitting}>{submitting ? "提交中" : "提交审批"}</button>
       </form>
 
