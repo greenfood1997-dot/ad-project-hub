@@ -173,6 +173,18 @@ function normalizeLoginAccount(value = "") {
   return account && !account.includes("@") ? `${account}@feishu.local` : account;
 }
 
+function findLoginAccount(users = [], value = "") {
+  const raw = normalizeEmail(value);
+  const normalized = normalizeLoginAccount(raw);
+  const exact = users.map(ensureMemberFields).find((item) => normalizeEmail(item.email) === normalized);
+  if (exact || !raw || raw.includes("@")) return exact || null;
+  const shortMatches = users.map(ensureMemberFields).filter((item) => {
+    const email = normalizeEmail(item.email);
+    return email.endsWith("@feishu.local") && email.slice(0, -"@feishu.local".length) === raw;
+  });
+  return shortMatches.length === 1 ? shortMatches[0] : null;
+}
+
 function nextUserId(db) {
   return `u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -806,7 +818,7 @@ export async function handleApi(req, res) {
       sendJson(res, 429, { ok: false, error: "登录失败次数过多，请 15 分钟后重试" });
       return;
     }
-    const account = snapshot.users.map(ensureMemberFields).find((item) => normalizeEmail(item.email) === email);
+    const account = findLoginAccount(snapshot.users, body.email || body.account);
     const storedPin = account?.pinHash || account?.pin || "";
     const validPin = account && pin && verifyPin(pin, storedPin);
     if (!validPin || account.status === "disabled") {

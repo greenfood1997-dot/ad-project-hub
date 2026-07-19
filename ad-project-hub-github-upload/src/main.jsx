@@ -7007,6 +7007,7 @@ function LoginScreen({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [resetToken, setResetToken] = useState("");
   const [newPin, setNewPin] = useState("");
+  const shortAccount = email.trim() && !email.includes("@");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -7073,8 +7074,8 @@ function LoginScreen({ onLogin }) {
           {!resetToken && <>
           <label>
             <span>账号名</span>
-            <div className="input-row"><Mail size={16} /><input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="例如 linquan" autoComplete="username" /></div>
-            <small className="login-field-help">直接输入名字拼音，系统会自动补全 @feishu.local</small>
+            <div className={`input-row account-input-row ${shortAccount ? "has-suffix" : ""}`}><Mail size={16} /><input value={email} onChange={(event) => setEmail(event.target.value.trimStart())} placeholder="例如 linquan" autoComplete="username" />{shortAccount && <span className="account-domain">@feishu.local</span>}</div>
+            <small className="login-field-help">{shortAccount ? `本次登录账号：${email.trim()}@feishu.local` : "可输入名字拼音，或输入完整企业邮箱"}</small>
           </label>
           </>}
           <label>
