@@ -95,6 +95,18 @@ export function monthlyProjectCostRows(rows = []) {
   return [["月份", "项目", "客户", "员工执行报销", "供应商付款", "垫付款", "垫资利息", "既有人力成本", "管理公摊", "其他成本/税费", "当月人力分摊", "实时已用成本", "管理全成本", "合同金额", "管理利润"], ...rows.map((row) => [row.month, row.projectName, row.client, row.reimbursements, row.supplierPayments, row.advance, row.interest, row.internalLabor, row.overhead, row.other, row.laborAllocation, row.realtimeCost, row.fullCost, row.contract, row.managementProfit])];
 }
 
+export function monthlyProjectCostDetailRows(report = {}) {
+  const rows = report.projects || [];
+  return [
+    ["月度文字汇总", report.summary || ""],
+    [],
+    ...monthlyProjectCostRows(rows),
+    [],
+    ["项目", "明细来源", "费用科目", "金额", "人员", "时间", "说明"],
+    ...rows.flatMap((project) => (project.details || []).map((item) => [project.projectName, item.source, item.category, item.amount, item.person, item.at, item.note]))
+  ];
+}
+
 export function approvalLedgerRows(approvals = [], options = {}) {
   const runtimeInfo = typeof options.runtimeInfo === "function" ? options.runtimeInfo : () => ({});
   const headers = [

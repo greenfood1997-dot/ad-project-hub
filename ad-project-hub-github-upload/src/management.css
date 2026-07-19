@@ -233,3 +233,25 @@
     grid-template-columns: 1fr;
   }
 }
+.management-cost-dashboard { grid-column: 1 / -1; display: grid; gap: 14px; }
+.management-cost-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.management-cost-toolbar input { min-height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; }
+.management-cost-summary { border: 1px solid #c9d8ff; border-radius: 12px; background: #f5f8ff; padding: 14px; }
+.management-cost-summary p { margin: 6px 0; line-height: 1.7; }
+.management-cost-summary small { color: var(--muted); }
+.management-cost-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.management-cost-metrics div { display: grid; gap: 5px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.management-cost-metrics span, .management-cost-metrics em { color: var(--muted); font-size: 12px; }
+.management-cost-projects { display: grid; gap: 10px; }
+.management-cost-projects article { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.management-cost-project-head { width: 100%; display: grid; grid-template-columns: 1fr auto 20px; gap: 12px; align-items: center; border: 0; background: #fff; padding: 14px; text-align: left; }
+.management-cost-project-head span { display: grid; gap: 4px; }
+.management-cost-project-head span:nth-child(2) { text-align: right; }
+.management-cost-project-head em { color: var(--muted); font-style: normal; font-size: 12px; }
+.management-cost-project-head svg.expanded { transform: rotate(180deg); }
+.management-cost-details { display: grid; gap: 8px; border-top: 1px solid var(--line); background: #fafbff; padding: 12px; }
+.management-cost-breakdown { display: flex; flex-wrap: wrap; gap: 6px; }
+.management-cost-breakdown span { border-radius: 999px; background: #eef2ff; padding: 5px 8px; font-size: 12px; }
+.management-cost-detail-row { display: grid; grid-template-columns: 90px 1fr 1fr auto; gap: 10px; align-items: center; border-top: 1px solid #e8ecf4; padding-top: 8px; }
+.management-cost-detail-row em { color: var(--muted); font-style: normal; font-size: 12px; }
+@media (max-width: 760px) { .management-cost-metrics { grid-template-columns: 1fr 1fr; } .management-cost-detail-row { grid-template-columns: 1fr auto; } }

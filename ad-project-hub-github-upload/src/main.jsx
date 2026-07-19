@@ -42,6 +42,7 @@ import ModuleFallback from "./ModuleFallback.jsx";
 
 const AdminShell = React.lazy(() => import("./AdminShell.jsx"));
 const ProjectDetail = React.lazy(() => import("./ProjectDetail.jsx"));
+const ManagementCostDashboard = React.lazy(() => import("./ManagementCostDashboard.jsx"));
 
 const SESSION_KEY = "ad-project-hub-session";
 const BUILD_VERSION = "2026-07-08-ai-task-command-pass";
@@ -1564,9 +1565,9 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   async function exportMonthlyProjectCosts() {
     const month = new Date().toISOString().slice(0, 7);
     try {
-      const rows = await apiRequest(`/api/reports/monthly-project-costs?month=${month}`, session);
-      downloadCsv(`${month}-项目全成本月报.csv`, monthlyProjectCostRows(rows));
-      setNotice(`已导出 ${month} 项目全成本月报：${rows.length} 个项目。`);
+      const report = await apiRequest(`/api/reports/monthly-project-costs?month=${month}`, session);
+      downloadCsv(`${month}-项目全成本月报.csv`, monthlyProjectCostRows(report.projects || []));
+      setNotice(`已导出 ${month} 项目全成本月报：${report.projects?.length || 0} 个项目。`);
     } catch (error) { setNotice(error.message || "项目全成本月报导出失败"); }
   }
 
@@ -6287,11 +6288,13 @@ function ManagementCockpit({ projects, approvals = [], settings = {}, session, s
   ];
   const showCash = subView === "现金流压力";
   const showAdvisor = subView === "AI 商业顾问";
-  const showDashboard = !showCash && !showAdvisor;
+  const showCosts = subView === "实时全成本";
+  const showDashboard = !showCash && !showAdvisor && !showCosts;
   const managementTabs = [
     { label: "公司大盘", icon: BarChart3, text: "看总额、回款、利润、项目结构" },
     { label: "现金流压力", icon: CircleDollarSign, text: "按6个月安全线判断现金能撑多久" },
-    { label: "AI 商业顾问", icon: Bot, text: "把经营数据翻译成下一步动作" }
+    { label: "AI 商业顾问", icon: Bot, text: "把经营数据翻译成下一步动作" },
+    { label: "实时全成本", icon: FileSpreadsheet, text: "实时看项目全成本并下钻细项" }
   ];
   function handleAdvisorAction(action = "", index = 0) {
     if (/催收|回款|待回款/.test(action)) {
@@ -6394,7 +6397,7 @@ function ManagementCockpit({ projects, approvals = [], settings = {}, session, s
     <section className="feature-grid">
       <div className="feature-panel wide-feature management-switcher">
         <div>
-          <PanelTitle icon={showCash ? CircleDollarSign : showAdvisor ? Bot : BarChart3} title={showCash ? "现金流压力" : showAdvisor ? "AI 商业顾问" : "公司经营大盘"} />
+          <PanelTitle icon={showCash ? CircleDollarSign : showAdvisor ? Bot : showCosts ? FileSpreadsheet : BarChart3} title={showCash ? "现金流压力" : showAdvisor ? "AI 商业顾问" : showCosts ? "实时全成本" : "公司经营大盘"} />
           <p>{showCash ? "现金安全线 = 当前公司现金 ÷（人力 + 租金 + 贷款 + 利息 + 每月其他固定支出），目标至少撑过 6 个月。" : showAdvisor ? "AI 顾问只给管理层看，会根据回款、毛利、现金压力和项目风险给经营动作。" : "这里汇总所有项目的合同、回款、支出、利润和项目风险，帮助创始人快速看公司状态。"}</p>
         </div>
         <button type="button" className="ghost" disabled={exportingManagement} onClick={exportManagementLedger}><FileSpreadsheet size={14} />{exportingManagement ? "导出中" : "导出经营摘要"}</button>
@@ -6413,6 +6416,7 @@ function ManagementCockpit({ projects, approvals = [], settings = {}, session, s
           ))}
         </div>
       </div>
+      {showCosts && <React.Suspense fallback={<ModuleFallback title="实时全成本加载中" />}><ManagementCostDashboard session={session} onNotice={onNotice} /></React.Suspense>}
       {showDashboard && <>
         <div className="feature-panel founder-card wide-feature">
           <PanelTitle icon={BarChart3} title="公司经营大盘" />

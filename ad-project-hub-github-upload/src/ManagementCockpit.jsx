@@ -5,6 +5,7 @@ import { downloadCsv, money } from "./utils/format.js";
 import { managementLedgerRows } from "./utils/ledgerRows.js";
 import { calculateRunway, operatingMetrics } from "./utils/operatingMetrics.js";
 import "./management.css";
+import ManagementCostDashboard from "./ManagementCostDashboard.jsx";
 
 function PanelTitle({ icon: Icon, title }) {
   return <div className="panel-title"><Icon size={18} /><h2>{title}</h2></div>;
@@ -67,11 +68,13 @@ export default function ManagementCockpit({ projects, approvals = [], settings =
   ];
   const showCash = subView === "现金流压力";
   const showAdvisor = subView === "AI 商业顾问";
-  const showDashboard = !showCash && !showAdvisor;
+  const showCosts = subView === "实时全成本";
+  const showDashboard = !showCash && !showAdvisor && !showCosts;
   const managementTabs = [
     { label: "公司大盘", icon: BarChart3, text: "看总额、回款、利润、项目结构" },
     { label: "现金流压力", icon: CircleDollarSign, text: "按6个月安全线判断现金能撑多久" },
     { label: "AI 商业顾问", icon: Bot, text: "把经营数据翻译成下一步动作" }
+    ,{ label: "实时全成本", icon: FileSpreadsheet, text: "实时看项目全成本并下钻细项" }
   ];
   function handleAdvisorAction(action = "", index = 0) {
     if (/催收|回款|待回款/.test(action)) {
@@ -174,7 +177,7 @@ export default function ManagementCockpit({ projects, approvals = [], settings =
     <section className="feature-grid">
       <div className="feature-panel wide-feature management-switcher">
         <div>
-          <PanelTitle icon={showCash ? CircleDollarSign : showAdvisor ? Bot : BarChart3} title={showCash ? "现金流压力" : showAdvisor ? "AI 商业顾问" : "公司经营大盘"} />
+          <PanelTitle icon={showCash ? CircleDollarSign : showAdvisor ? Bot : showCosts ? FileSpreadsheet : BarChart3} title={showCash ? "现金流压力" : showAdvisor ? "AI 商业顾问" : showCosts ? "实时全成本" : "公司经营大盘"} />
           <p>{showCash ? "现金安全线 = 当前公司现金 ÷（人力 + 租金 + 贷款 + 利息 + 每月其他固定支出），目标至少撑过 6 个月。" : showAdvisor ? "AI 顾问只给管理层看，会根据回款、毛利、现金压力和项目风险给经营动作。" : "这里汇总所有项目的合同、回款、支出、利润和项目风险，帮助创始人快速看公司状态。"}</p>
         </div>
         <button type="button" className="ghost" disabled={exportingManagement} onClick={exportManagementLedger}><FileSpreadsheet size={14} />{exportingManagement ? "导出中" : "导出经营摘要"}</button>
@@ -193,6 +196,7 @@ export default function ManagementCockpit({ projects, approvals = [], settings =
           ))}
         </div>
       </div>
+      {showCosts && <ManagementCostDashboard session={session} onNotice={onNotice} />}
       {showDashboard && <>
         <div className="feature-panel founder-card wide-feature">
           <PanelTitle icon={BarChart3} title="公司经营大盘" />

@@ -752,7 +752,7 @@ function monthlyProjectCostReport(db, month) {
   const selectedMonth = /^\d{4}-\d{2}$/.test(month) ? month : new Date().toISOString().slice(0, 7);
   const completed = (db.approvals || []).filter((item) => item.status === "已完成" && String(item.completedAt || item.updatedAt || "").slice(0, 7) === selectedMonth);
   const allocations = (db.settings?.compensation?.allocations || []).filter((item) => item.month === selectedMonth && item.projectId !== "company-overhead");
-  return (db.projects || []).map((project) => {
+  const projects = (db.projects || []).map((project) => {
     const projectApprovals = completed.filter((item) => item.projectId === project.id || item.projectName === project.name);
     const reimbursements = projectApprovals.filter((item) => item.type === "reimbursement").reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const supplierPayments = projectApprovals.filter((item) => item.type === "supplier_payment").reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -764,8 +764,20 @@ function monthlyProjectCostReport(db, month) {
     const overhead = Number(breakdown.overhead || project.extractedFields?.overhead || 0);
     const other = Number(breakdown.additionalCost || project.extractedFields?.additionalCost || 0);
     const realtimeCost = Number(project.costUsed || 0);
-    return { month: selectedMonth, projectId: project.id, projectName: project.name, client: project.client || "", reimbursements, supplierPayments, advance, interest, internalLabor, overhead, other, laborAllocation: labor, realtimeCost, fullCost: realtimeCost + labor, contract: Number(project.contract || 0), managementProfit: Number(project.contract || 0) - realtimeCost - labor };
+    const details = [
+      ...projectApprovals.map((item) => ({ source: item.type === "reimbursement" ? "执行报销" : "供应商付款", category: item.expenseCategory || item.payee || item.typeLabel || "其他", amount: Number(item.amount || 0), person: item.applicantName || "", at: item.completedAt || item.updatedAt || "", note: item.reason || "" })),
+      ...allocations.filter((item) => item.projectId === project.id).map((item) => ({ source: "人力分摊", category: item.memberName || "成员人力", amount: Number(item.amount || 0), person: item.memberName || "", at: `${selectedMonth}-01`, note: "月度人力成本分摊" })),
+      ...[["垫付款", advance], ["垫资利息", interest], ["既有人力成本", internalLabor], ["管理公摊", overhead], ["其他成本/税费", other]].filter(([, amount]) => amount > 0).map(([category, amount]) => ({ source: "项目成本", category, amount, person: "", at: "", note: "来自项目成本解析" }))
+    ];
+    return { month: selectedMonth, projectId: project.id, projectName: project.name, client: project.client || "", reimbursements, supplierPayments, advance, interest, internalLabor, overhead, other, laborAllocation: labor, realtimeCost, fullCost: realtimeCost + labor, contract: Number(project.contract || 0), managementProfit: Number(project.contract || 0) - realtimeCost - labor, details };
   });
+  const totalFullCost = projects.reduce((sum, item) => sum + item.fullCost, 0);
+  const totalProfit = projects.reduce((sum, item) => sum + item.managementProfit, 0);
+  const highestProject = [...projects].sort((a, b) => b.fullCost - a.fullCost)[0];
+  const categoryTotals = projects.flatMap((item) => item.details).reduce((map, item) => map.set(item.category, Number(map.get(item.category) || 0) + item.amount), new Map());
+  const highestCategory = [...categoryTotals.entries()].sort((a, b) => b[1] - a[1])[0];
+  const summary = `${selectedMonth} 共统计 ${projects.length} 个项目，管理全成本 ${totalFullCost.toLocaleString("zh-CN")} 元，管理利润 ${totalProfit.toLocaleString("zh-CN")} 元。${highestProject ? `成本最高项目为“${highestProject.projectName}”，全成本 ${highestProject.fullCost.toLocaleString("zh-CN")} 元。` : ""}${highestCategory ? `最大成本科目为“${highestCategory[0]}”，合计 ${highestCategory[1].toLocaleString("zh-CN")} 元。` : ""}`;
+  return { month: selectedMonth, generatedAt: new Date().toISOString(), summary, projects };
 }
 
 function visibleProjectForBody(db, user, body = {}) {
