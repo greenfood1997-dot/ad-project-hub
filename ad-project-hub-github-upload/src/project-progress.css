@@ -117,3 +117,9 @@
     grid-template-columns: 1fr;
   }
 }
+.execution-cost-note {
+  margin: 6px 0 12px;
+  color: #66758a;
+  font-size: 12px;
+  line-height: 1.6;
+}

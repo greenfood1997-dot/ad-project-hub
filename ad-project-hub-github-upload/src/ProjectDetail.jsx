@@ -158,7 +158,19 @@ export default function ProjectDetail({ project, isManagement, session, files, p
   const projectAlertUpdates = alertUpdates.filter((item) => item.project === project.name || item.projectName === project.name || item.projectId === project.id);
   const projectLogs = auditLogs.filter((item) => item.target === project.name);
   const projectTasks = (project.tasks || []).map(normalizeTask).filter((task) => !task.archivedAt);
-  const costRows = (project.costs || []).map(normalizeCostRow).filter((row) => row.name);
+  const executionOnly = ["member", "viewer"].includes(session.role);
+  const monthKey = new Date().toISOString().slice(0, 7);
+  const ownMonthlyReimbursements = projectApprovals.filter((item) => item.type === "reimbursement"
+    && item.applicantId === session.id && item.status === "已完成"
+    && String(item.completedAt || item.updatedAt || item.createdAt || "").slice(0, 7) === monthKey);
+  const ownMonthlyTotal = ownMonthlyReimbursements.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const executionCostRows = Array.from(ownMonthlyReimbursements.reduce((map, item) => {
+    const name = item.expenseCategory || "其他";
+    const row = map.get(name) || { name, value: 0, count: 0 };
+    row.value += Number(item.amount || 0); row.count += 1; map.set(name, row);
+    return map;
+  }, new Map()).values()).sort((a, b) => b.value - a.value).map((row) => ({ ...row, percent: ownMonthlyTotal ? Math.round(row.value / ownMonthlyTotal * 100) : 0 }));
+  const costRows = executionOnly ? executionCostRows : (project.costs || []).map(normalizeCostRow).filter((row) => row.name);
   const materialStatus = projectMaterialStatus(project, uniqueFiles, projectJobs);
   const actionItems = projectActionItems({ project, files: uniqueFiles, jobs: projectJobs, approvals: projectApprovals, health, isManagement, feishuPending: projectFeishuPendingFiles });
   const aiAdvice = projectAiAdvice({ project, materialStatus, approvals: projectApprovals, health, isManagement, feishuPending: projectFeishuPendingFiles });
@@ -922,6 +934,8 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           taskForm={taskForm}
           taskTemplates={taskTemplates}
           costRows={costRows}
+          executionOnly={executionOnly}
+          executionCostTotal={ownMonthlyTotal}
           isManagement={isManagement}
           approvalTypeOptions={approvalTypeOptions}
           exportingTaskLedger={exportingTaskLedger}

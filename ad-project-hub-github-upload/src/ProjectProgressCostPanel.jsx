@@ -9,6 +9,8 @@ export default function ProjectProgressCostPanel({
   taskForm,
   taskTemplates = [],
   costRows = [],
+  executionOnly = false,
+  executionCostTotal = 0,
   isManagement,
   approvalTypeOptions = [],
   exportingTaskLedger,
@@ -77,18 +79,19 @@ export default function ProjectProgressCostPanel({
         )}
       </div>
       <div>
-        <h3>{isManagement ? "成本与利润" : "成本构成"}</h3>
-        {costRows.length ? costRows.map(({ name, value }) => (
+        <h3>{executionOnly ? "我的本月执行支出" : isManagement ? "成本与利润" : "成本构成"}</h3>
+        {executionOnly && <p className="execution-cost-note">仅统计你本月已审批完成的报销，不展示项目整体成本和利润。</p>}
+        {costRows.length ? costRows.map(({ name, value, percent, count }) => (
           <div className="cost-row" key={name}>
-            <span>{name}</span>
+            <span>{name}{executionOnly ? ` · ${percent}% · ${count} 笔` : ""}</span>
             <b>{money(value)}</b>
           </div>
         )) : (
           <div className="action-empty cost-action-empty">
-            <strong>暂无成本明细</strong>
-            <span>上传成本表、提交报销或供应商付款通过后，会自动进入这里形成成本构成。</span>
+            <strong>{executionOnly ? "本月暂无执行支出" : "暂无成本明细"}</strong>
+            <span>{executionOnly ? "你本月审批完成的油费、演员费、物料等报销会按类别汇总到这里。" : "上传成本表、提交报销或供应商付款通过后，会自动进入这里形成成本构成。"}</span>
             <div className="button-row compact">
-              <button type="button" className="ghost tiny" onClick={() => onPrepareCostAction("cost-sheet")}>上传成本表</button>
+              {!executionOnly && <button type="button" className="ghost tiny" onClick={() => onPrepareCostAction("cost-sheet")}>上传成本表</button>}
               <button type="button" className="ghost tiny" onClick={() => onPrepareCostAction("reimbursement")}>提交报销</button>
               {approvalTypeOptions.some(([value]) => value === "supplier_payment") && (
                 <button type="button" className="ghost tiny" onClick={() => onPrepareCostAction("supplier_payment")}>供应商付款</button>
@@ -96,6 +99,7 @@ export default function ProjectProgressCostPanel({
             </div>
           </div>
         )}
+        {executionOnly && costRows.length > 0 && <div className="cost-row strong"><span>本月合计</span><b>{money(executionCostTotal)}</b></div>}
         {isManagement && <div className="cost-row strong">
           <span>项目利润</span>
           <b>{money(project.extractedFields?.profitBreakdown?.profit ?? Number(project.contract || 0) - Number(project.costUsed || 0))}</b>

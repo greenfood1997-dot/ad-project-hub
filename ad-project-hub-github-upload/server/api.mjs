@@ -692,7 +692,26 @@ function visibleProjectsForUser(db, user) {
 
 function scopedSnapshot(db, user) {
   if (user.role === "admin") return db;
-  const projects = visibleProjectsForUser(db, user);
+  const executionOnly = ["member", "viewer"].includes(user.role);
+  const projects = visibleProjectsForUser(db, user).map((project) => executionOnly ? {
+    ...project,
+    costBudget: 0,
+    costUsed: 0,
+    costs: [],
+    margin: 0,
+    extractedFields: {
+      ...(project.extractedFields || {}),
+      profitBreakdown: undefined,
+      internalLabor: undefined,
+      overhead: undefined,
+      advancePayment: undefined,
+      advanceInterest: undefined,
+      additionalCost: undefined,
+      executionBudget: undefined,
+      executionCost: undefined,
+      costUsed: undefined
+    }
+  } : project);
   const projectIds = new Set(projects.map((project) => project.id));
   const projectNames = new Set(projects.map((project) => project.name));
   const suppliers = (db.suppliers || []).filter((item) => projectNames.has(item.project));
@@ -710,7 +729,7 @@ function scopedSnapshot(db, user) {
       suppliers,
       supplierProfiles: (db.supplierProfiles || []).filter((item) => supplierNames.has(item.supplier))
     }),
-    approvals: (db.approvals || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)),
+    approvals: (db.approvals || []).filter((item) => (projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)) && (!executionOnly || item.applicantId === user.id)),
     payments: (db.payments || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)),
     collectionScripts: (db.collectionScripts || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName || item.project)),
     feishuProjectBindings: (db.feishuProjectBindings || []).filter((item) => projectIds.has(item.projectId) || projectNames.has(item.projectName)),

@@ -3075,7 +3075,19 @@ function LegacyProjectDetail({ project, isManagement, session, files, parseJobs,
   const projectAlertUpdates = alertUpdates.filter((item) => item.project === project.name || item.projectName === project.name || item.projectId === project.id);
   const projectLogs = auditLogs.filter((item) => item.target === project.name);
   const projectTasks = (project.tasks || []).map(normalizeTask).filter((task) => !task.archivedAt);
-  const costRows = (project.costs || []).map(normalizeCostRow).filter((row) => row.name);
+  const executionOnly = ["member", "viewer"].includes(session.role);
+  const monthKey = new Date().toISOString().slice(0, 7);
+  const ownMonthlyReimbursements = projectApprovals.filter((item) => item.type === "reimbursement"
+    && item.applicantId === session.id && item.status === "已完成"
+    && String(item.completedAt || item.updatedAt || item.createdAt || "").slice(0, 7) === monthKey);
+  const ownMonthlyTotal = ownMonthlyReimbursements.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const executionCostRows = Array.from(ownMonthlyReimbursements.reduce((map, item) => {
+    const name = item.expenseCategory || "其他";
+    const row = map.get(name) || { name, value: 0, count: 0 };
+    row.value += Number(item.amount || 0); row.count += 1; map.set(name, row);
+    return map;
+  }, new Map()).values()).sort((a, b) => b.value - a.value).map((row) => ({ ...row, percent: ownMonthlyTotal ? Math.round(row.value / ownMonthlyTotal * 100) : 0 }));
+  const costRows = executionOnly ? executionCostRows : (project.costs || []).map(normalizeCostRow).filter((row) => row.name);
   const materialStatus = projectMaterialStatus(project, uniqueFiles, projectJobs);
   const actionItems = projectActionItems({ project, files: uniqueFiles, jobs: projectJobs, approvals: projectApprovals, health, isManagement, feishuPending: projectFeishuPendingFiles });
   const aiAdvice = projectAiAdvice({ project, materialStatus, approvals: projectApprovals, health, isManagement, feishuPending: projectFeishuPendingFiles });
@@ -3961,18 +3973,19 @@ function LegacyProjectDetail({ project, isManagement, session, files, parseJobs,
           )}
         </div>
         <div>
-          <h3>{isManagement ? "成本与利润" : "成本构成"}</h3>
-          {costRows.length ? costRows.map(({ name, value }) => (
+          <h3>{executionOnly ? "我的本月执行支出" : isManagement ? "成本与利润" : "成本构成"}</h3>
+          {executionOnly && <p className="execution-cost-note">仅统计你本月已审批完成的报销，不展示项目整体成本和利润。</p>}
+          {costRows.length ? costRows.map(({ name, value, percent, count }) => (
             <div className="cost-row" key={name}>
-              <span>{name}</span>
+              <span>{name}{executionOnly ? ` · ${percent}% · ${count} 笔` : ""}</span>
               <b>{money(value)}</b>
             </div>
           )) : (
             <div className="action-empty cost-action-empty">
-              <strong>暂无成本明细</strong>
-              <span>上传成本表、提交报销或供应商付款通过后，会自动进入这里形成成本构成。</span>
+              <strong>{executionOnly ? "本月暂无执行支出" : "暂无成本明细"}</strong>
+              <span>{executionOnly ? "你本月审批完成的油费、演员费、物料等报销会按类别汇总到这里。" : "上传成本表、提交报销或供应商付款通过后，会自动进入这里形成成本构成。"}</span>
               <div className="button-row compact">
-                <button type="button" className="ghost tiny" onClick={() => prepareCostAction("cost-sheet")}>上传成本表</button>
+                {!executionOnly && <button type="button" className="ghost tiny" onClick={() => prepareCostAction("cost-sheet")}>上传成本表</button>}
                 <button type="button" className="ghost tiny" onClick={() => prepareCostAction("reimbursement")}>提交报销</button>
                 {approvalTypeOptions.some(([value]) => value === "supplier_payment") && (
                   <button type="button" className="ghost tiny" onClick={() => prepareCostAction("supplier_payment")}>供应商付款</button>
@@ -3980,6 +3993,7 @@ function LegacyProjectDetail({ project, isManagement, session, files, parseJobs,
               </div>
             </div>
           )}
+          {executionOnly && costRows.length > 0 && <div className="cost-row strong"><span>本月合计</span><b>{money(ownMonthlyTotal)}</b></div>}
           {isManagement && <div className="cost-row strong">
             <span>项目利润</span>
             <b>{money(project.extractedFields?.profitBreakdown?.profit ?? Number(project.contract || 0) - Number(project.costUsed || 0))}</b>
