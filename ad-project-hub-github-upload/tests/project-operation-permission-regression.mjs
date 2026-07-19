@@ -230,7 +230,7 @@ try {
     assert(!state[key].some((item) => item.projectId === "p-visible" || item.projectName === "可操作项目" || item.project === "可操作项目"), `删除项目后 ${key} 不应残留可见项目数据`);
     assert(state[key].some((item) => item.projectId === "p-hidden" || item.projectName === "隐藏项目" || item.project === "隐藏项目"), `删除可见项目不应误删 ${key} 的隐藏项目数据`);
   }
-  assert(state.auditLogs.some((item) => item.type === "project" && item.action === "delete" && item.target === "可操作项目"), "项目删除应进入审计日志");
+  assert(state.auditLogs.some((item) => item.type === "project" && item.action === "recycle" && item.target === "可操作项目"), "项目移入回收站应进入审计日志");
   assert(state.auditLogs.some((item) => item.type === "project" && item.action === "closeout" && item.target === "可操作项目"), "项目结案应进入审计日志");
 
   console.log("project operation permission regression passed");

@@ -594,11 +594,24 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
 
   async function deleteMistakenProject(project) {
     setDeletingProject(true);
-    setSettingsMessage(`正在永久删除「${project.name}」及关联记录...`);
+    setSettingsMessage(`正在将「${project.name}」及关联记录移入回收站...`);
     try {
       await api("/api/projects/delete", { method: "POST", body: JSON.stringify({ id: project.id }) });
       await Promise.all([loadAssignments(), loadSettings()]);
-      setSettingsMessage(`项目「${project.name}」及关联记录已删除，删除审计记录已保留。`);
+      setSettingsMessage(`项目「${project.name}」已移入回收站，云端文件保留 30 天。`);
+    } catch (err) {
+      setSettingsMessage(err.message);
+    } finally {
+      setDeletingProject(false);
+    }
+  }
+
+  async function restoreRecycledProject(item) {
+    setDeletingProject(true);
+    try {
+      await api("/api/projects/restore", { method: "POST", body: JSON.stringify({ id: item.id }) });
+      await Promise.all([loadAssignments(), loadSettings()]);
+      setSettingsMessage(`项目「${item.projectName}」及关联云端文件已恢复。`);
     } catch (err) {
       setSettingsMessage(err.message);
     } finally {
@@ -757,8 +770,10 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
             <ProjectCleanupPanel
               projects={projectRecords}
               state={adminState}
+              recycleBin={adminState.cloudRecycleBin || []}
               deleting={deletingProject}
               onDelete={deleteMistakenProject}
+              onRestore={restoreRecycledProject}
             />
             </Suspense>
           </ProductSettingsSection>

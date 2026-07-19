@@ -11,11 +11,11 @@ function assert(condition, message) {
 assert(adminSource.includes('const ProjectCleanupPanel = React.lazy(() => import("./ProjectCleanupPanel.jsx"))'), "admin settings should lazy-load project cleanup");
 assert(adminSource.includes('api("/api/projects/delete"'), "project cleanup should call the real delete API");
 assert(adminSource.includes("const [deletingProject, setDeletingProject]"), "project cleanup should keep a deletion loading state");
-assert(adminSource.includes("项目「${project.name}」及关联记录已删除"), "project cleanup should explain the completed cascade deletion");
-assert(panelSource.includes("误建项目清理") && panelSource.includes("永久删除此项目"), "project cleanup should have a clearly named destructive action");
+assert(adminSource.includes("项目「${project.name}」已移入回收站"), "project cleanup should explain the completed recycle action");
+assert(panelSource.includes("误建项目清理") && panelSource.includes("移入回收站"), "project cleanup should clearly move projects into the recycle bin");
 assert(!panelSource.includes("confirmName") && !panelSource.includes("请输入完整项目名"), "project cleanup should not require retyping the selected project name");
-assert(panelSource.includes("window.confirm") && panelSource.includes("此操作不可恢复"), "project cleanup should keep one explicit destructive confirmation");
-assert(panelSource.includes("关联记录") && panelSource.includes("审计记录"), "project cleanup should explain scope and audit retention before deletion");
+assert(panelSource.includes("window.confirm") && panelSource.includes("30 天内可以恢复"), "project cleanup should keep one explicit recycle confirmation");
+assert(panelSource.includes("关联记录") && panelSource.includes("云端原文件保留 30 天"), "project cleanup should explain scope and cloud retention before deletion");
 assert(styles.includes(".project-cleanup-panel") && styles.includes(".project-cleanup-impact"), "project cleanup should have dedicated responsive styles");
 
 console.log("frontend project cleanup entry passed");

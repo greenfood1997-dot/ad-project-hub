@@ -4,6 +4,7 @@ import { extname, join } from "node:path";
 import { recognizeFileWithTencentOcr, recognizeFileWithTencentOcrDetailed, tencentOcrConfigured } from "./tencent-ocr.mjs";
 import { rootDir } from "./config.mjs";
 import { resolveStorageSettings } from "./storage-settings.mjs";
+import { projectRecycleSnapshot } from "./cloud-recycle-service.mjs";
 
 export async function createProject(db, values, files, user, options = {}) {
   if (!values?.["项目名称"] && !files.length) throw new Error("请填写项目名称或先上传合同/执行表");
@@ -1073,6 +1074,8 @@ export function deleteProject(db, body, user) {
     return item.projectId === project.id || names.includes(project.name);
   };
 
+  const at = new Date().toISOString();
+  projectRecycleSnapshot(db, project, isProjectRecord, user, at);
   db.projects = (db.projects || []).filter((item) => item.id !== project.id);
   db.parseJobs = (db.parseJobs || []).filter((item) => !isProjectRecord(item));
   db.files = (db.files || []).filter((item) => !isProjectRecord(item));
@@ -1086,9 +1089,8 @@ export function deleteProject(db, body, user) {
   db.feishuProjectBindings = (db.feishuProjectBindings || []).filter((item) => !isProjectRecord(item));
   db.feishuPendingFiles = (db.feishuPendingFiles || []).filter((item) => !isProjectRecord(item));
   db.feishuEvents = (db.feishuEvents || []).filter((item) => !isProjectRecord(item));
-  const at = new Date().toISOString();
-  db.auditLogs.unshift({ type: "project", target: project.name, action: "delete", user: user.name, at });
-  return { id: project.id, name: project.name };
+  db.auditLogs.unshift({ type: "project", target: project.name, action: "recycle", user: user.name, at });
+  return { id: project.id, name: project.name, retainedDays: 30 };
 }
 
 function syncProjectProfit(project, executionBudget = 0) {

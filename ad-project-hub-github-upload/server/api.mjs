@@ -4,6 +4,7 @@ import { clearLoginFailures, hashPin, isLoginLimited, issueAuthToken, issuePassw
 import { getSchedulerStatus, reloadSystemScheduler } from "./scheduler.mjs";
 import { objectStorageReady, resolveStorageSettings } from "./storage-settings.mjs";
 import { compensationOverview, generateLaborAllocation, saveCompensationMember, saveProjectDividend } from "./compensation-service.mjs";
+import { listCloudRecycleBin, restoreRecycledProject } from "./cloud-recycle-service.mjs";
 import {
   addComment,
   actOnApproval,
@@ -713,6 +714,7 @@ function publicState(db, user) {
     feishuEvents: ADMIN_ROLES.includes(user.role) ? (db.feishuEvents || []).slice(0, 50) : (db.feishuEvents || []).slice(0, 20),
     feishuPendingFiles: ADMIN_ROLES.includes(user.role) ? feishuPendingFiles(db).slice(0, 50) : (db.feishuPendingFiles || []).slice(0, 20),
     systemNotifications: visibleSystemNotificationsFor(db, user),
+    cloudRecycleBin: ADMIN_ROLES.includes(user.role) ? listCloudRecycleBin(db) : [],
     settings: scopedSettings(db.settings || {}, user),
     users: ADMIN_ROLES.includes(user.role)
       ? (db.users || []).map((item) => publicUser(ensureMemberFields(item)))
@@ -1212,6 +1214,20 @@ export async function handleApi(req, res) {
       return;
     }
     const data = await mutateDb((db) => deleteProject(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/projects/recycle-bin") {
+    if (!requireRole(user, ADMIN_ROLES, res)) return;
+    sendJson(res, 200, { ok: true, data: listCloudRecycleBin(snapshot) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/projects/restore") {
+    if (!requireRole(user, ADMIN_ROLES, res)) return;
+    const body = await readBody(req);
+    const data = await mutateDb((db) => restoreRecycledProject(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }

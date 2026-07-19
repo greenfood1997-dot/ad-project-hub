@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { rootDir } from "./config.mjs";
 import { hmacBuffer, hmacHex, nextFileId, sha256Hex } from "./service-utils.mjs";
@@ -33,7 +33,7 @@ function s3PublicUrl(settings = {}, objectKey = "") {
   return `${endpoint}/${settings.bucket}/${objectKey.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-function s3SignedHeaders({ settings = {}, objectKey = "", buffer, contentType = "application/octet-stream", now = new Date() }) {
+function s3SignedHeaders({ settings = {}, objectKey = "", buffer = Buffer.alloc(0), contentType = "application/octet-stream", method = "PUT", now = new Date() }) {
   const endpointUrl = new URL(String(settings.endpoint || `https://${settings.bucket}.s3.${settings.region || "us-east-1"}.amazonaws.com`).replace(/\/+$/, ""));
   const region = String(settings.region || "us-east-1");
   const service = "s3";
@@ -45,7 +45,7 @@ function s3SignedHeaders({ settings = {}, objectKey = "", buffer, contentType = 
   const payloadHash = sha256Hex(buffer);
   const canonicalHeaders = `content-type:${contentType}\nhost:${host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
   const signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
-  const canonicalRequest = ["PUT", canonicalUri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+  const canonicalRequest = [method, canonicalUri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
   const credentialScope = `${date}/${region}/${service}/aws4_request`;
   const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, sha256Hex(canonicalRequest)].join("\n");
   const signingKey = hmacBuffer(hmacBuffer(hmacBuffer(hmacBuffer(`AWS4${settings.secretAccessKey}`, date), region), service), "aws4_request");
@@ -60,6 +60,26 @@ function s3SignedHeaders({ settings = {}, objectKey = "", buffer, contentType = 
       "x-amz-date": amzDate
     }
   };
+}
+
+export async function deleteStoredObject(file = {}, settings = {}) {
+  const objectKey = String(file.storagePath || "").trim();
+  if (!objectKey) return { deleted: false, reason: "missing-storage-path" };
+  if (file.storageProvider === "local") {
+    if (!objectKey.startsWith("uploads/")) throw new Error("拒绝删除 uploads 目录以外的本地文件");
+    await unlink(join(rootDir, objectKey)).catch((error) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+    return { deleted: true, provider: "local", objectKey };
+  }
+  if (!s3Enabled(settings)) throw new Error("对象存储未配置，暂不能执行云端永久删除");
+  const { url, headers } = s3SignedHeaders({ settings, objectKey, method: "DELETE" });
+  const res = await fetch(url, { method: "DELETE", headers });
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`对象存储删除失败：${res.status} ${text.slice(0, 160)}`);
+  }
+  return { deleted: true, provider: file.storageProvider || "s3-compatible", objectKey };
 }
 
 async function uploadToS3CompatibleStorage(file = {}, buffer, category = "file", now = new Date().toISOString(), settings = {}) {
