@@ -518,7 +518,8 @@ function saveProjectAssignment(db, body, actor) {
 
   db.settings = db.settings || {};
   const currentMembers = settingMembers(db);
-  const scopedOut = currentMembers.filter((member) => !projectMatchesMember(project, member));
+  // Reassignment replaces the project's previous roster; matching by project ID avoids stale rows after PM/name changes.
+  const scopedOut = currentMembers.filter((member) => member.projectId !== project.id && member.project !== project.name);
   const assignmentRows = assignedUsers.map((member) => ({
     id: `assign-${project.id}-${member.id}`,
     userId: member.id,

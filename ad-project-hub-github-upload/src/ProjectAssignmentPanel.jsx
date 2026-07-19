@@ -56,7 +56,7 @@ export default function ProjectAssignmentPanel({ api, members, assignments, onRe
       department: selected.department || "",
     });
     setMessage("");
-  }, [selected?.id, memberByNameOrContact]);
+  }, [selected?.id, selected?.pm, selected?.sales, selected?.department, JSON.stringify(selected?.members || []), memberByNameOrContact]);
 
   async function loadSuggestions(projectId = selected?.id, { silent = false } = {}) {
     if (!projectId) return;
