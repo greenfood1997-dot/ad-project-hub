@@ -3,6 +3,7 @@ import { getCurrentUser, readBody, requireRole, sendJson } from "./http-utils.mj
 import { clearLoginFailures, hashPin, isLoginLimited, issueAuthToken, issuePasswordChangeToken, loginLimitKey, recordLoginFailure, verifyPasswordChangeToken, verifyPin } from "./auth.mjs";
 import { getSchedulerStatus, reloadSystemScheduler } from "./scheduler.mjs";
 import { objectStorageReady, resolveStorageSettings } from "./storage-settings.mjs";
+import { compensationOverview, generateLaborAllocation, saveCompensationMember, saveProjectDividend } from "./compensation-service.mjs";
 import {
   addComment,
   actOnApproval,
@@ -60,6 +61,7 @@ const OWNER_ROLES = ["shareholder"];
 const ADMIN_ROLES = ["shareholder", "admin"];
 const DIRECTOR_ROLES = ["shareholder", "admin", "director"];
 const MANAGEMENT_ROLES = ["shareholder", "admin", "director", "finance"];
+const COMPENSATION_ROLES = ["shareholder", "admin", "finance"];
 const PROJECT_WRITE_ROLES = ["shareholder", "admin", "director", "pm", "sales"];
 const PROJECT_UPLOAD_ROLES = ["shareholder", "admin", "director", "pm", "sales", "member"];
 const BUILD_VERSION = "2026-07-08-ai-task-command-pass";
@@ -1008,6 +1010,36 @@ export async function handleApi(req, res) {
     const data = await mutateDb((db) => saveSetting(db, body.type, body.values, user));
     const scheduler = ["product", "scheduler"].includes(body.type) ? await reloadSystemScheduler() : getSchedulerStatus();
     sendJson(res, 200, { ok: true, data: { ...data, scheduler } });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/compensation") {
+    if (!requireRole(user, COMPENSATION_ROLES, res)) return;
+    sendJson(res, 200, { ok: true, data: compensationOverview(snapshot, url.searchParams.get("year") || new Date().getFullYear()) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/compensation/member") {
+    if (!requireRole(user, COMPENSATION_ROLES, res)) return;
+    const body = await readBody(req);
+    const data = await mutateDb((db) => saveCompensationMember(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/compensation/allocate") {
+    if (!requireRole(user, COMPENSATION_ROLES, res)) return;
+    const body = await readBody(req);
+    const data = await mutateDb((db) => generateLaborAllocation(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/compensation/dividend") {
+    if (!requireRole(user, OWNER_ROLES, res)) return;
+    const body = await readBody(req);
+    const data = await mutateDb((db) => saveProjectDividend(db, body, user));
+    sendJson(res, 200, { ok: true, data });
     return;
   }
 

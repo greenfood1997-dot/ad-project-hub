@@ -771,3 +771,14 @@
   color: var(--primary);
   text-decoration: none;
 }
+.compensation-settings { display: grid; gap: 16px; }
+.compensation-table, .compensation-summary { display: grid; gap: 10px; }
+.compensation-row { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(180px, .8fr) minmax(180px, .8fr); gap: 12px; align-items: end; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.compensation-row strong small { display: block; margin-top: 4px; color: var(--muted); font-weight: 500; }
+.compensation-row label, .dividend-form label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+.compensation-row input, .dividend-form input, .dividend-form select { min-height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; }
+.dividend-form { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(180px, .6fr) auto; gap: 12px; align-items: end; }
+.compensation-summary { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin: 14px 0; }
+.compensation-summary > div { display: grid; gap: 5px; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.compensation-summary span { color: var(--muted); font-size: 12px; }
+@media (max-width: 780px) { .compensation-row, .dividend-form { grid-template-columns: 1fr; } }

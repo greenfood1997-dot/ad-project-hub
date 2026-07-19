@@ -18,6 +18,7 @@ const ProductSettingsForm = React.lazy(() => import("./ProductSettingsForm.jsx")
 const AdminMemberPanel = React.lazy(() => import("./AdminMemberPanel.jsx"));
 const InterestRatePanel = React.lazy(() => import("./InterestRatePanel.jsx"));
 const ProjectCleanupPanel = React.lazy(() => import("./ProjectCleanupPanel.jsx"));
+const CompensationSettingsPanel = React.lazy(() => import("./CompensationSettingsPanel.jsx"));
 
 function ProductSettingsSection({ id, title, description, openSection, setOpenSection, children }) {
   const open = openSection === id;
@@ -744,6 +745,11 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
               refreshing={refreshingInterestRate}
               onRefresh={refreshInterestRate}
             />
+            </Suspense>
+          </ProductSettingsSection>
+          <ProductSettingsSection id="compensation" title="人力成本与股东分红" description="成员工资分摊、股东项目分红和全年汇总" openSection={openProductSection} setOpenSection={setOpenProductSection}>
+            <Suspense fallback={<ModuleFallback title="薪酬与分红配置加载中" />}>
+              <CompensationSettingsPanel api={api} session={session} />
             </Suspense>
           </ProductSettingsSection>
           <ProductSettingsSection id="cleanup" title="误建项目清理" description="清理重复建项或上传错误的项目及关联记录" openSection={openProductSection} setOpenSection={setOpenProductSection}>
