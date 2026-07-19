@@ -15,5 +15,10 @@ assert(styles.includes("72px 72px 64px"), "member rows should reserve a compact 
 assert(panel.includes('className="ghost member-delete-button"'), "split member panel delete should use a compact ghost button");
 assert(main.includes('className="ghost member-delete-button"'), "production member delete should use a compact ghost button");
 assert(styles.includes("color: #b42318") && styles.includes("background: #fff5f4"), "delete should remain visibly destructive without a large solid red treatment");
+assert(shell.includes("const [deletingMemberIds, setDeletingMemberIds] = useState([])"), "split admin should track concurrent member deletions");
+assert(shell.includes("ids.filter((id) => id !== member.id)"), "each split admin deletion should clear only its own row");
+assert(panel.includes("deletingMemberIds.includes(member.id)"), "split member rows should derive independent deleting state");
+assert(main.includes("const [deletingMemberIds, setDeletingMemberIds] = useState([])"), "production admin should track concurrent member deletions");
+assert(main.includes("const deleting = deletingMemberIds.includes(member.id)"), "production member rows should derive independent deleting state");
 
 console.log("frontend member edit regression passed");

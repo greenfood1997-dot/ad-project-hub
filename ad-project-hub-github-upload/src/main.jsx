@@ -7107,7 +7107,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
   const [message, setMessage] = useState("");
   const [savingMember, setSavingMember] = useState(false);
   const [togglingMemberId, setTogglingMemberId] = useState("");
-  const [deletingMemberId, setDeletingMemberId] = useState("");
+  const [deletingMemberIds, setDeletingMemberIds] = useState([]);
   const [cleaningDefaultAccounts, setCleaningDefaultAccounts] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState("");
   const [testingAi, setTestingAi] = useState(false);
@@ -7322,7 +7322,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
 
   async function removeMember(member) {
     if (!window.confirm(`确认永久删除成员“${member.name}”？\n\n只有没有业务记录的误建账号可以删除；已有记录的成员请停用。`)) return;
-    setDeletingMemberId(member.id);
+    setDeletingMemberIds((ids) => [...new Set([...ids, member.id])]);
     try {
       await api("/api/members/delete", { method: "POST", body: JSON.stringify({ id: member.id }) });
       const nextMembers = await api("/api/members");
@@ -7332,7 +7332,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     } catch (err) {
       setMessage(err.message);
     } finally {
-      setDeletingMemberId("");
+      setDeletingMemberIds((ids) => ids.filter((id) => id !== member.id));
     }
   }
 
@@ -7706,19 +7706,20 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
               <strong>飞书私聊绑定：{feishuBoundCount}/{activeMembers.length || 0}</strong>
               <span>{feishuMissingMembers.length ? `还差 ${feishuMissingMembers.slice(0, 5).map((member) => member.name || member.email).join("、")}${feishuMissingMembers.length > 5 ? `等 ${feishuMissingMembers.length} 人` : ""}，这些成员暂时收不到 OA 私聊提醒。` : "启用中的成员都已绑定飞书，可以接收 OA 私聊提醒。"}</span>
             </div>
-            {members.map((member) => (
-              <div className="member-row" key={member.id}>
+            {members.map((member) => {
+              const deleting = deletingMemberIds.includes(member.id);
+              return <div className="member-row" key={member.id}>
                 <div>
                   <strong>{member.name}</strong>
                   <span>{member.email} · {member.department || "未分组"}{member.feishuOpenId || member.feishuUserId ? " · 已绑飞书" : " · 未绑飞书"}</span>
                 </div>
                 <b className={`role-pill ${member.role}`}>{roleLabel(member.role)}</b>
                 <b className={`status-pill ${member.status}`}>{member.status === "disabled" ? "已停用" : "启用中"}</b>
-                <button type="button" className="ghost" disabled={savingMember || togglingMemberId === member.id || deletingMemberId === member.id} onClick={() => edit(member)}>编辑</button>
-                <button type="button" className="ghost" disabled={togglingMemberId === member.id || deletingMemberId === member.id} onClick={() => toggle(member)}>{togglingMemberId === member.id ? "处理中" : member.status === "disabled" ? "启用" : "停用"}</button>
-                <button type="button" className="ghost member-delete-button" disabled={deletingMemberId === member.id || togglingMemberId === member.id} onClick={() => removeMember(member)}>{deletingMemberId === member.id ? "删除中" : "删除"}</button>
+                <button type="button" className="ghost" disabled={savingMember || togglingMemberId === member.id || deleting} onClick={() => edit(member)}>编辑</button>
+                <button type="button" className="ghost" disabled={togglingMemberId === member.id || deleting} onClick={() => toggle(member)}>{togglingMemberId === member.id ? "处理中" : member.status === "disabled" ? "启用" : "停用"}</button>
+                <button type="button" className="ghost member-delete-button" disabled={deleting || togglingMemberId === member.id} onClick={() => removeMember(member)}>{deleting ? "删除中" : "删除"}</button>
               </div>
-            ))}
+            })}
           </div>
         </section>}
 

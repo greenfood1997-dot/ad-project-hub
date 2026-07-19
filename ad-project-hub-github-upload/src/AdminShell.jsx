@@ -59,7 +59,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
   const [message, setMessage] = useState("");
   const [savingMember, setSavingMember] = useState(false);
   const [togglingMemberId, setTogglingMemberId] = useState("");
-  const [deletingMemberId, setDeletingMemberId] = useState("");
+  const [deletingMemberIds, setDeletingMemberIds] = useState([]);
   const [cleaningDefaultAccounts, setCleaningDefaultAccounts] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState("");
   const [testingAi, setTestingAi] = useState(false);
@@ -290,7 +290,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
 
   async function removeMember(member) {
     if (!window.confirm(`确认永久删除成员“${member.name}”？\n\n只有没有业务记录的误建账号可以删除；已有记录的成员请停用。`)) return;
-    setDeletingMemberId(member.id);
+    setDeletingMemberIds((ids) => [...new Set([...ids, member.id])]);
     try {
       await api("/api/members/delete", { method: "POST", body: JSON.stringify({ id: member.id }) });
       const nextMembers = await api("/api/members");
@@ -300,7 +300,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
     } catch (err) {
       setMessage(err.message);
     } finally {
-      setDeletingMemberId("");
+      setDeletingMemberIds((ids) => ids.filter((id) => id !== member.id));
     }
   }
 
@@ -724,7 +724,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
               message={message}
               savingMember={savingMember}
               togglingMemberId={togglingMemberId}
-              deletingMemberId={deletingMemberId}
+              deletingMemberIds={deletingMemberIds}
               insecureDefaultAccountCount={Number(deployHealth?.insecureDefaultAccountCount || 0)}
               cleaningDefaultAccounts={cleaningDefaultAccounts}
               roleOptions={roleOptions}

@@ -10,7 +10,7 @@ export default function AdminMemberPanel({
   message,
   savingMember,
   togglingMemberId,
-  deletingMemberId,
+  deletingMemberIds = [],
   insecureDefaultAccountCount = 0,
   cleaningDefaultAccounts = false,
   roleOptions = [],
@@ -55,19 +55,20 @@ export default function AdminMemberPanel({
           <strong>飞书私聊绑定：{feishuBoundCount}/{activeMembers.length || 0}</strong>
           <span>{feishuMissingMembers.length ? `还差 ${feishuMissingMembers.slice(0, 5).map((member) => member.name || member.email).join("、")}${feishuMissingMembers.length > 5 ? `等 ${feishuMissingMembers.length} 人` : ""}，这些成员暂时收不到 OA 私聊提醒。` : "启用中的成员都已绑定飞书，可以接收 OA 私聊提醒。"}</span>
         </div>
-        {members.map((member) => (
-          <div className={`member-row ${editingId === member.id ? "editing" : ""}`} key={member.id}>
+        {members.map((member) => {
+          const deleting = deletingMemberIds.includes(member.id);
+          return <div className={`member-row ${editingId === member.id ? "editing" : ""}`} key={member.id}>
             <div>
               <strong>{member.name}</strong>
               <span>{member.email} · {member.department || "未分组"}{member.feishuOpenId || member.feishuUserId ? " · 已绑飞书" : " · 未绑飞书"}</span>
             </div>
             <b className={`role-pill ${member.role}`}>{roleLabel(member.role)}</b>
             <b className={`status-pill ${member.status}`}>{member.status === "disabled" ? "已停用" : "启用中"}</b>
-            <button type="button" className="ghost" aria-pressed={editingId === member.id} disabled={savingMember || togglingMemberId === member.id || deletingMemberId === member.id} onClick={() => onEdit(member)}>{editingId === member.id ? "编辑中" : "编辑"}</button>
-            <button type="button" className="ghost" disabled={togglingMemberId === member.id || deletingMemberId === member.id} onClick={() => onToggle(member)}>{togglingMemberId === member.id ? "处理中" : member.status === "disabled" ? "启用" : "停用"}</button>
-            <button type="button" className="ghost member-delete-button" disabled={deletingMemberId === member.id || togglingMemberId === member.id} onClick={() => onDelete(member)}>{deletingMemberId === member.id ? "删除中" : "删除"}</button>
+            <button type="button" className="ghost" aria-pressed={editingId === member.id} disabled={savingMember || togglingMemberId === member.id || deleting} onClick={() => onEdit(member)}>{editingId === member.id ? "编辑中" : "编辑"}</button>
+            <button type="button" className="ghost" disabled={togglingMemberId === member.id || deleting} onClick={() => onToggle(member)}>{togglingMemberId === member.id ? "处理中" : member.status === "disabled" ? "启用" : "停用"}</button>
+            <button type="button" className="ghost member-delete-button" disabled={deleting || togglingMemberId === member.id} onClick={() => onDelete(member)}>{deleting ? "删除中" : "删除"}</button>
           </div>
-        ))}
+        })}
       </div>
     </section>
   );
