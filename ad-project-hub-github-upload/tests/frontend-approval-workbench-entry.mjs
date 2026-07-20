@@ -15,6 +15,7 @@ assert(source.includes('["approvals", "项目备用金"]'), "approval nav should
 assert(source.includes('["approvals", "报销"]'), "approval nav should include reimbursements");
 assert(source.includes('["approvals", "供应商付款"]'), "approval nav should include supplier payments");
 assert(source.includes("function ApprovalFunds"), "frontend should render approval workbench");
+assert(mainSource.includes('import ApprovalFundsPanel from "./ApprovalFunds.jsx"') && mainSource.includes('activeView === "approvals" && <ApprovalFundsPanel'), "production entry should render the maintained split approval workbench instead of the legacy embedded copy");
 assert(source.includes("const supplierPaymentSubmitRoles") && source.includes("function canSubmitSupplierPaymentRole(session)"), "frontend should define roles allowed to submit supplier payments");
 assert(source.includes("function approvalTypeOptionsFor(session)") && source.includes("canSubmitSupplierPaymentRole(session)"), "approval type options should be role-scoped");
 assert(source.includes("const approvalTypeOptions = approvalTypeOptionsFor(session)"), "approval forms should use role-scoped type options");

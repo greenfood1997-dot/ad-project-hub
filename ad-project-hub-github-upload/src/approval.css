@@ -492,7 +492,9 @@
 
 /* Keep the workbench scannable: primary work stays left, context stays right. */
 .approval-workbench {
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  width: 100%;
+  max-width: 100%;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
   align-items: start;
 }
 
@@ -508,6 +510,18 @@
 .approval-main,
 .reimbursement-summary-panel {
   grid-column: 1;
+}
+
+.approval-form {
+  width: 100%;
+  max-width: 100%;
+}
+
+.approval-form input,
+.approval-form select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .approval-detail,

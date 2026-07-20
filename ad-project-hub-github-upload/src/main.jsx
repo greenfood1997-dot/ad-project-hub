@@ -40,6 +40,7 @@ import { deployReadinessActions } from "./utils/deployReadiness.js";
 import { useLocalWeather } from "./utils/localWeather.js";
 import { canSeeManagement } from "./utils/permissions.js";
 import ModuleFallback from "./ModuleFallback.jsx";
+import ApprovalFundsPanel from "./ApprovalFunds.jsx";
 import { applyColorScheme, readThemePreferences, THEME_PREFERENCE_KEY } from "./utils/theme.js";
 
 applyColorScheme(readThemePreferences());
@@ -2188,7 +2189,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             setActiveSubView("待我审批");
           }}
         />}
-        {!!visibleProjects.length && activeView === "approvals" && <ApprovalFunds
+        {!!visibleProjects.length && activeView === "approvals" && <ApprovalFundsPanel
           projects={visibleProjects}
           approvals={state?.approvals || []}
           selected={selected}
@@ -4697,7 +4698,7 @@ function AiWorkbench({ session, projects, approvals = [], settings = {}, stats =
   );
 }
 
-function ApprovalFunds({ projects, approvals, selected, session, subView, setSubView, focusApprovalId = "", onFocusConsumed, onDone, onNotice }) {
+function LegacyApprovalFunds({ projects, approvals, selected, session, subView, setSubView, focusApprovalId = "", onFocusConsumed, onDone, onNotice }) {
   const [selectedApprovalKey, setSelectedApprovalKey] = useState("");
   const [form, setForm] = useState({
     projectId: selected?.id || "",
