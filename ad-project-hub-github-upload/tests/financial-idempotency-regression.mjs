@@ -25,7 +25,7 @@ recordProjectPayment(db, { ...paymentBody, amount: 5000 }, otherUser);
 assert.equal(db.payments.length, 3, "the same raw key from another user must not collide");
 assert.equal(project.paid, 15000);
 
-const approvalBody = { projectId: "p-1", type: "reimbursement", amount: 500, reason: "交通", idempotencyKey: "approval-submit-1" };
+const approvalBody = { projectId: "p-1", type: "reimbursement", voucherType: "none", amount: 500, reason: "交通", idempotencyKey: "approval-submit-1" };
 const firstApproval = createApproval(db, approvalBody, user);
 const repeatedApproval = createApproval(db, approvalBody, user);
 assert.equal(db.approvals.length, 1);

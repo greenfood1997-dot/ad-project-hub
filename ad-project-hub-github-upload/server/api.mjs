@@ -21,6 +21,7 @@ import {
   clientLibrary,
   collectionLibrary,
   deleteProject,
+  deleteMistakenSupplier,
   exportBackupSnapshot,
   feishuProjectBindings,
   feishuPendingFiles,
@@ -1761,6 +1762,14 @@ export async function handleApi(req, res) {
       return;
     }
     const data = await mutateDb((db) => updateSupplierSettlement(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/suppliers/delete") {
+    if (!requireRole(user, ["shareholder", "admin"], res)) return;
+    const body = await readBody(req);
+    const data = await mutateDb((db) => deleteMistakenSupplier(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }

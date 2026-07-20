@@ -337,3 +337,5 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+.supplier-delete-action { color: #b42318; border-color: #f1c1bc; }
+.supplier-delete-action:hover:not(:disabled) { background: #fff5f4; border-color: #dc776d; }

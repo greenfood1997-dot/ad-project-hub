@@ -52,6 +52,8 @@ export default function SupplierLibrary({
   const [settlementSavingId, setSettlementSavingId] = useState("");
   const [focusedSupplier, setFocusedSupplier] = useState("");
   const [focusedRatingKey, setFocusedRatingKey] = useState("");
+  const [deletingSupplier, setDeletingSupplier] = useState(false);
+  const canDeleteSupplier = ["shareholder", "admin"].includes(session?.role);
   useEffect(() => {
     if (!selectedName && suppliers[0]?.supplier) setSelectedName(suppliers[0].supplier);
   }, [suppliers, selectedName]);
@@ -167,6 +169,18 @@ export default function SupplierLibrary({
     }
   }
 
+  async function deleteSupplier() {
+    if (!selected?.supplier || !window.confirm(`确认删除误建供应商“${selected.supplier}”？\n\n已有真实付款的供应商不会被删除。`)) return;
+    setDeletingSupplier(true);
+    try {
+      const result = await apiRequest("/api/suppliers/delete", session, { method: "POST", body: JSON.stringify({ supplier: selected.supplier }) });
+      setSelectedName("");
+      await onDone();
+      onNotice(`${result.supplier} 已从供应商库删除${result.rolledBack ? `，并回滚项目成本 ${money(result.rolledBack)}` : ""}${result.needsCostReview ? "。成本表解析形成的项目成本请在项目成本复盘中确认" : ""}。`);
+    } catch (error) { onNotice(error.message); }
+    finally { setDeletingSupplier(false); }
+  }
+
   if (!suppliers.length) {
     const targetProject = projects[0] || null;
     return (
@@ -215,7 +229,7 @@ export default function SupplierLibrary({
       </div>
 
       {selected && <div className="feature-panel wide-feature supplier-detail-panel">
-        <PanelTitle icon={BarChart3} title="供应商画像" />
+        <div className="section-head"><PanelTitle icon={BarChart3} title="供应商画像" />{canDeleteSupplier && <button type="button" className="ghost supplier-delete-action" onClick={deleteSupplier} disabled={deletingSupplier}>{deletingSupplier ? "删除中" : "删除误建供应商"}</button>}</div>
         <div className="review-summary">
           <Mini label="推荐星级" value={`${selected.star || 1} 星`} />
           <Mini label="合作次数" value={`${selected.cooperationCount || 0} 次`} />

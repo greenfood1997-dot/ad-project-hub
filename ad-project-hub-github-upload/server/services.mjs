@@ -4156,6 +4156,33 @@ export function rateSupplier(db, body, user) {
   return supplierLibrary(db).find((item) => item.supplier === supplierName);
 }
 
+export function deleteMistakenSupplier(db, body, user) {
+  const supplierName = String(body.supplier || "").trim();
+  if (!supplierName) throw new Error("请选择要删除的供应商");
+  const rows = (db.suppliers || []).filter((item) => String(item.supplier || "").trim() === supplierName);
+  const paidRows = rows.filter((item) => /已付|已结/.test(String(item.status || "")) || item.paidAt);
+  const completedApproval = (db.approvals || []).some((item) => item.type === "supplier_payment" && item.payee === supplierName && item.status === "已完成");
+  if (paidRows.length || completedApproval) throw new Error(`“${supplierName}”已有真实付款或已完成审批，不能删除；请保留财务历史`);
+
+  let rolledBack = 0;
+  for (const row of rows) {
+    if (!row.costAppliedAt) continue;
+    const project = (db.projects || []).find((item) => item.id === row.projectId || item.name === row.project);
+    if (!project) continue;
+    const amount = Number(row.amount || 0);
+    project.costs = (project.costs || []).filter((item) => !(item?.source === "supplier-settlement" && item?.settlementId === row.id));
+    project.costUsed = Math.max(0, Number(project.costUsed || 0) - amount);
+    project.margin = Number(project.contract || 0) ? Math.round(((Number(project.contract || 0) - project.costUsed) / Number(project.contract || 1)) * 100) : 0;
+    rolledBack += amount;
+  }
+  db.suppliers = (db.suppliers || []).filter((item) => String(item.supplier || "").trim() !== supplierName);
+  db.supplierProfiles = (db.supplierProfiles || []).filter((item) => String(item.supplier || "").trim() !== supplierName);
+  const at = new Date().toISOString();
+  db.auditLogs.unshift({ type: "supplier", target: supplierName, action: "delete-mistaken-supplier", user: user.name, meta: { rows: rows.length, rolledBack }, at });
+  return { supplier: supplierName, deletedRows: rows.length, rolledBack, needsCostReview: rows.some((item) => !item.costAppliedAt) };
+}
+
+
 export function updateSupplierSettlement(db, body, user) {
   const supplierId = String(body.id || body.supplierId || "").trim();
   const supplierName = String(body.supplier || "").trim();
