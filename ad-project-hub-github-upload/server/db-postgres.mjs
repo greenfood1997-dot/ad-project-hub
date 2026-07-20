@@ -4,6 +4,7 @@ import "./env.mjs";
 import { defaultDb } from "./default-db.mjs";
 
 let pool;
+const MUTATION_LOCK_KEY = 1463899201;
 
 async function getPool() {
   if (pool) return pool;
@@ -20,9 +21,9 @@ export async function migratePostgres() {
   await db.query(sql);
 }
 
-export async function readPostgresDb() {
-  await migratePostgres();
-  const db = await getPool();
+export async function readPostgresDb(client = null) {
+  if (!client) await migratePostgres();
+  const db = client || await getPool();
   const [
     users,
     settingsRows,
@@ -288,12 +289,13 @@ async function insertProjectFile(db, project, file = {}) {
   );
 }
 
-export async function writePostgresDbFromSnapshot(snapshot) {
-  await migratePostgres();
-  const pool = await getPool();
-  const db = await pool.connect();
+export async function writePostgresDbFromSnapshot(snapshot, client = null) {
+  if (!client) await migratePostgres();
+  const activePool = client ? null : await getPool();
+  const db = client || await activePool.connect();
+  const ownsClient = !client;
   const onClientError = (error) => console.error(`[POSTGRES] transaction connection error: ${error.message}`);
-  db.on("error", onClientError);
+  if (ownsClient) db.on("error", onClientError);
   const filesByProject = collectProjectFilesForPostgres(snapshot);
   try {
     await db.query("begin");
@@ -734,6 +736,34 @@ export async function writePostgresDbFromSnapshot(snapshot) {
     throw error;
   }
   } finally {
+    if (ownsClient) {
+      db.off("error", onClientError);
+      db.release();
+    }
+  }
+}
+
+export async function mutatePostgresDb(mutator) {
+  await migratePostgres();
+  const activePool = await getPool();
+  const db = await activePool.connect();
+  const onClientError = (error) => console.error(`[POSTGRES] locked mutation connection error: ${error.message}`);
+  let locked = false;
+  db.on("error", onClientError);
+  try {
+    // Session advisory locks serialize the full read-modify-write cycle across Render instances.
+    await db.query("select pg_advisory_lock($1)", [MUTATION_LOCK_KEY]);
+    locked = true;
+    const snapshot = await readPostgresDb(db);
+    const result = await mutator(snapshot);
+    await writePostgresDbFromSnapshot(snapshot, db);
+    return result;
+  } finally {
+    if (locked) {
+      await db.query("select pg_advisory_unlock($1)", [MUTATION_LOCK_KEY]).catch((error) => {
+        console.error(`[POSTGRES] failed to release mutation lock: ${error.message}`);
+      });
+    }
     db.off("error", onClientError);
     db.release();
   }

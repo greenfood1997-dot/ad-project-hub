@@ -26,6 +26,11 @@ export async function writeDb(db) {
 
 export async function mutateDb(mutator) {
   const run = mutationQueue.then(async () => {
+    if (usePostgres) {
+      const { mutatePostgresDb } = await getPostgres();
+      // Do not replay the business callback: it may already have called OCR, AI, or notifications.
+      return await mutatePostgresDb(mutator);
+    }
     const db = await readDb();
     const result = await mutator(db);
     await writeDb(db);

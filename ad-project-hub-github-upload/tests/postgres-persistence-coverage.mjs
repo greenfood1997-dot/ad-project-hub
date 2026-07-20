@@ -28,7 +28,8 @@ assert(schema.includes("progress numeric") && schema.includes("petty_cash_budget
 assert(schema.includes("service_period text") && schema.includes("start_date text") && schema.includes("end_date text"), "Postgres projects table should keep timeline fields");
 assert(postgres.includes("select id, name, client, owner, pm, sales, department") && postgres.includes('petty_cash_budget::float as "pettyCashBudget"'), "Postgres read should restore project assignment and petty cash fields");
 assert(postgres.includes("insert into projects (") && postgres.includes("pm, sales, department, progress") && postgres.includes("petty_cash_budget, petty_cash_used"), "Postgres write should persist project assignment and progress fields");
-assert(postgres.includes("const db = await pool.connect()") && postgres.includes("db.release()"), "Postgres snapshot writes must stay on one transaction connection and release it");
+assert(postgres.includes("const db = client || await activePool.connect()") && postgres.includes("db.release()"), "Postgres snapshot writes must stay on one transaction connection and release owned clients");
+assert(postgres.includes("pg_advisory_lock($1)") && postgres.includes("pg_advisory_unlock($1)"), "Postgres read-modify-write cycles must be serialized across instances");
 assert(postgres.includes('pin_hash as "pinHash"') && postgres.includes('must_change_pin as "mustChangePin"'), "Postgres read should restore secure authentication fields");
 assert(postgres.includes("pin, pin_hash, must_change_pin") && postgres.includes("user.pinHash || null") && postgres.includes("Boolean(user.mustChangePin)"), "Postgres write should persist secure authentication fields");
 assert(!postgres.includes('user.pin || "123456"'), "Postgres write must not regenerate the default PIN");
