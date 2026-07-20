@@ -38,6 +38,37 @@ async function sendText(settings, openId, text) {
   return { ok: true, messageId: payload.data?.message_id || "" };
 }
 
+async function sendApprovalCard(settings, openId, approval, text, detailUrl) {
+  if (settings.mockSend === true || settings.mockSend === "true") return { ok: true, mocked: true, interactive: true, messageId: `mock-card-${Date.now()}` };
+  const token = await getFeishuTenantAccessToken(settings);
+  const card = {
+    config: { wide_screen_mode: true },
+    header: { template: "blue", title: { tag: "plain_text", content: `OA ${approval.typeLabel || "审批"}待处理` } },
+    elements: [
+      { tag: "div", text: { tag: "lark_md", content: text.replace(/\n/g, "\n") } },
+      { tag: "action", actions: [
+        { tag: "button", type: "primary", text: { tag: "plain_text", content: "通过" }, value: { action: "approval_action", approvalId: approval.id, decision: "approve" }, confirm: { title: { tag: "plain_text", content: "确认通过" }, text: { tag: "plain_text", content: "确认后将同步更新 OA，并自动流转到下一审批人。" } } },
+        { tag: "button", type: "danger", text: { tag: "plain_text", content: "驳回" }, value: { action: "approval_action", approvalId: approval.id, decision: "reject" }, confirm: { title: { tag: "plain_text", content: "确认驳回" }, text: { tag: "plain_text", content: "确认后该审批将结束，并同步通知申请人。" } } },
+        ...(detailUrl ? [{ tag: "button", type: "default", text: { tag: "plain_text", content: "去 OA 查看" }, url: detailUrl }] : [])
+      ] }
+    ]
+  };
+  const res = await fetch("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id", { method: "POST", headers: { "content-type": "application/json; charset=utf-8", authorization: `Bearer ${token}` }, body: JSON.stringify({ receive_id: openId, msg_type: "interactive", content: JSON.stringify(card) }) });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload.code !== 0) throw new Error(payload.msg || `飞书返回 ${res.status}`);
+  return { ok: true, interactive: true, messageId: payload.data?.message_id || "" };
+}
+
+export function approvalCardAction(payload = {}) {
+  const value = payload.action?.value || payload.event?.action?.value || {};
+  if (value.action !== "approval_action") return null;
+  return {
+    approvalId: String(value.approvalId || ""),
+    action: value.decision === "reject" ? "reject" : "approve",
+    operatorOpenId: String(payload.operator?.open_id || payload.event?.operator?.open_id || payload.open_id || "")
+  };
+}
+
 export async function notifyApprovalInFeishu(db, approval, event = "submitted", options = {}) {
   const terminal = ["已完成", "已驳回", "已撤回"].includes(approval.status);
   const target = terminal ? "applicant" : "current";
@@ -67,7 +98,10 @@ export async function notifyApprovalInFeishu(db, approval, event = "submitted", 
       continue;
     }
     try {
-      results.push({ userId: user.id, name: user.name, openId, ...(await sendText(db.settings?.feishu || {}, openId, text)) });
+      const deliveryResult = terminal
+        ? await sendText(db.settings?.feishu || {}, openId, text)
+        : await sendApprovalCard(db.settings?.feishu || {}, openId, approval, text, detailUrl).catch(async (error) => ({ ...(await sendText(db.settings?.feishu || {}, openId, text)), cardError: error.message }));
+      results.push({ userId: user.id, name: user.name, openId, ...deliveryResult });
     } catch (error) {
       results.push({ userId: user.id, name: user.name, openId, ok: false, error: error.message });
     }

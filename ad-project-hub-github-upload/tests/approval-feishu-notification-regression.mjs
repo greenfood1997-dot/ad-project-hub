@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { notifyApprovalInFeishu } from "../server/approval-feishu-service.mjs";
+import { approvalCardAction, notifyApprovalInFeishu } from "../server/approval-feishu-service.mjs";
 
 const db = {
   settings: { feishu: { mockSend: true } },
@@ -13,10 +13,12 @@ const db = {
 const approval = { id: "ap1", type: "reimbursement", typeLabel: "报销", projectId: "p1", projectName: "项目一", applicantId: "applicant", applicantName: "申请人", amount: 1234.56, reason: "交通费", status: "待PM确认", currentRole: "pm", voucher: { status: "valid-invoice" } };
 const submitted = await notifyApprovalInFeishu(db, approval, "submitted", { origin: "https://oa.example.com" });
 assert.equal(submitted.results[0].userId, "pm1");
+assert.equal(submitted.results[0].interactive, true);
 assert.match(submitted.text, /¥1,234\.56/);
 assert.match(submitted.text, /approvalId=ap1/);
 assert.equal((await notifyApprovalInFeishu(db, approval, "submitted", {})).duplicate, true);
 approval.status = "已完成"; approval.currentRole = "";
 const completed = await notifyApprovalInFeishu(db, approval, "completed", {});
 assert.equal(completed.results[0].userId, "applicant");
+assert.deepEqual(approvalCardAction({ action: { value: { action: "approval_action", approvalId: "ap1", decision: "reject" } }, operator: { open_id: "ou_pm" } }), { approvalId: "ap1", action: "reject", operatorOpenId: "ou_pm" });
 console.log("approval Feishu notification regression passed");

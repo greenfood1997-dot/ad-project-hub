@@ -182,7 +182,7 @@ try {
 
   const visibleApproval = await ok("POST", "/api/approvals", "u-member", {
     projectId: "p-visible",
-    type: "reimbursement",
+    type: "reimbursement", voucherType: "none",
     amount: 300,
     payee: "执行成员",
     reason: "可见项目报销"
@@ -202,7 +202,7 @@ try {
 
   const hiddenApproval = await ok("POST", "/api/approvals", "u-hidden-member", {
     projectId: "p-hidden",
-    type: "reimbursement",
+    type: "reimbursement", voucherType: "none",
     amount: 300,
     payee: "隐藏成员",
     reason: "隐藏项目报销"

@@ -6,7 +6,7 @@ import { objectStorageReady, resolveStorageSettings } from "./storage-settings.m
 import { compensationOverview, generateLaborAllocation, saveCompensationMember, saveProjectDividend } from "./compensation-service.mjs";
 import { listCloudRecycleBin, restoreRecycledProject } from "./cloud-recycle-service.mjs";
 import { exchangeFeishuLoginCode, feishuLoginUrl, upsertFeishuIdentity } from "./feishu-identity-service.mjs";
-import { notifyApprovalInFeishu } from "./approval-feishu-service.mjs";
+import { approvalCardAction, notifyApprovalInFeishu } from "./approval-feishu-service.mjs";
 import {
   addComment,
   actOnApproval,
@@ -906,8 +906,21 @@ export async function handleApi(req, res) {
       sendJson(res, 200, { challenge: body.challenge });
       return;
     }
-    const data = await mutateDb(async (db) => handleFeishuEvent(db, body, { id: "feishu-bot", name: "飞书机器人", role: "bot" }));
-    sendJson(res, 200, { ok: true, data });
+    const cardAction = approvalCardAction(body);
+    const data = await mutateDb(async (db) => {
+      if (!cardAction) return handleFeishuEvent(db, body, { id: "feishu-bot", name: "飞书机器人", role: "bot" });
+      const settingsToken = db.settings?.feishu?.verificationToken;
+      if (settingsToken && body?.token && body.token !== settingsToken) throw new Error("飞书 Verification Token 不匹配");
+      const operator = (db.users || []).find((item) => item.status !== "disabled" && (item.feishuOpenId === cardAction.operatorOpenId || item.feishuUserId === cardAction.operatorOpenId));
+      if (!operator) throw new Error("未识别点击人的 OA 身份，请管理员同步飞书通讯录");
+      const approval = actOnApproval(db, { id: cardAction.approvalId, action: cardAction.action, note: `通过飞书${cardAction.action === "reject" ? "驳回" : "通过"}` }, operator);
+      const origin = `${req.headers["x-forwarded-proto"] || "http"}://${req.headers["x-forwarded-host"] || req.headers.host}`;
+      await notifyApprovalInFeishu(db, approval, cardAction.action === "reject" ? "rejected" : approval.status === "已完成" ? "completed" : "advanced", { origin, actorName: operator.name, note: "通过飞书交互卡片处理" });
+      db.auditLogs.unshift({ type: "approval-feishu", target: approval.id, action: `card-${cardAction.action}`, user: operator.name, meta: { openId: cardAction.operatorOpenId, status: approval.status }, at: new Date().toISOString() });
+      return { approval, toast: { type: "success", content: cardAction.action === "reject" ? "已驳回，OA 已同步" : "已通过，OA 已同步" } };
+    });
+    if (cardAction) sendJson(res, 200, data);
+    else sendJson(res, 200, { ok: true, data });
     return;
   }
 
