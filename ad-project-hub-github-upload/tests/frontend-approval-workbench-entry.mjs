@@ -26,6 +26,7 @@ assert(source.includes("当前角色不能提交该审批类型，请选择报�
 assert(source.includes("当前角色不能提交供应商付款，请让 PM、销售、财务或管理层处理。"), "approval workbench should explain supplier payment role limits");
 assert(source.includes("actionableApprovals"), "approval workbench should compute approvals actionable by current user");
 assert(source.includes("visibleApprovals"), "approval workbench should filter approvals by active sub page");
+assert(source.includes("approval-workspace-heading") && !componentSource.includes("categories.map((item)"), "left navigation should control the workspace without duplicate category cards");
 assert(source.includes("function approvalLedgerRows(approvals = [])") && source.includes("处理日志"), "approval workbench should build readable approval CSV rows with handling logs");
 assert(source.includes('"报销类目"') && source.includes("approval.expenseCategory || \"\""), "approval export should include reimbursement category");
 assert(source.includes("const expenseCategories") && source.includes("拍摄交通") && source.includes("达人/KOL") && source.includes("办公杂费"), "approval workbench should define advertising execution reimbursement categories");

@@ -56,12 +56,6 @@ export default function ApprovalFunds({ projects, approvals, selected, session, 
     steps: Array.isArray(item.steps) ? item.steps : []
   }));
   const actionableApprovals = normalizedApprovals.filter((item) => canHandleApproval(session, item));
-  const categories = [
-    { label: "待我审批", desc: "需要当前角色处理的审批", count: actionableApprovals.length },
-    { label: "项目备用金", desc: "项目预算、已用和剩余额度", count: normalizedApprovals.filter((item) => item.category === "项目备用金").length },
-    { label: "报销", desc: "员工报销、票据和入账状态", count: normalizedApprovals.filter((item) => item.category === "报销").length },
-    { label: "供应商付款", desc: "供应商支出、付款和结算状态", count: normalizedApprovals.filter((item) => item.category === "供应商付款").length },
-  ];
   const activeCategory = subView || "待我审批";
   const activeRequestType = activeCategory === "项目备用金" ? "petty_cash" : activeCategory === "供应商付款" ? "supplier_payment" : activeCategory === "报销" ? "reimbursement" : "";
   const canCreateActiveRequest = activeRequestType && approvalTypeOptions.some(([value]) => value === activeRequestType);
@@ -286,22 +280,10 @@ export default function ApprovalFunds({ projects, approvals, selected, session, 
 
   return (
     <section className="approval-workbench">
-      <div className="approval-type-row">
-        {categories.map((item) => (
-          <button
-            type="button"
-            className={`approval-type ${activeCategory === item.label ? "active" : ""}`}
-            key={item.label}
-            onClick={() => {
-              setSubView(item.label);
-              setSelectedApprovalKey("");
-            }}
-          >
-            <strong>{item.label}</strong>
-            <span>{item.desc}</span>
-            <b>{item.count}</b>
-          </button>
-        ))}
+      <div className="approval-workspace-heading">
+        <span>审批与备用金</span>
+        <strong>{activeCategory}</strong>
+        <p>{activeCategory === "待我审批" ? "只展示当前需要你处理的审批，点击记录可查看流程并处理。" : activeCategory === "项目备用金" ? "查看项目额度，并提交或跟进备用金申请。" : activeCategory === "报销" ? "提交员工报销，管理票据、入账状态和月度汇总。" : "提交和跟进供应商付款与结算记录。"}</p>
       </div>
 
       {canCreateActiveRequest && <form className="feature-panel approval-form" onSubmit={submitApproval}>
