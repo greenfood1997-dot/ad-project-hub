@@ -5,6 +5,7 @@ import { handleStatic } from "./server/static.mjs";
 import { sendCorsPreflight, sendJson } from "./server/http-utils.mjs";
 import { startSystemScheduler } from "./server/scheduler.mjs";
 import { bootstrapPostgresAdminFromEnv } from "./server/bootstrap-admin.mjs";
+import { isTransientDatabaseError, publicServerError } from "./server/database-errors.mjs";
 
 const bootstrap = await bootstrapPostgresAdminFromEnv();
 if (bootstrap.applied) {
@@ -20,7 +21,8 @@ const server = createServer(async (req, res) => {
     if (req.url.startsWith("/api/")) await handleApi(req, res);
     else await handleStatic(req, res);
   } catch (error) {
-    sendJson(res, 500, { ok: false, error: error.message });
+    console.error(`[API] ${req.method} ${req.url}: ${error.message}`);
+    sendJson(res, isTransientDatabaseError(error) ? 503 : 500, { ok: false, error: publicServerError(error) });
   }
 });
 

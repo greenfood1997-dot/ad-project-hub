@@ -613,7 +613,8 @@ try {
     type: "reimbursement",
     amount: 120,
     reason: "测试交通报销",
-    payee: "普通员工"
+    payee: "普通员工",
+    voucherType: "none"
   });
   assert(approval.status === "待PM确认", "员工应能提交项目审批");
 

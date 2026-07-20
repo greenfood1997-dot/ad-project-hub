@@ -43,7 +43,10 @@ export async function testAiSettings(values, deps) {
 export async function saveSetting(db, type, values, user, deps) {
   if (type === "companyFinance") return saveCompanyFinance(db, values, user, deps);
   const current = db.settings?.[type] || {};
-  const candidate = type === "aiService" ? { ...current, ...values } : values;
+  const safeValues = type === "aiService" && !String(values?.["API Key"] || "").trim()
+    ? Object.fromEntries(Object.entries(values || {}).filter(([key]) => key !== "API Key"))
+    : values;
+  const candidate = type === "aiService" ? { ...current, ...safeValues } : safeValues;
   const checked = type === "aiService" ? await testAiSettings(candidate, deps) : null;
   const normalized = type === "aiService" ? validateAiSettings(candidate, deps) : values;
   const saved = { ...current, ...normalized, connection: checked, savedAt: new Date().toISOString(), savedBy: user.id };

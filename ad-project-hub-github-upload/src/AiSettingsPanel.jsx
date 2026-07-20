@@ -31,7 +31,7 @@ export default function AiSettingsPanel({
             <option value="自定义">自定义兼容接口</option>
           </select>
         </label>
-        <label><span>API Key</span><input value={aiSettings["API Key"] || ""} type="password" onChange={(event) => setAiSettings({ ...aiSettings, "API Key": event.target.value })} placeholder="粘贴你的 API Key" /></label>
+        <label><span>API Key</span><input value={aiSettings["API Key"] || ""} type="password" autoComplete="new-password" onChange={(event) => setAiSettings({ ...aiSettings, "API Key": event.target.value })} placeholder={aiReady ? "已安全保存；留空继续使用原 Key" : "粘贴你的 API Key"} /></label>
         <label><span>Base URL</span><input value={aiSettings["Base URL"] || ""} onChange={(event) => setAiSettings({ ...aiSettings, "Base URL": event.target.value })} /></label>
         <label><span>模型名称</span><input value={aiSettings["模型名称"] || ""} onChange={(event) => setAiSettings({ ...aiSettings, "模型名称": event.target.value })} /></label>
         {settingsMessage && <p className="form-message">{settingsMessage}</p>}

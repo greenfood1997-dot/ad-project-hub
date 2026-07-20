@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 
 const checks = [
+  ["数据库恢复重试", "tests/database-recovery-regression.mjs"],
+  ["AI 配置密钥安全", "tests/ai-settings-secret-regression.mjs"],
   ["多人写入串行化", "tests/db-mutation-serialization-regression.mjs"],
   ["财务写入幂等", "tests/financial-idempotency-regression.mjs"],
   ["前端财务幂等", "tests/frontend-financial-idempotency-entry.mjs"],

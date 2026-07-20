@@ -190,7 +190,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
     setFeishuEvents(payload.data?.feishuEvents || []);
     setFeishuPendingFiles(payload.data?.feishuPendingFiles || []);
     setSystemNotifications(payload.data?.systemNotifications || []);
-    setAiSettings((current) => ({ ...current, ...(settings.aiService || {}) }));
+    setAiSettings((current) => ({ ...current, ...(settings.aiService || {}), "API Key": "" }));
     setProductSettings((current) => ({ ...current, ...(settings.product || {}) }));
     setFeishuSettings((current) => ({ ...current, ...(settings.feishu || {}) }));
     setWechatSettings((current) => ({ ...current, ...(settings.wechat || {}) }));
@@ -361,6 +361,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
         body: JSON.stringify({ type: "aiService", values: aiSettings }),
       });
       await loadSettings();
+      setAiSettings((current) => ({ ...current, "API Key": "" }));
       setSettingsMessage("AI API 已保存并刷新配置，后续合同/表格解析会使用这套配置。");
     } catch (err) {
       setSettingsMessage(err.message);

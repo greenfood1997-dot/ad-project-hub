@@ -1,5 +1,6 @@
 import "./env.mjs";
 import { readJsonDb, writeJsonDb } from "./db-json.mjs";
+import { retryTransientDatabase } from "./database-errors.mjs";
 
 const usePostgres = Boolean(process.env.DATABASE_URL);
 let mutationQueue = Promise.resolve();
@@ -11,7 +12,7 @@ async function getPostgres() {
 export async function readDb() {
   if (!usePostgres) return await readJsonDb();
   const { readPostgresDb } = await getPostgres();
-  return await readPostgresDb();
+  return await retryTransientDatabase(() => readPostgresDb());
 }
 
 export async function writeDb(db) {
@@ -20,7 +21,7 @@ export async function writeDb(db) {
     return;
   }
   const { writePostgresDbFromSnapshot } = await getPostgres();
-  await writePostgresDbFromSnapshot(db);
+  await retryTransientDatabase(() => writePostgresDbFromSnapshot(db));
 }
 
 export async function mutateDb(mutator) {

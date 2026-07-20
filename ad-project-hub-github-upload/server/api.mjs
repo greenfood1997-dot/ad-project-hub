@@ -1221,7 +1221,10 @@ export async function handleApi(req, res) {
     const body = await readBody(req);
     const data = await mutateDb((db) => saveSetting(db, body.type, body.values, user));
     const scheduler = ["product", "scheduler"].includes(body.type) ? await reloadSystemScheduler() : getSchedulerStatus();
-    sendJson(res, 200, { ok: true, data: { ...data, scheduler } });
+    const safeData = body.type === "aiService"
+      ? { ...data, "API Key": undefined, configured: Boolean(data["API Key"]), scheduler }
+      : { ...data, scheduler };
+    sendJson(res, 200, { ok: true, data: safeData });
     return;
   }
 
@@ -1311,7 +1314,11 @@ export async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/settings/ai/test") {
     if (!requireRole(user, ADMIN_ROLES, res)) return;
     const body = await readBody(req);
-    const data = await testAiSettings(body.values);
+    const submitted = body.values || {};
+    const values = String(submitted["API Key"] || "").trim()
+      ? submitted
+      : { ...(snapshot.settings?.aiService || {}), ...submitted, "API Key": snapshot.settings?.aiService?.["API Key"] || "" };
+    const data = await testAiSettings(values);
     sendJson(res, 200, { ok: true, data });
     return;
   }
