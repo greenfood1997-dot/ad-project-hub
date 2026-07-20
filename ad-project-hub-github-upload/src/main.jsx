@@ -39,6 +39,9 @@ import { deployReadinessActions } from "./utils/deployReadiness.js";
 import { useLocalWeather } from "./utils/localWeather.js";
 import { canSeeManagement } from "./utils/permissions.js";
 import ModuleFallback from "./ModuleFallback.jsx";
+import { applyColorScheme, readThemePreferences, THEME_PREFERENCE_KEY } from "./utils/theme.js";
+
+applyColorScheme(readThemePreferences());
 
 const AdminShell = React.lazy(() => import("./AdminShell.jsx"));
 const ProjectDetail = React.lazy(() => import("./ProjectDetail.jsx"));
@@ -1414,11 +1417,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   const [notice, setNotice] = useState("");
   const [personalSettingsOpen, setPersonalSettingsOpen] = useState(false);
   const [personalPreferences, setPersonalPreferences] = useState(() => {
-    try {
-      return { language: "zh-CN", fontSize: "standard", theme: "default", ...JSON.parse(localStorage.getItem("ad-project-hub-preferences") || "{}") };
-    } catch {
-      return { language: "zh-CN", fontSize: "standard", theme: "default" };
-    }
+    return readThemePreferences();
   });
   const [pinDialogOpen, setPinDialogOpen] = useState(false);
   const [pinForm, setPinForm] = useState({ currentPin: "", newPin: "", confirmPin: "" });
@@ -1427,10 +1426,13 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     if (projectFocus && selectedId) setExpandedProjectId(selectedId);
   }, [projectFocus, selectedId]);
   useEffect(() => {
-    localStorage.setItem("ad-project-hub-preferences", JSON.stringify(personalPreferences));
+    localStorage.setItem(THEME_PREFERENCE_KEY, JSON.stringify(personalPreferences));
     document.documentElement.lang = personalPreferences.language;
     document.body.dataset.fontSize = personalPreferences.fontSize;
     document.body.dataset.appearance = personalPreferences.theme;
+    applyColorScheme(personalPreferences);
+    const timer = window.setInterval(() => applyColorScheme(personalPreferences), 60 * 1000);
+    return () => window.clearInterval(timer);
   }, [personalPreferences]);
   const [changingPin, setChangingPin] = useState(false);
   const [exportingProjectLedger, setExportingProjectLedger] = useState(false);
@@ -2069,7 +2071,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           <section className="personal-settings-dialog">
             <div className="personal-settings-head"><div><h2>个人设置</h2><span>{session.name} · {roleLabel(session.role)}</span></div><button type="button" className="ghost" onClick={() => setPersonalSettingsOpen(false)}>关闭</button></div>
             <div className="personal-settings-group"><strong>账号</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setPinDialogOpen(true); }}><span><LockKeyhole size={17} /><b>修改登录 PIN</b></span><em>维护自己的登录凭据</em></button></div>
-            <div className="personal-settings-group personal-preference-group"><strong>显示与外观</strong><label><span><Type size={17} /><b>语言</b></span><select value={personalPreferences.language} onChange={(event) => setPersonalPreferences({ ...personalPreferences, language: event.target.value })}><option value="zh-CN">简体中文</option></select></label><label><span><Type size={17} /><b>字体大小</b></span><select value={personalPreferences.fontSize} onChange={(event) => setPersonalPreferences({ ...personalPreferences, fontSize: event.target.value })}><option value="compact">较小</option><option value="standard">标准</option><option value="large">较大</option></select></label><label><span><Palette size={17} /><b>外观颜色</b></span><select value={personalPreferences.theme} onChange={(event) => setPersonalPreferences({ ...personalPreferences, theme: event.target.value })}><option value="default">柔和紫</option><option value="ocean">海盐蓝</option><option value="forest">清新绿</option></select></label></div>
+            <div className="personal-settings-group personal-preference-group"><strong>显示与外观</strong><label><span><Type size={17} /><b>语言</b></span><select value={personalPreferences.language} onChange={(event) => setPersonalPreferences({ ...personalPreferences, language: event.target.value })}><option value="zh-CN">简体中文</option></select></label><label><span><Type size={17} /><b>字体大小</b></span><select value={personalPreferences.fontSize} onChange={(event) => setPersonalPreferences({ ...personalPreferences, fontSize: event.target.value })}><option value="compact">较小</option><option value="standard">标准</option><option value="large">较大</option></select></label><label><span><Palette size={17} /><b>明暗模式</b></span><select value={personalPreferences.colorMode} onChange={(event) => setPersonalPreferences({ ...personalPreferences, colorMode: event.target.value })}><option value="auto">跟随时间（19:00 自动变暗）</option><option value="light">始终浅色</option><option value="dark">始终深色</option></select></label><label><span><Palette size={17} /><b>品牌配色</b></span><select value={personalPreferences.theme} onChange={(event) => setPersonalPreferences({ ...personalPreferences, theme: event.target.value })}><option value="default">柔和紫</option><option value="ocean">海盐蓝</option><option value="forest">清新绿</option></select></label></div>
             {isAdmin && <div className="personal-settings-group"><strong>协同与系统 · 仅管理员可见</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:product"); }}><span><MessageSquareText size={17} /><b>飞书机器人</b></span><em>{feishuConfigured ? "已配置" : "未配置"}</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:product"); }}><span><MessagesSquare size={17} /><b>企业微信</b></span><em>{wechatConfigured ? "已配置" : "未配置"}</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:product"); }}><span><CheckCircle2 size={17} /><b>版本状态</b></span><em>{health?.version === BUILD_VERSION ? "已更新" : "待确认"}</em></button></div>}
             {isAdmin && <div className="personal-settings-group admin-only-settings"><strong>后台管理 · 仅管理员可见</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin"); }}><span><UsersRound size={17} /><b>成员管理</b></span><em>账号、角色与权限</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:assignments"); }}><span><UserCog size={17} /><b>项目分派</b></span><em>PM、销售与执行成员</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:ai"); }}><span><Bot size={17} /><b>AI 接入</b></span><em>模型与解析服务</em></button><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:product"); }}><span><Settings2 size={17} /><b>产品设置</b></span><em>机器人、存储与业务规则</em></button></div>}
             {!isAdmin && canManageAssignments && <div className="personal-settings-group"><strong>工作权限</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:assignments"); }}><span><UserCog size={17} /><b>项目分派</b></span><em>仅开放总监分派权限</em></button></div>}

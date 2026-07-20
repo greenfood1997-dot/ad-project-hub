@@ -2011,6 +2011,86 @@ label span {
   --soft-shadow: 0 16px 38px rgba(74, 72, 114, 0.075);
 }
 
+body[data-color-scheme="dark"] {
+  --bg: #0b0f17;
+  --surface: #141a24;
+  --surface-soft: #101620;
+  --line: #252d3a;
+  --line-strong: #354052;
+  --text: #edf2f7;
+  --muted: #9aa7b8;
+  --brand-soft: #17264a;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  --soft-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+  background: radial-gradient(circle at 8% 10%, rgba(51, 112, 255, 0.13), transparent 30%), linear-gradient(135deg, #090d14, #101620);
+  color: var(--text);
+}
+
+body[data-color-scheme="dark"] .app-shell,
+body[data-color-scheme="dark"] main,
+body[data-color-scheme="dark"] .dashboard-main {
+  color: var(--text);
+}
+
+body[data-color-scheme="dark"] .topbar {
+  background: rgba(11, 15, 23, 0.92);
+  border-color: var(--line);
+}
+
+body[data-color-scheme="dark"] :is(.feature-panel, .panel, .detail, .project-list, .project-card, .metric, .member-table, .member-form, .login-panel, .personal-settings-dialog, .account-pin-dialog, .upload-modal, .modal-card, .compact-list, .approval-card, .approval-priority-panel, .approval-priority-panel button, .approval-detail, .assignment-accordion, .assignment-accordion-trigger) {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--text);
+  box-shadow: var(--soft-shadow);
+}
+
+body[data-color-scheme="dark"] :is(input, select, textarea, .search, .input-row) {
+  background: #0d131d;
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+body[data-color-scheme="dark"] :is(input, textarea)::placeholder {
+  color: #6f7d90;
+}
+
+body[data-color-scheme="dark"] :is(.ghost, button:not(.primary):not(.danger):not(.danger-button), .personal-settings-group label) {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+body[data-color-scheme="dark"] :is(table, thead, tbody, tr, td, th) {
+  border-color: var(--line);
+  color: var(--text);
+}
+
+body[data-color-scheme="dark"] :is(.modal-backdrop) {
+  background: rgba(0, 0, 0, 0.72);
+}
+
+body[data-color-scheme="dark"] :is(.mini, .approval-form-context, .approval-impact-preview, .approval-next-panel, .empty-state, .upload-context-note, .notice-bar) {
+  background: var(--surface-soft);
+  border-color: var(--line);
+}
+
+body[data-color-scheme="dark"] .logo-mark img {
+  filter: invert(1);
+  background: #000;
+}
+
+body,
+.topbar,
+.sidebar,
+.feature-panel,
+.panel,
+.detail,
+.project-card,
+input,
+select,
+textarea {
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
 body {
   background:
     radial-gradient(circle at 8% 10%, rgba(146, 224, 206, 0.24), transparent 30%),
