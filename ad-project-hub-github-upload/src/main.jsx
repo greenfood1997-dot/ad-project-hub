@@ -3051,7 +3051,9 @@ function LegacyProjectDetail({ project, isManagement, session, files, parseJobs,
       pm: project.pm || "",
       sales: project.sales || "",
       status: project.status || "",
-      contract: project.contract || 0,
+      contract: project.contractEnteredAmount ?? project.contract ?? 0,
+      taxRate: project.taxRate ?? 6,
+      contractTaxIncluded: project.contractTaxIncluded !== false,
       paid: project.paid || 0,
       nextMilestone: project.nextMilestone || "",
       paymentDue: project.paymentDue || ""
@@ -3280,6 +3282,8 @@ function LegacyProjectDetail({ project, isManagement, session, files, parseJobs,
             "销售": form.sales,
             "项目状态": form.status,
             "合同金额": form.contract,
+            "项目税率": form.taxRate,
+            "合同金额口径": form.contractTaxIncluded ? "含税" : "未税",
             "已回款": form.paid,
             "下一节点": form.nextMilestone,
             "回款节点": form.paymentDue
@@ -3916,16 +3920,20 @@ function LegacyProjectDetail({ project, isManagement, session, files, parseJobs,
             ["sales", "销售"],
             ["status", "状态"],
             ["contract", "合同金额"],
+            ["taxRate", "项目税率（%）"],
+            ["contractTaxIncluded", "合同金额口径"],
             ["paid", "已回款"],
             ["nextMilestone", "下一节点"],
             ["paymentDue", "回款节点"]
           ].map(([field, label]) => (
             <label key={field}>
               <span>{label}</span>
-              {editing ? (
+              {editing && field === "contractTaxIncluded" ? (
+                <select value={form[field] === false ? "未税" : "含税"} onChange={(event) => updateForm(field, event.target.value === "含税")}><option value="含税">含税金额</option><option value="未税">未税金额</option></select>
+              ) : editing ? (
                 <input value={form[field] ?? ""} onChange={(event) => updateForm(field, event.target.value)} />
               ) : (
-                <strong>{["contract", "paid"].includes(field) ? money(form[field]) : form[field] || "待补充"}</strong>
+                <strong>{["contract", "paid"].includes(field) ? money(form[field]) : field === "contractTaxIncluded" ? (form[field] === false ? "未税金额" : "含税金额") : form[field] || "待补充"}</strong>
               )}
             </label>
           ))}
@@ -6544,6 +6552,8 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
     "客户 / 品牌": "",
     "负责人": session.name,
     "合同金额": "",
+    "项目税率": "",
+    "合同金额口径": "",
     "执行预算占比": "60%",
   });
   const [files, setFiles] = useState(() => initialFiles);
@@ -6866,12 +6876,14 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
               {Object.keys(values).map((key) => (
                 <label key={key}>
                   <span>{key}</span>
-                  <input value={values[key]} onChange={(event) => {
+                  {key === "合同金额口径" ? <select value={values[key]} onChange={(event) => {
+                    setValues({ ...values, [key]: event.target.value }); setPreview(null); setConfirmed(false); setUploadError(null);
+                  }}><option value="">使用公司默认口径</option><option value="含税">含税金额</option><option value="未税">未税金额</option></select> : <input value={values[key]} onChange={(event) => {
                     setValues({ ...values, [key]: event.target.value });
                     setPreview(null);
                     setConfirmed(false);
                     setUploadError(null);
-                  }} placeholder={key === "项目名称" ? "可留空，由 AI 从合同识别" : ""} />
+                  }} placeholder={key === "项目名称" ? "可留空，由 AI 从合同识别" : key === "合同金额" ? "例如 4074700" : key === "项目税率" ? "例如 6%" : ""} />}
                 </label>
               ))}
             </div>
@@ -7177,6 +7189,8 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
   const [productSettings, setProductSettings] = useState({
     "公司名称": "广告项目中台",
     "默认执行预算占比": "60%",
+    "默认项目税率": "6%",
+    "默认合同金额口径": "含税",
     "大文件提醒阈值MB": "40",
     "自动巡检间隔毫秒": "900000",
     "关闭自动巡检": "",

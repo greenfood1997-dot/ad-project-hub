@@ -6,6 +6,15 @@ import { rootDir } from "./config.mjs";
 import { resolveStorageSettings } from "./storage-settings.mjs";
 import { projectRecycleSnapshot } from "./cloud-recycle-service.mjs";
 
+export function projectTaxSnapshot(amount, rate = 0, taxIncluded = true) {
+  const enteredAmount = Math.max(0, parseMoney(amount));
+  const taxRate = Math.max(0, Number(String(rate).replace("%", "")) || 0);
+  const included = ![false, "false", "未税", "不含税"].includes(taxIncluded);
+  const netRevenue = included ? enteredAmount / (1 + taxRate / 100) : enteredAmount;
+  const estimatedTax = netRevenue * taxRate / 100;
+  return { enteredAmount: roundCurrency(enteredAmount), contractTaxIncluded: included, taxRate, netRevenue: roundCurrency(netRevenue), estimatedTax: roundCurrency(estimatedTax), contractTotal: roundCurrency(netRevenue + estimatedTax) };
+}
+
 export async function createProject(db, values, files, user, options = {}) {
   if (!values?.["项目名称"] && !files.length) throw new Error("请填写项目名称或先上传合同/执行表");
   const now = new Date().toISOString();
@@ -26,7 +35,9 @@ export async function createProject(db, values, files, user, options = {}) {
       throw new Error("这是成本/利润测算表，但未匹配到已有合同项目。请先上传合同，或在表内补充完整项目名称/客户名称。");
     }
   }
-  const contract = parseMoney(values["合同金额"]);
+  const detectedContract = parseMoney(previewParsed?.contract) || parseMoney(values["合同金额"]);
+  const tax = projectTaxSnapshot(detectedContract, values["项目税率"] || previewParsed?.taxRate || db.settings?.product?.["默认项目税率"] || 6, values["合同金额口径"] || previewParsed?.contractTaxIncluded || (db.settings?.product?.["默认合同金额口径"] !== "未税"));
+  const contract = tax.contractTotal;
   assertUniqueProject(db, values, files, contract);
   const project = {
     id: `P-${Date.now()}`,
@@ -34,6 +45,11 @@ export async function createProject(db, values, files, user, options = {}) {
     client: values["客户 / 品牌"] || "",
     owner: values["负责人"] || user.name,
     contract,
+    contractEnteredAmount: tax.enteredAmount,
+    contractTaxIncluded: tax.contractTaxIncluded,
+    taxRate: tax.taxRate,
+    netRevenue: tax.netRevenue,
+    estimatedTax: tax.estimatedTax,
     costBudget: contract * parsePercent(values["执行预算占比"] || values["合同成本率"] || ""),
     costUsed: 0,
     paid: 0,
@@ -43,10 +59,10 @@ export async function createProject(db, values, files, user, options = {}) {
     aiSummary: files.length ? "合同/执行表已进入 AI 解析队列，可在项目详情查看解析进度。" : "",
     nextMilestone: "",
     paymentDue: "",
-    margin: 0,
+    margin: profitMargin(contract, contract - tax.estimatedTax),
     tasks: [],
     costs: [],
-    extractedFields: { executionBudgetRatio: values["执行预算占比"] || values["合同成本率"] || "" },
+    extractedFields: { executionBudgetRatio: values["执行预算占比"] || values["合同成本率"] || "", estimatedTax: tax.estimatedTax },
     createdAt: now,
     createdBy: user.id,
     files
@@ -247,6 +263,7 @@ export async function previewProjectUpload(db, body, user) {
   }
 
   const contract = parseMoney(parsed.contract) || parseMoney(values["合同金额"]);
+  const tax = projectTaxSnapshot(contract, parsed.taxRate || values["项目税率"] || db.settings?.product?.["默认项目税率"] || 6, parsed.contractTaxIncluded ?? values["合同金额口径"] ?? (db.settings?.product?.["默认合同金额口径"] !== "未税"));
   const paid = parseMoney(parsed.paid);
   const derivedReceivable = Math.max(contract - paid, 0);
   const aiReceivable = parseMoney(parsed.aiReportedReceivable ?? parsed.receivable);
@@ -264,6 +281,10 @@ export async function previewProjectUpload(db, body, user) {
     "客户 / 品牌": parsed.client || values["客户 / 品牌"] || "",
     "负责人": values["负责人"] || user.name,
     "合同金额": contract,
+    "合同金额口径": tax.contractTaxIncluded ? "含税" : "未税",
+    "项目税率": `${tax.taxRate}%`,
+    "未税收入": tax.netRevenue,
+    "预计税费": tax.estimatedTax,
     "已回款": paid,
     "待回款": derivedReceivable,
     "服务周期": parsed.servicePeriod || "",
@@ -352,9 +373,8 @@ export function updateProject(db, body, user) {
   const nextClosedAt = values["结案时间"] !== undefined
     ? String(values["结案时间"] || "").trim()
     : String(project.closedAt || project.extractedFields?.closedAt || "").trim();
-  const contract = values["合同金额"] !== undefined && values["合同金额"] !== ""
-    ? parseMoney(values["合同金额"])
-    : parseMoney(project.contract);
+  const tax = projectTaxSnapshot(values["合同金额"] !== undefined && values["合同金额"] !== "" ? values["合同金额"] : (project.contractEnteredAmount ?? project.contract), values["项目税率"] ?? project.taxRate ?? db.settings?.product?.["默认项目税率"] ?? 6, values["合同金额口径"] ?? project.contractTaxIncluded ?? true);
+  const contract = tax.contractTotal;
   const paid = values["已回款"] !== undefined && values["已回款"] !== ""
     ? parseMoney(values["已回款"])
     : parseMoney(project.paid);
@@ -379,6 +399,11 @@ export function updateProject(db, body, user) {
   if (nextCloseoutNote) project.closeoutNote = nextCloseoutNote;
   if (nextClosedAt) project.closedAt = nextClosedAt;
   project.contract = contract;
+  project.contractEnteredAmount = tax.enteredAmount;
+  project.contractTaxIncluded = tax.contractTaxIncluded;
+  project.taxRate = tax.taxRate;
+  project.netRevenue = tax.netRevenue;
+  project.estimatedTax = tax.estimatedTax;
   project.paid = paid;
   project.receivable = Math.max(contract - paid, 0);
   project.extractedFields = {
@@ -387,6 +412,7 @@ export function updateProject(db, body, user) {
     sales: project.sales,
     executionBudgetRatio,
     executionBudget,
+    estimatedTax: tax.estimatedTax,
     closeoutNote: nextCloseoutNote,
     closedAt: nextClosedAt
   };
@@ -394,7 +420,8 @@ export function updateProject(db, body, user) {
   const profitBreakdown = syncProjectProfit(project, executionBudget);
   project.costBudget = executionBudget || profitBreakdown.executionBudget || parseMoney(project.costBudget);
   project.costUsed = profitBreakdown.totalDeduction || parseMoney(project.costUsed);
-  project.margin = contract ? profitMargin(contract, contract - project.costUsed) : 0;
+  const estimatedTaxDeduction = Number(profitBreakdown.additionalCost || 0) > 0 ? 0 : tax.estimatedTax;
+  project.margin = contract ? profitMargin(contract, contract - project.costUsed - estimatedTaxDeduction) : 0;
   project.alerts = projectRiskAlerts(project);
   project.updatedAt = new Date().toISOString();
 
@@ -1610,6 +1637,7 @@ function applyParsedFields(db, project, job, parsed) {
   const existingContract = parseMoney(project.contract);
   const hasCostSheet = Boolean(parsed.hasCostSheet);
   const contract = hasCostSheet ? (existingContract || parsedContract) : (parsedContract || existingContract);
+  const tax = projectTaxSnapshot(contract, parsed.taxRate || project.taxRate || db.settings?.product?.["默认项目税率"] || 6, parsed.contractTaxIncluded ?? project.contractTaxIncluded ?? true);
   const configuredRatioText = project.extractedFields?.executionBudgetRatio || job.sourceValues?.["执行预算占比"] || job.sourceValues?.["合同成本率"] || "";
   const configuredRatio = parsePercent(configuredRatioText);
   const configuredBudget = configuredRatio && contract ? contract * configuredRatio : parseMoney(project.costBudget);
@@ -1636,6 +1664,11 @@ function applyParsedFields(db, project, job, parsed) {
     name: shouldUseParsedName ? parsedProjectName : project.name,
     client: project.client || parsed.client || "",
     contract,
+    contractEnteredAmount: tax.enteredAmount,
+    contractTaxIncluded: tax.contractTaxIncluded,
+    taxRate: tax.taxRate,
+    netRevenue: tax.netRevenue,
+    estimatedTax: tax.estimatedTax,
     costBudget,
     costUsed,
     paid,
@@ -1645,7 +1678,7 @@ function applyParsedFields(db, project, job, parsed) {
     aiSummary: parsed.summary || "文件已解析，结构化字段已同步到项目台账。",
     nextMilestone: parsed.nextMilestone || parsed.servicePeriod || parsed.deliveryDate || "",
     paymentDue: parsed.paymentDue || "",
-    margin: contract ? profitMargin(contract, contract - costUsed) : 0,
+    margin: contract ? profitMargin(contract, contract - costUsed - (Number(profitBreakdown?.additionalCost || 0) ? 0 : tax.estimatedTax)) : 0,
     tasks: parsed.tasks || [],
     costs: hasCostSheet ? profitBreakdown.costs : (project.costs || []),
     extractedFields: mergeProjectExtractedFields(existingExtractedFields, parsed, {
@@ -1683,6 +1716,22 @@ function applyParsedFields(db, project, job, parsed) {
   for (const supplier of db.suppliers || []) {
     if (supplier.project === oldName) supplier.project = project.name;
   }
+}
+
+export function extractContractTaxRate(text = "") {
+  const source = String(text || "");
+  const matches = [
+    source.match(/(?:增值税|税率|税点)[：:\s]*(\d+(?:\.\d+)?)\s*%/),
+    source.match(/按\s*(\d+(?:\.\d+)?)\s*%\s*(?:税率|税点|计税|开票)/)
+  ];
+  return Math.max(0, Number(matches.find(Boolean)?.[1] || 0));
+}
+
+export function inferContractTaxIncluded(text = "") {
+  const source = String(text || "").replace(/\s+/g, "");
+  if (/不含税|未税(?:金额|总价)|税前金额/.test(source)) return false;
+  if (/含税(?:金额|总价|价款)|价税合计|最终优惠含税/.test(source)) return true;
+  return undefined;
 }
 
 function mergeProjectExtractedFields(existing = {}, parsed = {}, options = {}) {
@@ -5292,7 +5341,7 @@ async function requestAiJson(ai, values, text) {
   const messages = [
     {
       role: "system",
-      content: "你是广告项目经营中台的文件解析和自动归档助手。你要结合文件表头、合同语义和广告行业财务常识，把合同、报价单、执行表、排期表、供应商结算表中的关键信息归类到项目中台。只返回 JSON，不要 Markdown。字段包括 projectName, client, partyA, partyB, contract, paid, receivable, advancePayment, advanceInterest, executionCost, executionBudget, internalLabor, overhead, additionalCost, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, costClassifications, suppliers, tasks, archiveTags, confidence, missingFields, hasCostSheet。金额返回数字，日期保留原文。合同存在原价、报价合计和最终优惠总价时，contract 必须取双方最终约定的含税成交价或最终优惠总价，不得取优惠前原价；paid 只能填写文件明确说明已经实际回款的金额，付款计划不能算已回款；receivable 必须等于 contract 减 paid。遇到合同约定按季度/每季/季付/季度回款，或付款后附带承兑汇票、汇票期限、兑付周期时，必须把完整付款方式写入 paymentDue 或 summary。成本表中每一个有金额的费用列都必须保留，不能因为系统没有预设字段而丢弃：costs 返回原始科目和精确金额；costClassifications 返回对象数组 {name, category, amount, reason, confidence}，category 只能为 advancePayment、advanceInterest、executionCost、internalLabor、overhead、additionalCost。结合合同约定判断投流/投放是否属于甲方资金代垫；明确属于垫款时归 advancePayment，否则归 executionCost。税费、挂靠费、中标服务费等没有固定字段但会影响利润的费用归 additionalCost。无法可靠判断时 confidence 返回 low 并在 missingFields 标记待人工确认，禁止静默忽略。项目利润口径为：项目总金额减去成本表中全部实际成本（每个科目只扣一次）；executionBudget 只是预算上限，不计入实际成本。只有文件明确是成本表、供应商结算表、费用明细表时，hasCostSheet 才为 true。suppliers 为对象数组，含 supplier,type,amount,status；tasks 为 [节点, 进度百分比]。"
+      content: "你是广告项目经营中台的文件解析和自动归档助手。只返回 JSON，不要 Markdown。字段包括 projectName, client, partyA, partyB, contract, taxRate, contractTaxIncluded, paid, receivable, advancePayment, advanceInterest, executionCost, executionBudget, internalLabor, overhead, additionalCost, costBudget, costUsed, servicePeriod, nextMilestone, paymentDue, risk, summary, costs, costClassifications, suppliers, tasks, archiveTags, confidence, missingFields, hasCostSheet。contract 必须取双方最终约定的成交总价或最终优惠总价；taxRate 返回合同明确税率的数字（如 6），contractTaxIncluded 根据合同文字返回 true/false，无法判断时不要猜测。paid 只能填写明确已实际回款的金额。成本表每个有金额的费用列都必须保留；税费、挂靠费、中标服务费归 additionalCost。项目利润为项目总金额减全部实际成本，每个科目只扣一次；executionBudget 只是预算上限。只有明确是成本表、供应商结算表、费用明细表时 hasCostSheet 才为 true。"
     },
     {
       role: "user",
@@ -5482,6 +5531,8 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
   const contract = hasCostSheet && !hasContractInBatch
     ? parseMoney(values["合同金额"])
     : (parseMoney(values["合同金额"]) || extractContractAmount(text) || amounts[0] || 0);
+  const taxRate = extractContractTaxRate(text);
+  const contractTaxIncluded = inferContractTaxIncluded(text);
   const explicitPaid = guessAmount(text, ["已回款", "已付款", "首付款", "预付款", "已收款"]) || 0;
   const paid = explicitPaid || 0;
   const advancePayment = hasCostSheet ? pickTableMetric(tableMetrics, "advancePayment", guessAmount(text, ["项目垫款", "垫款本金", "垫款", "代垫"])) : 0;
@@ -5507,6 +5558,8 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
     projectName,
     client,
     contract,
+    taxRate,
+    contractTaxIncluded,
     projectRevenue: tableMetrics.projectRevenue || 0,
     executionBudgetRatio: values["执行预算占比"] || values.executionBudgetRatio || "",
     paid,
@@ -5556,6 +5609,8 @@ function normalizeParsedFields(parsed, values, files, interestRateSettings) {
     projectName: parsed.projectName || values["项目名称"] || "",
     client: parsed.client || values["客户 / 品牌"] || "",
     contract,
+    taxRate: Math.max(0, Number(String(parsed.taxRate ?? values["项目税率"] ?? "").replace("%", "")) || 0),
+    contractTaxIncluded: parsed.contractTaxIncluded ?? inferContractTaxIncluded(files.map((file) => file.text || "").join("\n")),
     paid,
     receivable,
     aiReportedReceivable,

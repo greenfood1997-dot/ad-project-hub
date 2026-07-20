@@ -106,10 +106,12 @@ export default function ProjectDetail({ project, isManagement, session, files, p
       pm: project.pm || "",
       sales: project.sales || "",
       status: project.status || "",
-      contract: project.contract || 0,
+      contract: project.contractEnteredAmount ?? project.contract ?? 0,
       paid: project.paid || 0,
       nextMilestone: project.nextMilestone || "",
       paymentDue: project.paymentDue || ""
+      , taxRate: project.taxRate ?? 6
+      , contractTaxIncluded: project.contractTaxIncluded !== false
     });
     setEditing(false);
     setOpenSection("overview");
@@ -352,6 +354,8 @@ export default function ProjectDetail({ project, isManagement, session, files, p
             "销售": form.sales,
             "项目状态": form.status,
             "合同金额": form.contract,
+            "项目税率": form.taxRate,
+            "合同金额口径": form.contractTaxIncluded ? "含税" : "未税",
             "已回款": form.paid,
             "下一节点": form.nextMilestone,
             "回款节点": form.paymentDue

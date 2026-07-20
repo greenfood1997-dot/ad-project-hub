@@ -85,16 +85,20 @@ export default function ProjectOverviewPanel({
             ["sales", "销售"],
             ["status", "状态"],
             ["contract", "合同金额"],
+            ["taxRate", "项目税率（%）"],
+            ["contractTaxIncluded", "合同金额口径"],
             ["paid", "已回款"],
             ["nextMilestone", "下一节点"],
             ["paymentDue", "回款节点"]
           ].map(([field, label]) => (
             <label key={field}>
               <span>{label}</span>
-              {editing ? (
+              {editing ? field === "contractTaxIncluded" ? (
+                <select value={form[field] === false ? "未税" : "含税"} onChange={(event) => onUpdateForm(field, event.target.value === "含税")}><option value="含税">含税金额</option><option value="未税">未税金额</option></select>
+              ) : (
                 <input value={form[field] ?? ""} onChange={(event) => onUpdateForm(field, event.target.value)} />
               ) : (
-                <strong>{["contract", "paid"].includes(field) ? money(form[field]) : form[field] || "待补充"}</strong>
+                <strong>{["contract", "paid"].includes(field) ? money(form[field]) : field === "contractTaxIncluded" ? (form[field] === false ? "未税金额" : "含税金额") : form[field] || "待补充"}</strong>
               )}
             </label>
           ))}

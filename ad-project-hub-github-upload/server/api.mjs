@@ -763,12 +763,13 @@ function monthlyProjectCostReport(db, month) {
     const interest = Number(breakdown.advanceInterest || project.extractedFields?.advanceInterest || 0);
     const internalLabor = Number(breakdown.internalLabor || project.extractedFields?.internalLabor || 0);
     const overhead = Number(breakdown.overhead || project.extractedFields?.overhead || 0);
-    const other = Number(breakdown.additionalCost || project.extractedFields?.additionalCost || 0);
+    const actualOther = Number(breakdown.additionalCost || project.extractedFields?.additionalCost || 0);
+    const other = actualOther || Number(project.estimatedTax || project.extractedFields?.estimatedTax || 0);
     const realtimeCost = Number(project.costUsed || 0);
     const details = [
       ...projectApprovals.map((item) => ({ source: item.type === "reimbursement" ? "执行报销" : "供应商付款", category: item.expenseCategory || item.payee || item.typeLabel || "其他", amount: Number(item.amount || 0), person: item.applicantName || "", at: item.completedAt || item.updatedAt || "", note: item.reason || "" })),
       ...allocations.filter((item) => item.projectId === project.id).map((item) => ({ source: "人力分摊", category: item.memberName || "成员人力", amount: Number(item.amount || 0), person: item.memberName || "", at: `${selectedMonth}-01`, note: "月度人力成本分摊" })),
-      ...[["垫付款", advance], ["垫资利息", interest], ["既有人力成本", internalLabor], ["管理公摊", overhead], ["其他成本/税费", other]].filter(([, amount]) => amount > 0).map(([category, amount]) => ({ source: "项目成本", category, amount, person: "", at: "", note: "来自项目成本解析" }))
+      ...[["垫付款", advance], ["垫资利息", interest], ["既有人力成本", internalLabor], ["管理公摊", overhead], [actualOther ? "其他成本/实际税费" : "预计项目税费", other]].filter(([, amount]) => amount > 0).map(([category, amount]) => ({ source: "项目成本", category, amount, person: "", at: "", note: actualOther ? "来自项目成本解析" : "按项目税率自动测算，实际税费入库后替换" }))
     ];
     return { month: selectedMonth, projectId: project.id, projectName: project.name, client: project.client || "", reimbursements, supplierPayments, advance, interest, internalLabor, overhead, other, laborAllocation: labor, realtimeCost, fullCost: realtimeCost + labor, contract: Number(project.contract || 0), managementProfit: Number(project.contract || 0) - realtimeCost - labor, details };
   });

@@ -19,6 +19,8 @@ export default function UploadDialog({ session, projects, selected, initialType 
     "客户 / 品牌": "",
     "负责人": session.name,
     "合同金额": "",
+    "项目税率": "",
+    "合同金额口径": "",
     "执行预算占比": "60%",
   });
   const [files, setFiles] = useState(() => initialFiles);
@@ -355,12 +357,14 @@ export default function UploadDialog({ session, projects, selected, initialType 
               {Object.keys(values).map((key) => (
                 <label key={key}>
                   <span>{key}</span>
-                  <input value={values[key]} onChange={(event) => {
+                  {key === "合同金额口径" ? <select value={values[key]} onChange={(event) => {
+                    setValues({ ...values, [key]: event.target.value }); setPreview(null); setConfirmed(false); setUploadError(null);
+                  }}><option value="">使用公司默认口径</option><option value="含税">含税金额</option><option value="未税">未税金额</option></select> : <input value={values[key]} onChange={(event) => {
                     setValues({ ...values, [key]: event.target.value });
                     if (!preview?.requiresManualContract) setPreview(null);
                     setConfirmed(false);
                     setUploadError(null);
-                  }} placeholder={key === "项目名称" ? "可留空，由 AI 从合同识别" : key === "合同金额" ? "识别失败时请手动填写，例如 4074700" : ""} />
+                  }} placeholder={key === "项目名称" ? "可留空，由 AI 从合同识别" : key === "合同金额" ? "识别失败时请手动填写，例如 4074700" : key === "项目税率" ? "留空使用公司默认，例如 6%" : ""} />}
                 </label>
               ))}
             </div>

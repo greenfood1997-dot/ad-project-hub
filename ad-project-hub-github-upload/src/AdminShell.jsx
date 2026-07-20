@@ -89,6 +89,8 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
   const [productSettings, setProductSettings] = useState({
     "公司名称": "广告项目中台",
     "默认执行预算占比": "60%",
+    "默认项目税率": "6%",
+    "默认合同金额口径": "含税",
     "大文件提醒阈值MB": "40",
     "自动巡检间隔毫秒": "900000",
     "关闭自动巡检": "",
