@@ -689,7 +689,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
     <div className="app-shell">
       <aside className="sidebar">
         <div className="logo">
-          <div className="logo-mark">A</div>
+          <div className="logo-mark"><img src="/brand/company-logo-square.png" alt="公司 Logo" /></div>
           <div>
             <strong>后台管理</strong>
             <span>成员 / 权限 / 设置</span>

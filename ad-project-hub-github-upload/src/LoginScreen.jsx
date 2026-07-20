@@ -45,7 +45,7 @@ export default function LoginScreen({ onLogin, sessionKey }) {
     <main className="login-page">
       <section className="login-panel">
         <div className="logo">
-          <div className="logo-mark">A</div>
+          <div className="logo-mark"><img src="/brand/company-logo-square.png" alt="公司 Logo" /></div>
           <div>
             <strong>广告项目中台 OA</strong>
             <span>内部项目协作与智能分析</span>

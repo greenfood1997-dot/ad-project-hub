@@ -1985,7 +1985,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="logo">
-          <div className="logo-mark">A</div>
+          <div className="logo-mark"><img src="/brand/company-logo-square.png" alt="公司 Logo" /></div>
           <div>
             <strong>广告项目中台</strong>
             <span>经营 / 执行 / 回款</span>
@@ -7117,7 +7117,7 @@ function LoginScreen({ onLogin }) {
     <main className="login-page">
       <section className="login-panel">
         <div className="logo">
-          <div className="logo-mark">A</div>
+          <div className="logo-mark"><img src="/brand/company-logo-square.png" alt="公司 Logo" /></div>
           <div>
             <strong>广告项目中台 OA</strong>
             <span>内部项目协作与智能分析</span>
@@ -7706,7 +7706,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="logo">
-          <div className="logo-mark">A</div>
+          <div className="logo-mark"><img src="/brand/company-logo-square.png" alt="公司 Logo" /></div>
           <div>
             <strong>后台管理</strong>
             <span>成员 / 权限 / 设置</span>
