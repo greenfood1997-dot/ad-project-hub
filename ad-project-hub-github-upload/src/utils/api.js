@@ -1,6 +1,13 @@
 const IDEMPOTENT_PATHS = new Set(["/api/payments", "/api/approvals", "/api/projects/cost-sheet"]);
 const idempotencyKeys = new Map();
 
+export async function readApiPayload(res, fallback = "服务暂时不可用，请稍后重试") {
+  const contentType = String(res.headers?.get?.("content-type") || "");
+  const text = await res.text();
+  if (!contentType.includes("application/json")) throw new Error(res.status >= 500 ? "OA 服务正在重启，请等待几秒后重试" : fallback);
+  try { return JSON.parse(text); } catch { throw new Error(fallback); }
+}
+
 function financialIdempotencyKey(path, session, options = {}) {
   if (String(options.method || "GET").toUpperCase() !== "POST" || !IDEMPOTENT_PATHS.has(path)) return "";
   const fingerprint = `${session.id || "anonymous"}:${path}:${String(options.body || "")}`;
@@ -27,7 +34,7 @@ export async function apiRequest(path, session, options = {}) {
       ...(options.headers || {}),
     },
   });
-  const payload = await res.json();
+  const payload = await readApiPayload(res);
   if (!payload.ok) {
     const error = new Error(payload.error || "请求失败");
     error.data = payload.data;

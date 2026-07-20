@@ -9,6 +9,7 @@ async function getPool() {
   if (pool) return pool;
   const pg = await import("pg");
   pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  pool.on("error", (error) => console.error(`[POSTGRES] idle connection error: ${error.message}`));
   return pool;
 }
 
@@ -291,6 +292,8 @@ export async function writePostgresDbFromSnapshot(snapshot) {
   await migratePostgres();
   const pool = await getPool();
   const db = await pool.connect();
+  const onClientError = (error) => console.error(`[POSTGRES] transaction connection error: ${error.message}`);
+  db.on("error", onClientError);
   const filesByProject = collectProjectFilesForPostgres(snapshot);
   try {
     await db.query("begin");
@@ -731,6 +734,7 @@ export async function writePostgresDbFromSnapshot(snapshot) {
     throw error;
   }
   } finally {
+    db.off("error", onClientError);
     db.release();
   }
 }

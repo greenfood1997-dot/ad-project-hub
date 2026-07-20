@@ -1,6 +1,6 @@
 import React, { Suspense, useEffect, useRef, useState } from "react";
 import { Bot, ChevronRight, Cloud, Coins, DatabaseBackup, HeartPulse, LayoutDashboard, LogOut, Plus, Settings2, Trash2, UserCog, UsersRound, WalletCards } from "lucide-react";
-import { downloadFile } from "./utils/api.js";
+import { downloadFile, readApiPayload } from "./utils/api.js";
 import { money } from "./utils/format.js";
 import { canManageAssignmentsRole, canUseAdminRole, roleLabel, roleOptions } from "./utils/permissions.js";
 import { deployReadinessActions } from "./utils/deployReadiness.js";
@@ -162,7 +162,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
         ...(options.headers || {}),
       },
     });
-    const payload = await res.json();
+    const payload = await readApiPayload(res);
     if (!payload.ok) throw new Error(payload.error || "请求失败");
     return payload.data;
   }
@@ -181,7 +181,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
 
   async function loadSettings() {
     const res = await fetch("/api/state", { headers: { authorization: `Bearer ${session.token || ""}`, "x-user-id": session.id } });
-    const payload = await res.json();
+    const payload = await readApiPayload(res, "读取设置失败，请稍后重试");
     if (!payload.ok) throw new Error(payload.error || "读取设置失败");
     const settings = payload.data?.settings || {};
     setProjectRecords(payload.data?.projects || []);
@@ -205,7 +205,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
     if (!silent) setSettingsMessage("正在检查线上部署状态...");
     try {
       const res = await fetch("/api/health");
-      const payload = await res.json();
+      const payload = await readApiPayload(res, "健康检查失败，请稍后重试");
       if (!payload.ok) throw new Error(payload.error || "健康检查失败");
       setDeployHealth(payload.data || null);
       if (!silent) setSettingsMessage(payload.data?.version === buildVersion ? "线上版本检查通过，后台和服务端是同一版。" : "线上版本可能不是最新版，请重新部署或检查是否上传了旧包。");
