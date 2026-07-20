@@ -70,6 +70,10 @@
 
 .reimbursement-summary-controls input,
 .reimbursement-summary-controls select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   min-height: 38px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
@@ -190,6 +194,26 @@
 .approval-form .primary {
   width: 100%;
   margin-top: 2px;
+}
+
+.approval-form-context {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 10px 12px;
+}
+
+.approval-form-context strong {
+  color: #1d4ed8;
+  font-size: 13px;
+}
+
+.approval-form-context span {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .approval-detail {
@@ -461,8 +485,8 @@
 }
 
 .approval-detail,
-.approval-workbench > .feature-panel:nth-last-child(2),
-.approval-workbench > .feature-panel:last-child {
+.petty-cash-panel,
+.approval-ai-panel {
   grid-column: 2;
 }
 
@@ -541,8 +565,8 @@
   .approval-main,
   .reimbursement-summary-panel,
   .approval-detail,
-  .approval-workbench > .feature-panel:nth-last-child(2),
-  .approval-workbench > .feature-panel:last-child {
+  .petty-cash-panel,
+  .approval-ai-panel {
     grid-column: 1;
   }
 

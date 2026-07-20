@@ -63,9 +63,16 @@ export default function ApprovalFunds({ projects, approvals, selected, session, 
     { label: "供应商付款", desc: "供应商支出、付款和结算状态", count: normalizedApprovals.filter((item) => item.category === "供应商付款").length },
   ];
   const activeCategory = subView || "待我审批";
+  const activeRequestType = activeCategory === "项目备用金" ? "petty_cash" : activeCategory === "供应商付款" ? "supplier_payment" : activeCategory === "报销" ? "reimbursement" : "";
+  const canCreateActiveRequest = activeRequestType && approvalTypeOptions.some(([value]) => value === activeRequestType);
+  const requestTitle = activeCategory === "项目备用金" ? "申请项目备用金" : activeCategory === "供应商付款" ? "提交供应商付款" : "提交报销";
   const visibleApprovals = activeCategory === "待我审批"
     ? actionableApprovals
     : normalizedApprovals.filter((item) => item.category === activeCategory);
+  useEffect(() => {
+    if (!activeRequestType || !approvalTypeOptions.some(([value]) => value === activeRequestType)) return;
+    setForm((current) => current.type === activeRequestType ? current : { ...current, type: activeRequestType });
+  }, [activeRequestType, approvalTypeOptions]);
   useEffect(() => {
     const focusId = focusApprovalId || localApprovalFocusId;
     if (!focusId) return;
@@ -297,20 +304,18 @@ export default function ApprovalFunds({ projects, approvals, selected, session, 
         ))}
       </div>
 
-      <form className="feature-panel approval-form" onSubmit={submitApproval}>
-        <PanelTitle icon={Plus} title="提交审批" />
+      {canCreateActiveRequest && <form className="feature-panel approval-form" onSubmit={submitApproval}>
+        <PanelTitle icon={Plus} title={requestTitle} />
         <label>
           <span>项目</span>
           <select value={form.projectId} onChange={(event) => updateForm("projectId", event.target.value)}>
             {projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}
           </select>
         </label>
-        <label>
-          <span>类型</span>
-          <select value={form.type} onChange={(event) => updateForm("type", event.target.value)}>
-            {approvalTypeOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-          </select>
-        </label>
+        <div className="approval-form-context">
+          <strong>{activeCategory}</strong>
+          <span>{activeCategory === "项目备用金" ? "用于项目执行中的小额支出预算，审批完成后增加项目可用额度。" : activeCategory === "供应商付款" ? "用于供应商支出与结算，审批完成后同步进入供应商付款记录。" : "用于员工垫付报销，审批完成后同步计入项目执行成本。"}</span>
+        </div>
         <label>
           <span>金额</span>
           <input value={form.amount} onChange={(event) => updateForm("amount", event.target.value)} placeholder="例如 1280" />
@@ -335,8 +340,8 @@ export default function ApprovalFunds({ projects, approvals, selected, session, 
           {form.voucherType === "payment-screenshot" && <label><span>支付交易号</span><input value={form.transactionNo} onChange={(event) => updateForm("transactionNo", event.target.value)} placeholder="用于防止支付截图重复报销" /></label>}
           <label><span>凭证说明</span><input value={form.voucherNote} onChange={(event) => updateForm("voucherNote", event.target.value)} placeholder="未开票原因、补票时间或票据说明" /></label>
         </>}
-        <button type="submit" className="primary" disabled={submitting}>{submitting ? "提交中" : "提交审批"}</button>
-      </form>
+        <button type="submit" className="primary" disabled={submitting}>{submitting ? "提交中" : requestTitle}</button>
+      </form>}
 
       <div className="feature-panel approval-main">
         <div className="section-head compact">
@@ -404,7 +409,7 @@ export default function ApprovalFunds({ projects, approvals, selected, session, 
         </div>
       </div>
 
-      <div className="feature-panel reimbursement-summary-panel">
+      {activeCategory === "报销" && <div className="feature-panel reimbursement-summary-panel">
         <div className="section-head compact">
           <PanelTitle icon={FileSpreadsheet} title="月度报销汇总" />
           <div className="button-row compact">
@@ -455,7 +460,7 @@ export default function ApprovalFunds({ projects, approvals, selected, session, 
             )) : <div><strong>暂无项目报销</strong><span>本月还没有报销记录。</span></div>}
           </div>
         </div>
-      </div>
+      </div>}
 
       <div className="feature-panel approval-detail">
         <PanelTitle icon={Clock3} title="流程进度" />
@@ -507,14 +512,14 @@ export default function ApprovalFunds({ projects, approvals, selected, session, 
         </div>}
       </div>
 
-      <div className="feature-panel">
+      {activeCategory === "项目备用金" && <div className="feature-panel petty-cash-panel">
         <PanelTitle icon={CircleDollarSign} title="项目备用金" />
         <p className="muted">{pettyCashProject?.name || "当前项目"} · 跟随当前审批/表单项目</p>
         <Mini label="预算额度" value={money(pettyCashProject?.pettyCashBudget || 0)} />
         <Mini label="已使用" value={money(pettyCashProject?.pettyCashUsed || 0)} />
         <Mini label="剩余额度" value={money(pettyCashLeft)} />
-      </div>
-      <div className="feature-panel">
+      </div>}
+      <div className="feature-panel approval-ai-panel">
         <PanelTitle icon={ShieldAlert} title="AI 审批提示" />
         <p className="muted">备用金只用于执行人员拍摄、差旅、现场小额支出；供应商付款单独进入供应商支出。报销通过后自动计入项目成本。</p>
         <div className="approval-impact-preview">

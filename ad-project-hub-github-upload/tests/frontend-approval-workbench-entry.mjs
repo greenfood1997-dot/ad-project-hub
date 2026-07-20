@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 
-const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
+const mainSource = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
+const componentSource = await readFile(new URL("../src/ApprovalFunds.jsx", import.meta.url), "utf8");
+const source = `${mainSource}\n${componentSource}`;
 const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
 const approvalStyles = await readFile(new URL("../src/approval.css", import.meta.url), "utf8");
 
@@ -32,6 +34,9 @@ assert(source.includes("报销类目：${item.expenseCategory}") && source.inclu
 assert(source.includes("function reimbursementSummaryRows(approvals = [], projects = [], month = \"\")"), "approval workbench should build reimbursement summary CSV rows");
 assert(source.includes("const [reimbursementMonth") && source.includes("const [summaryProjectId") && source.includes("monthlyReimbursements"), "approval workbench should keep monthly reimbursement summary state");
 assert(source.includes("月度报销汇总") && source.includes("全部项目报销") && source.includes("单项目报销") && source.includes("按报销类目"), "approval workbench should render reimbursement monthly summary");
+assert(source.includes('activeCategory === "报销" && <div className="feature-panel reimbursement-summary-panel">'), "monthly reimbursement summary should only appear in the reimbursement workspace");
+assert(source.includes("canCreateActiveRequest && <form") && source.includes("title={requestTitle}"), "each business workspace should render its own permitted request form instead of a shared generic approval form");
+assert(source.includes('activeCategory === "项目备用金" && <div className="feature-panel petty-cash-panel">'), "petty cash balances should only appear in the petty cash workspace");
 assert(source.includes("导出单项目报销表") && source.includes("导出全部项目报销汇总"), "approval workbench should expose single-project and all-project reimbursement exports");
 assert(source.includes("exportSingleProjectReimbursements") && source.includes("exportAllProjectReimbursementSummary"), "approval workbench should implement reimbursement summary exports");
 assert(source.includes("const [exportingApprovalLedger, setExportingApprovalLedger]") && source.includes("function exportApprovalLedger()"), "approval workbench should keep export state and action");
