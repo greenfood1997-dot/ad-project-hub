@@ -8006,3 +8006,91 @@ nav a,
   background: #f1edff;
   color: #5b45c6;
 }
+
+/* Final night palette: keep this last so legacy light declarations cannot win. */
+body[data-color-scheme="dark"] {
+  --bg: #000000;
+  --surface: #111111;
+  --surface-soft: #181818;
+  --line: #292929;
+  --line-strong: #3a3a3a;
+  --text: #ffffff;
+  --muted: #b5b5b5;
+  --brand-soft: #17264a;
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] :is(.app-shell, main, main.dashboard-main, .dashboard-main, .workspace, .dashboard-grid, .feature-grid, .employee-grid) {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .sidebar {
+  background: #050505 !important;
+  border-color: #262626 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .topbar {
+  background: #080808 !important;
+  border-color: #292929 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] :is(.feature-panel, .panel, .detail, .project-list, .project-card, .metric, .member-table, .member-form, .login-panel, .personal-settings-dialog, .account-pin-dialog, .upload-modal, .modal-card, .compact-list, .approval-card, .approval-priority-panel, .approval-priority-panel button, .approval-detail, .assignment-accordion, .assignment-accordion-trigger, .empty-project-state, .empty-steps > div, .project-command-center, .project-command-grid > button) {
+  background: #111111 !important;
+  border-color: #2c2c2c !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+body[data-color-scheme="dark"] :is(h1, h2, h3, strong, b, label, .logo strong, .section-head h2, .panel-title h2, .empty-project-state h2) {
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] :is(p, span, small, em, .muted, .logo span, .integration p, .empty-project-state p) {
+  color: #b5b5b5;
+}
+
+body[data-color-scheme="dark"] :is(nav a, nav button, .nav-parent, .nav-child, .integration button, .personal-settings-trigger) {
+  color: #e8e8e8 !important;
+}
+
+body[data-color-scheme="dark"] :is(nav a:hover, nav button:hover, .nav-parent:hover, .nav-child:hover) {
+  background: #171717 !important;
+}
+
+body[data-color-scheme="dark"] :is(input, select, textarea, .search, .input-row) {
+  background: #0a0a0a !important;
+  border-color: #343434 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] :is(.ghost, button:not(.primary):not(.danger):not(.danger-button)) {
+  background: #121212;
+  border-color: #353535;
+  color: #ffffff;
+}
+
+body[data-color-scheme="dark"] :is(.mini, .approval-form-context, .approval-impact-preview, .approval-next-panel, .upload-context-note, .notice-bar, .storage-test-result) {
+  background: #181818 !important;
+  border-color: #303030 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] :is(table, thead, tbody, tr, td, th) {
+  background: #111111 !important;
+  border-color: #292929 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .logo-mark {
+  background: #ffffff !important;
+  border: 1px solid #303030;
+}
+
+body[data-color-scheme="dark"] .logo-mark img {
+  filter: none;
+  background: #ffffff;
+}

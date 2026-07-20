@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { applyColorScheme, readThemePreferences, resolvedColorScheme } from "../src/utils/theme.js";
+import { readFile } from "node:fs/promises";
 
 const atShanghaiHour = (hour) => new Date(`2026-07-20T${String((hour + 16) % 24).padStart(2, "0")}:00:00.000Z`);
 assert.equal(resolvedColorScheme("auto", atShanghaiHour(7)), "light");
@@ -12,4 +13,10 @@ assert.equal(readThemePreferences({ getItem: () => "{}" }).colorMode, "auto");
 const target = { dataset: {}, style: {} };
 assert.equal(applyColorScheme({ colorMode: "dark" }, target), "dark");
 assert.equal(target.dataset.colorScheme, "dark");
+const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const darkStyles = await readFile(new URL("../src/dark-theme.css", import.meta.url), "utf8");
+const finalNightPalette = styles.slice(styles.lastIndexOf("/* Final night palette"));
+assert(finalNightPalette.includes("background: #000000 !important") && finalNightPalette.includes(".sidebar") && finalNightPalette.includes("color: #ffffff !important"), "final dark override should enforce black surfaces and white text after legacy styles");
+for (const moduleName of ["approval-workbench", "supplier-library", "client-library", "management-cost-dashboard", "feishu-bot-panel", "upload-modal", "notification-drawer", "project-cleanup-panel"]) assert(darkStyles.includes(moduleName), `dark theme should cover ${moduleName}`);
+assert(darkStyles.includes(".notification-trigger.has-items") && darkStyles.includes(":where(.fresh, .selected, .active)"), "dark theme should override high-priority light state styles");
 console.log("time theme regression passed");

@@ -35,6 +35,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import "./styles.css";
+import "./dark-theme.css";
 import { deployReadinessActions } from "./utils/deployReadiness.js";
 import { useLocalWeather } from "./utils/localWeather.js";
 import { canSeeManagement } from "./utils/permissions.js";

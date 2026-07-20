@@ -1,0 +1,126 @@
+/* Loaded globally and intentionally stronger than lazy business-module styles. */
+body[data-color-scheme="dark"] {
+  --bg: #000;
+  --surface: #111;
+  --surface-soft: #181818;
+  --line: #292929;
+  --line-strong: #3a3a3a;
+  --text: #fff;
+  --muted: #b5b5b5;
+  background: #000 !important;
+  color: #fff !important;
+}
+
+body[data-color-scheme="dark"] :where(.app-shell, main, .dashboard-main, .workspace, .dashboard-grid, .feature-grid, .employee-grid, .overview-layout, .approval-workbench, .collection-workbench, .supplier-library, .client-library, .management-cost-dashboard, .assignment-layout) {
+  background: #000 !important;
+  color: #fff !important;
+}
+
+body[data-color-scheme="dark"] .sidebar {
+  background: #050505 !important;
+  border-color: #262626 !important;
+  color: #fff !important;
+}
+
+body[data-color-scheme="dark"] .topbar {
+  background: rgba(5, 5, 5, 0.96) !important;
+  border-color: #292929 !important;
+  color: #fff !important;
+}
+
+body[data-color-scheme="dark"] :where(
+  [class*="panel"], [class*="card"], [class*="form"], [class*="list"], [class*="drawer"],
+  [class*="dialog"], [class*="modal"], [class*="preview"], [class*="summary"], [class*="detail"],
+  [class*="history"], [class*="toolbar"], [class*="accordion"], [class*="empty"], [class*="settings"],
+  [class*="status-grid"], [class*="metrics"], [class*="steps"], [class*="strip"], [class*="callout"]
+) {
+  border-color: #2c2c2c !important;
+  color: #fff !important;
+}
+
+body[data-color-scheme="dark"] :where(
+  .feature-panel, .panel, .detail, .project-list, .project-card, .metric, .member-table, .member-form,
+  .login-panel, .personal-settings-dialog, .account-pin-dialog, .upload-modal, .notification-drawer,
+  .empty-project-state, .detail-section, .workbench-block, .supplier-card, .supplier-detail-panel,
+  .client-handoff-pack, .approval-card, .approval-detail, .approval-priority-panel, .collection-generator,
+  .collection-script-card, .assignment-accordion, .assignment-accordion-trigger, .assignment-accordion-body,
+  .feishu-bot-panel, .feishu-guide > div, .management-switcher, .management-cost-projects article,
+  .management-cost-details, .settings-block, .product-settings-content, .product-settings-nav,
+  .project-cleanup-panel, .interest-rate-panel, .deploy-health-panel, .ai-chat-shell, .ai-side-panel,
+  .ai-message, .upload-preview, .preview-section, .file-list > div, .notification-card
+) {
+  background: #111 !important;
+  border-color: #2c2c2c !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+body[data-color-scheme="dark"] :where(
+  .mini, .compact-list, .approval-form-context, .approval-impact-preview, .approval-next-panel,
+  .upload-context-note, .notice-bar, .storage-test-result, .project-command-grid > button,
+  .empty-steps > div, .suggestion-column, .member-check, .collection-priority-panel,
+  .feishu-status-grid > div, .feishu-health-card, .feishu-ops-strip > div, .notification-priority-panel,
+  .material-intake-item, .material-card, .task-row, .supplier-settlement-note, .cash-formula-card
+) {
+  background: #181818 !important;
+  border-color: #303030 !important;
+  color: #fff !important;
+}
+
+body[data-color-scheme="dark"] :where(h1, h2, h3, h4, strong, b, label, .logo strong, .panel-title h2, .section-head h2) {
+  color: #fff !important;
+}
+
+body[data-color-scheme="dark"] :where(p, span, small, em, .muted, .logo span, .integration p) {
+  color: #b5b5b5;
+}
+
+body[data-color-scheme="dark"] :where(input, select, textarea, .search, .input-row) {
+  background: #090909 !important;
+  border-color: #383838 !important;
+  color: #fff !important;
+}
+
+body[data-color-scheme="dark"] :where(.ghost, button:not(.primary):not(.danger):not(.danger-button)) {
+  background: #141414;
+  border-color: #383838;
+  color: #fff;
+}
+
+body[data-color-scheme="dark"] :where(nav a, nav button, .nav-parent, .nav-child, .integration button) {
+  color: #e8e8e8 !important;
+}
+
+body[data-color-scheme="dark"] :where(nav a:hover, nav button:hover, .nav-parent:hover, .nav-child:hover) {
+  background: #191919 !important;
+}
+
+body[data-color-scheme="dark"] :where(table, thead, tbody, tr, td, th) {
+  background: #111 !important;
+  border-color: #292929 !important;
+  color: #fff !important;
+}
+
+body[data-color-scheme="dark"] .modal-backdrop,
+body[data-color-scheme="dark"] .notification-backdrop {
+  background: rgba(0, 0, 0, 0.82) !important;
+}
+
+body[data-color-scheme="dark"] .logo-mark {
+  background: #fff !important;
+}
+
+body[data-color-scheme="dark"] .logo-mark img {
+  filter: none;
+  background: #fff;
+}
+
+body[data-color-scheme="dark"] .notification-trigger.has-items {
+  background: #2a210c !important;
+  border-color: #8a6519 !important;
+  color: #ffd978 !important;
+}
+
+body[data-color-scheme="dark"] :where(.fresh, .selected, .active) {
+  border-color: #365a9d !important;
+}
