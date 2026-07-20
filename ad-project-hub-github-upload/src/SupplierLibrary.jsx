@@ -173,10 +173,18 @@ export default function SupplierLibrary({
     if (!selected?.supplier || !window.confirm(`确认删除误建供应商“${selected.supplier}”？\n\n已有真实付款的供应商不会被删除。`)) return;
     setDeletingSupplier(true);
     try {
-      const result = await apiRequest("/api/suppliers/delete", session, { method: "POST", body: JSON.stringify({ supplier: selected.supplier }) });
+      let result;
+      try {
+        result = await apiRequest("/api/suppliers/delete", session, { method: "POST", body: JSON.stringify({ supplier: selected.supplier }) });
+      } catch (error) {
+        if (!error.message.includes("强制清理")) throw error;
+        const confirmedName = window.prompt(`“${selected.supplier}”存在付款标记。仅在确认属于历史误识别时继续。\n\n请输入完整供应商名称：`);
+        if (confirmedName !== selected.supplier) throw new Error("名称不一致，已取消强制清理");
+        result = await apiRequest("/api/suppliers/delete", session, { method: "POST", body: JSON.stringify({ supplier: selected.supplier, forceMistake: true, confirmSupplierName: confirmedName }) });
+      }
       setSelectedName("");
       await onDone();
-      onNotice(`${result.supplier} 已从供应商库删除${result.rolledBack ? `，并回滚项目成本 ${money(result.rolledBack)}` : ""}${result.needsCostReview ? "。成本表解析形成的项目成本请在项目成本复盘中确认" : ""}。`);
+      onNotice(`${result.supplier} 已从供应商库${result.forced ? "强制清理" : "删除"}${result.rolledBack ? `，并回滚项目成本 ${money(result.rolledBack)}` : ""}${result.needsCostReview ? "。成本表解析形成的项目成本请在项目成本复盘中确认" : ""}。`);
     } catch (error) { onNotice(error.message); }
     finally { setDeletingSupplier(false); }
   }

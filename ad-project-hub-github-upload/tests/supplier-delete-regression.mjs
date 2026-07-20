@@ -12,7 +12,11 @@ assert.equal(db.supplierProfiles.length, 0);
 assert.equal(db.projects[0].costUsed, 2000);
 
 const paidDb = { suppliers: [{ supplier: "真实供应商", status: "已付款", amount: 100 }], supplierProfiles: [], approvals: [], projects: [], auditLogs: [] };
-assert.throws(() => deleteMistakenSupplier(paidDb, { supplier: "真实供应商" }, actor), /已有真实付款/);
+assert.throws(() => deleteMistakenSupplier(paidDb, { supplier: "真实供应商" }, actor), /强制清理/);
+const forced = deleteMistakenSupplier(paidDb, { supplier: "真实供应商", forceMistake: true, confirmSupplierName: "真实供应商" }, actor);
+assert.equal(forced.forced, true);
+assert.equal(paidDb.suppliers.length, 0);
+assert.equal(paidDb.auditLogs[0].action, "force-delete-mistaken-supplier");
 
 const api = await readFile(new URL("../server/api.mjs", import.meta.url), "utf8");
 const panel = await readFile(new URL("../src/SupplierLibrary.jsx", import.meta.url), "utf8");
@@ -20,5 +24,6 @@ const main = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8")
 assert(api.includes('url.pathname === "/api/suppliers/delete"') && api.includes('["shareholder", "admin"]'), "supplier delete API must be admin scoped");
 assert(panel.includes("删除误建供应商") && panel.includes("/api/suppliers/delete"), "split supplier library should expose safe delete");
 assert(main.includes("删除误建供应商") && main.includes("deletingSupplier"), "production supplier library should expose safe delete");
+assert(panel.includes("confirmSupplierName") && panel.includes("window.prompt"), "forced cleanup should require typing the full supplier name");
 
 console.log("supplier delete regression passed");

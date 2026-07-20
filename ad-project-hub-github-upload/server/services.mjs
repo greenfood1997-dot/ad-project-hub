@@ -4162,7 +4162,13 @@ export function deleteMistakenSupplier(db, body, user) {
   const rows = (db.suppliers || []).filter((item) => String(item.supplier || "").trim() === supplierName);
   const paidRows = rows.filter((item) => /已付|已结/.test(String(item.status || "")) || item.paidAt);
   const completedApproval = (db.approvals || []).some((item) => item.type === "supplier_payment" && item.payee === supplierName && item.status === "已完成");
-  if (paidRows.length || completedApproval) throw new Error(`“${supplierName}”已有真实付款或已完成审批，不能删除；请保留财务历史`);
+  const forced = body.forceMistake === true && String(body.confirmSupplierName || "").trim() === supplierName;
+  if ((paidRows.length || completedApproval) && !forced) {
+    const error = new Error(`“${supplierName}”已有真实付款或已完成审批；如确认属于历史误识别，请输入完整名称后强制清理`);
+    error.code = "SUPPLIER_FORCE_CONFIRM_REQUIRED";
+    error.data = { supplier: supplierName, rows: rows.length, paidRows: paidRows.length, completedApproval };
+    throw error;
+  }
 
   let rolledBack = 0;
   for (const row of rows) {
@@ -4178,8 +4184,9 @@ export function deleteMistakenSupplier(db, body, user) {
   db.suppliers = (db.suppliers || []).filter((item) => String(item.supplier || "").trim() !== supplierName);
   db.supplierProfiles = (db.supplierProfiles || []).filter((item) => String(item.supplier || "").trim() !== supplierName);
   const at = new Date().toISOString();
-  db.auditLogs.unshift({ type: "supplier", target: supplierName, action: "delete-mistaken-supplier", user: user.name, meta: { rows: rows.length, rolledBack }, at });
-  return { supplier: supplierName, deletedRows: rows.length, rolledBack, needsCostReview: rows.some((item) => !item.costAppliedAt) };
+  const snapshot = rows.map((item) => ({ id: item.id || "", project: item.project || "", projectId: item.projectId || "", amount: Number(item.amount || 0), status: item.status || "", paidAt: item.paidAt || "" }));
+  db.auditLogs.unshift({ type: "supplier", target: supplierName, action: forced ? "force-delete-mistaken-supplier" : "delete-mistaken-supplier", user: user.name, meta: { rows: rows.length, rolledBack, completedApproval, snapshot }, at });
+  return { supplier: supplierName, deletedRows: rows.length, rolledBack, forced, needsCostReview: rows.some((item) => !item.costAppliedAt) };
 }
 
 
