@@ -12,5 +12,7 @@ assert(postgres.indexOf("pg_advisory_lock($1)") < postgres.indexOf("const snapsh
 assert(postgres.indexOf("const snapshot = await readPostgresDb(db)") < postgres.indexOf("await mutator(snapshot)"), "business mutation must use the freshly locked snapshot");
 assert(db.includes("return await mutatePostgresDb(mutator)"), "production Postgres writes must use the cross-instance locked mutation path");
 assert(!db.includes("retryTransientDatabase(() => mutatePostgresDb(mutator))"), "business callbacks must not be replayed after external side effects");
+assert(postgres.includes("db.release(connectionBroken)"), "broken mutation clients must be destroyed instead of returned to the pool");
+assert(postgres.includes('db.query("rollback").catch'), "a failed rollback must not replace the original connection error");
 
 console.log("postgres cross-instance mutation lock regression passed");

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { isTransientDatabaseError, publicServerError, retryTransientDatabase } from "../server/database-errors.mjs";
 
 assert.equal(isTransientDatabaseError({ code: "57P03", message: "the database system is in recovery mode" }), true);
+assert.equal(isTransientDatabaseError(new Error("Client has encountered a connection error and is not queryable")), true);
 assert.equal(isTransientDatabaseError(new Error("ordinary validation error")), false);
 assert.equal(publicServerError(new Error("the database system is in recovery mode")), "数据库正在恢复，请稍后重试。本次操作未完成。");
 

@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import "./env.mjs";
 import { defaultDb } from "./default-db.mjs";
+import { isTransientDatabaseError } from "./database-errors.mjs";
 
 let pool;
 const MUTATION_LOCK_KEY = 1463899201;
@@ -732,7 +733,9 @@ export async function writePostgresDbFromSnapshot(snapshot, client = null) {
 
     await db.query("commit");
   } catch (error) {
-    await db.query("rollback");
+    await db.query("rollback").catch((rollbackError) => {
+      console.error(`[POSTGRES] rollback failed after ${error.message}: ${rollbackError.message}`);
+    });
     throw error;
   }
   } finally {
@@ -747,7 +750,11 @@ export async function mutatePostgresDb(mutator) {
   await migratePostgres();
   const activePool = await getPool();
   const db = await activePool.connect();
-  const onClientError = (error) => console.error(`[POSTGRES] locked mutation connection error: ${error.message}`);
+  let connectionBroken = false;
+  const onClientError = (error) => {
+    connectionBroken = true;
+    console.error(`[POSTGRES] locked mutation connection error: ${error.message}`);
+  };
   let locked = false;
   db.on("error", onClientError);
   try {
@@ -758,13 +765,17 @@ export async function mutatePostgresDb(mutator) {
     const result = await mutator(snapshot);
     await writePostgresDbFromSnapshot(snapshot, db);
     return result;
+  } catch (error) {
+    if (isTransientDatabaseError(error)) connectionBroken = true;
+    throw error;
   } finally {
-    if (locked) {
+    if (locked && !connectionBroken) {
       await db.query("select pg_advisory_unlock($1)", [MUTATION_LOCK_KEY]).catch((error) => {
+        connectionBroken = true;
         console.error(`[POSTGRES] failed to release mutation lock: ${error.message}`);
       });
     }
     db.off("error", onClientError);
-    db.release();
+    db.release(connectionBroken);
   }
 }

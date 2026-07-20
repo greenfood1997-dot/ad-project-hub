@@ -19,7 +19,8 @@ export function isTransientDatabaseError(error) {
   const message = String(error?.message || error || "");
   return TRANSIENT_DATABASE_CODES.has(code)
     || /database system is (?:starting up|in recovery mode|shutting down)/i.test(message)
-    || /terminating connection|connection terminated unexpectedly|connection reset|server closed the connection unexpectedly/i.test(message);
+    || /terminating connection|connection terminated unexpectedly|connection reset|server closed the connection unexpectedly/i.test(message)
+    || /client has encountered a connection error and is not queryable|client is not queryable/i.test(message);
 }
 
 export async function retryTransientDatabase(operation, { attempts = 4, baseDelayMs = 250 } = {}) {
