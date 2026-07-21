@@ -36,6 +36,7 @@ assert(source.includes("function dropFiles") && source.includes("event.dataTrans
 assert(source.includes("onDrop={dropFiles}") && source.includes("onDragOver={(event) => event.preventDefault()}"), "file drop zone should wire drop and drag-over handlers");
 assert(source.includes("function removeFile") && source.includes("移除"), "upload file list should support removing a single file");
 assert(source.includes("onMinimize") && source.includes("upload-mini-panel") && source.includes("缩到后台继续"), "upload task should be minimizable to background");
+assert(source.includes('return createPortal(\n      <div className="upload-mini-panel">') && source.includes('document.body\n    );'), "minimized upload task should stay in a body portal instead of being clipped by dashboard layout");
 assert(source.includes("const uploadNextAction = loading") && source.includes("点开后开始 AI 预览识别") && source.includes("点开后确认入库"), "minimized upload task should explain the next action");
 assert(source.includes("const uploadTargetName") && source.includes("upload-mini-meta") && source.includes("{uploadTargetName} · {files.length} 个文件"), "minimized upload task should show target project and file count");
 assert(source.includes("const canCloseUpload = !loading") && source.includes("const canEditUploadFiles = !loading && !confirmed"), "upload dialog should separate close/edit safety from background processing");

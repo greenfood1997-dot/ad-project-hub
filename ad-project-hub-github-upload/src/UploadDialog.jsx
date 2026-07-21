@@ -271,7 +271,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
             : "等待选择文件";
 
   if (minimized) {
-    return (
+    return createPortal(
       <div className="upload-mini-panel">
         <button type="button" className="upload-mini-main" onClick={onExpand}>
           <UploadCloud size={17} />
@@ -287,7 +287,8 @@ export default function UploadDialog({ session, projects, selected, initialType 
         </div>
         <div className="upload-mini-progress"><i style={{ width: `${progressPercent}%` }} /></div>
         <button type="button" className="ghost tiny" onClick={onExpand}>打开</button>
-      </div>
+      </div>,
+      document.body
     );
   }
 
