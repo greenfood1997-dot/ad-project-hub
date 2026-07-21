@@ -298,11 +298,18 @@
 }
 
 .client-library .review-summary {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
 .client-library .review-summary .mini {
   min-width: 0;
+}
+
+.client-library .review-summary .mini strong {
+  overflow-wrap: normal;
+  word-break: keep-all;
+  white-space: nowrap;
+  font-size: clamp(16px, 1.55vw, 22px);
 }
 
 .client-library .client-handoff-actions,
@@ -339,3 +346,25 @@
 }
 .supplier-delete-action { color: #b42318; border-color: #f1c1bc; }
 .supplier-delete-action:hover:not(:disabled) { background: #fff5f4; border-color: #dc776d; }
+
+body[data-color-scheme="dark"] .client-library :where(.supplier-card, .client-handoff-pack, .client-handoff-actions p, .settings-form) {
+  background: #151515 !important;
+  border-color: #343434 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .client-library .supplier-card.active {
+  background: #17213a !important;
+  border-color: #365a9d !important;
+}
+
+body[data-color-scheme="dark"] .client-library :where(input, textarea, select) {
+  background: #080808 !important;
+  border-color: #3b3b3b !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .client-library .client-handoff-badge.active {
+  background: #173329 !important;
+  color: #9ae6c5 !important;
+}

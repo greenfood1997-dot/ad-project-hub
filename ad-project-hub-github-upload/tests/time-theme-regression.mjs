@@ -19,4 +19,14 @@ const finalNightPalette = styles.slice(styles.lastIndexOf("/* Final night palett
 assert(finalNightPalette.includes("background: #000000 !important") && finalNightPalette.includes(".sidebar") && finalNightPalette.includes("color: #ffffff !important"), "final dark override should enforce black surfaces and white text after legacy styles");
 for (const moduleName of ["approval-workbench", "supplier-library", "client-library", "management-cost-dashboard", "feishu-bot-panel", "upload-modal", "notification-drawer", "project-cleanup-panel"]) assert(darkStyles.includes(moduleName), `dark theme should cover ${moduleName}`);
 assert(darkStyles.includes(".notification-trigger.has-items") && darkStyles.includes(":where(.fresh, .selected, .active)"), "dark theme should override high-priority light state styles");
+assert(darkStyles.includes(".personal-preference-group label") && darkStyles.includes(".personal-preference-group select"), "personal appearance controls should use dark surfaces instead of fixed white rows");
+for (const [file, selectors] of [
+  ["management.css", [".cash-formula-card span", ".cash-settings-preview.danger"]],
+  ["supplier-client.css", [".client-handoff-actions p", ".client-library .review-summary .mini strong"]],
+  ["closeout.css", [".closeout-complete-box", ".closeout-complete-box textarea"]],
+  ["ai.css", [".ai-feed-item p", ".ai-workbench .chat-input"]]
+]) {
+  const moduleStyles = await readFile(new URL(`../src/${file}`, import.meta.url), "utf8");
+  for (const selector of selectors) assert(moduleStyles.includes(selector), `${file} should cover screenshot regression selector ${selector}`);
+}
 console.log("time theme regression passed");

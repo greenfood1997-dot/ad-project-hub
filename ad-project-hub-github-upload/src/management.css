@@ -325,6 +325,35 @@ body[data-color-scheme="dark"] .advisor-question-list label > div { border-color
   background: #f0fdf4;
 }
 
+body[data-color-scheme="dark"] .cash-formula-card span {
+  background: #202020 !important;
+  border: 1px solid #383838;
+  color: #d2d2d2 !important;
+}
+
+body[data-color-scheme="dark"] .cash-formula-card b {
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .cash-settings-preview,
+body[data-color-scheme="dark"] .cash-settings-preview.danger,
+body[data-color-scheme="dark"] .cash-settings-preview.warn,
+body[data-color-scheme="dark"] .cash-settings-preview.ok {
+  border-color: #63443f !important;
+  background: #2a1d1c !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .cash-settings-preview :where(strong, span, em) {
+  color: #f1d4cf !important;
+}
+
+body[data-color-scheme="dark"] .settings-form :where(input, select, textarea) {
+  background: #090909 !important;
+  border-color: #3a3a3a !important;
+  color: #ffffff !important;
+}
+
 @media (max-width: 720px) {
   .management-switcher,
   .management-tab-row,

@@ -64,3 +64,19 @@
 .closeout-memory-actions .tiny {
   min-height: 30px;
 }
+
+body[data-color-scheme="dark"] .closeout-complete-box {
+  background: #151515 !important;
+  border-color: #343434 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .closeout-complete-box textarea {
+  background: #080808 !important;
+  border-color: #3a3a3a !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .closeout-complete-box > span {
+  color: #b5b5b5 !important;
+}

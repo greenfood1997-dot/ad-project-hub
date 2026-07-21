@@ -124,3 +124,44 @@ body[data-color-scheme="dark"] .notification-trigger.has-items {
 body[data-color-scheme="dark"] :where(.fresh, .selected, .active) {
   border-color: #365a9d !important;
 }
+
+body[data-color-scheme="dark"] .personal-preference-group label {
+  background: #181818 !important;
+  border-color: #343434 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .personal-preference-group label > span,
+body[data-color-scheme="dark"] .personal-preference-group label > span b,
+body[data-color-scheme="dark"] .personal-preference-group label > span svg {
+  color: #ffffff !important;
+  stroke: currentColor;
+}
+
+body[data-color-scheme="dark"] .personal-preference-group select {
+  background: #080808 !important;
+  border-color: #414141 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .personal-settings-group button:hover {
+  background: #1c1c1c !important;
+}
+
+body[data-color-scheme="dark"] .personal-settings-group button,
+body[data-color-scheme="dark"] .personal-settings-group label {
+  background: #181818 !important;
+  border-color: #343434 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .personal-settings-dialog :where(button, label) > span,
+body[data-color-scheme="dark"] .personal-settings-dialog :where(button, label) > span :where(b, svg) {
+  color: #ffffff !important;
+  stroke: currentColor;
+}
+
+body[data-color-scheme="dark"] .personal-settings-dialog :where(button, label) em,
+body[data-color-scheme="dark"] .personal-settings-group > strong {
+  color: #b5b5b5 !important;
+}

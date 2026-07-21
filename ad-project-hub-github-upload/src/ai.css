@@ -523,3 +523,27 @@
   background: #f1edff;
   color: #5b45c6;
 }
+
+body[data-color-scheme="dark"] .ai-workbench :where(.ai-chat-shell, .ai-side-panel, .ai-message, .ai-feed-item p, .ai-context-strip div, .idea-card, .compact-list) {
+  background: #151515 !important;
+  border-color: #343434 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .ai-workbench .ai-feed-item.user p {
+  background: #28345d !important;
+}
+
+body[data-color-scheme="dark"] .ai-workbench :where(.ai-message p, .ai-feed-item p, .idea-card p) {
+  color: #d0d0d0 !important;
+}
+
+body[data-color-scheme="dark"] .ai-workbench .chat-input {
+  background: #101010 !important;
+  border-color: #4a4a4a !important;
+}
+
+body[data-color-scheme="dark"] .ai-workbench .chat-input input {
+  background: transparent !important;
+  color: #ffffff !important;
+}
