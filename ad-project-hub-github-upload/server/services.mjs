@@ -167,6 +167,10 @@ export async function previewProjectUpload(db, body, user) {
       records: revenue.verificationRecords || []
     });
     const recognizedRevenue = verificationSummary.totalAmount || matchedItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const breakdownTotal = (verificationSummary.breakdown || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const summaryDifference = verificationSummary.totalAmount && breakdownTotal
+      ? Math.round((verificationSummary.totalAmount - breakdownTotal) * 100) / 100
+      : 0;
     if (!verificationItems.length && !verificationSummary.totalAmount) {
       warnings.push("未识别到核销条数或核销金额，请检查核销表是否包含服务项、数量、月份等字段。");
       preview.canConfirm = false;
@@ -174,8 +178,10 @@ export async function previewProjectUpload(db, body, user) {
     preview.fields = {
       "核销月份": inferVerificationMonth(files) || monthKey(new Date(now)),
       "确认收入": recognizedRevenue,
+      "上传材料": `${files.length} 个文件`,
       "匹配状态": matchedItems.some((item) => item.status !== "自动通过") ? "待复核" : "自动通过"
     };
+    if (summaryDifference) warnings.push(`结算汇总与费用分项相差 ${summaryDifference} 元，请核对后再确认入库。`);
     preview.sections.push({
       title: "核销明细",
       rows: matchedItems.slice(0, 12).map((item) => ({
@@ -198,7 +204,7 @@ export async function previewProjectUpload(db, body, user) {
         total: verificationSummary.totalAmount
       });
     }
-    preview.summary = `预计确认收入 ${recognizedRevenue}，确认后会生成一条月度核销记录。`;
+    preview.summary = `已联合检查 ${files.length} 个核销 / 结算材料，预计确认收入 ${recognizedRevenue}，确认后会生成一条月度核销记录。`;
     return preview;
   }
 
@@ -1499,11 +1505,17 @@ export async function uploadProjectVerificationSheet(db, body, user) {
   if (!project) throw new Error("项目不存在");
   const now = new Date().toISOString();
   const files = await normalizeUploadedFiles(body.files || [], "verification-sheet", user, now, db.settings?.storage || {});
-  if (!files.length) throw new Error("请先上传月度核销表");
+  if (!files.length) throw new Error("请先上传核销表或结算佐证材料");
   learnParserSkills(db, files, "verification-sheet", user, now);
   const revenue = project.extractedFields?.revenueRecognition || {};
   const quoteRules = Array.isArray(revenue.quoteRules) ? revenue.quoteRules : [];
   if (!quoteRules.length) throw new Error("当前项目还没有报价规则库，请先上传合同报价表。");
+  const incomingKeys = files.map(uploadedFileKey).sort().join("|");
+  const duplicateRecord = (revenue.verificationRecords || []).find((item) => {
+    const existingKeys = (item.files || []).map(uploadedFileKey).sort().join("|");
+    return existingKeys && existingKeys === incomingKeys;
+  });
+  if (duplicateRecord) throw new Error(`这组核销材料已于 ${duplicateRecord.month || "之前"} 确认入库，请勿重复核销。`);
   const verificationItems = extractVerificationItems(files);
   const verificationSummary = verificationItems.summary || {};
   if (!verificationItems.length && !verificationSummary.totalAmount) throw new Error("未识别到核销条数或核销金额，请检查核销表是否包含服务项、数量、月份等字段。");
@@ -6567,10 +6579,10 @@ function extractVerificationSummary(rows = []) {
   for (const row of rows) {
     const cells = row.cells || [];
     for (let index = 0; index < cells.length - 1; index += 1) {
-      const label = String(cells[index] || "").replace(/\s+/g, "").trim();
+      const label = String(cells[index] || "").replace(/\s+/g, "").replace(/[()（）:：]/g, "").trim();
       const amount = parseMoney(cells[index + 1]);
       if (!amount) continue;
-      if (/^(视频|视频收入|投流|投放|垫款|垫款应收)$/.test(label)) {
+      if (/^(视频|视频收入|内容制作|视频制作|账户运营维护|运营维护|投放充值|投流|投放|垫款|垫款应收)$/.test(label)) {
         breakdown.push({
           type: label,
           amount,
@@ -6578,7 +6590,7 @@ function extractVerificationSummary(rows = []) {
           rawText: cells.filter(Boolean).join(" ")
         });
       }
-      if (/^(总数|总计|应核销款项|应核销金额)$/.test(label)) {
+      if (/^(总数|总计|合计|合计含税|申报金额|结算金额|运营结算金额|应核销款项|应核销金额)$/.test(label)) {
         totalAmount = amount;
       }
     }

@@ -194,4 +194,27 @@ assert.equal(summaryResult.record.summary.totalAmount, 352325.673);
 assert.equal(summaryResult.record.summary.breakdown.length, 3);
 assert.equal(summaryResult.record.items.reduce((sum, item) => sum + Number(item.amount || 0), 0), 326820);
 
+const materialDb = createDb();
+const materialFiles = [{
+  name: "12-2月纵横结算材料.pdf",
+  type: "application/pdf",
+  size: 12535542,
+  category: "verification-sheet",
+  tableRows: [
+    { sheetName: "运营结算金额汇总", cells: ["内容制作", "173160"] },
+    { sheetName: "运营结算金额汇总", cells: ["账户运营维护", "11700"] },
+    { sheetName: "运营结算金额汇总", cells: ["投放充值", "35349.52"] },
+    { sheetName: "运营结算金额汇总", cells: ["合计（含税）", "220209.52"] }
+  ],
+  text: "2025.12-2026.02 代运营项目结算材料"
+}];
+const materialResult = await uploadProjectVerificationSheet(materialDb, { id: "P-1", files: materialFiles }, user);
+assert.equal(materialResult.record.amount, 220209.52);
+assert.equal(materialResult.record.summary.breakdown.length, 3);
+assert.equal(materialResult.record.summary.breakdown.reduce((sum, item) => sum + item.amount, 0), 220209.52);
+await assert.rejects(
+  uploadProjectVerificationSheet(materialDb, { id: "P-1", files: materialFiles }, user),
+  /这组核销材料已于/
+);
+
 console.log("verification parser regression passed");

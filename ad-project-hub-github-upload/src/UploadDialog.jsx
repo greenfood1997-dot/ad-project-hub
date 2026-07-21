@@ -42,7 +42,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
     "create-project": "新项目：合同 / 报价表",
     "cost-sheet": "已有项目：成本 / 报销表",
     "quote-sheet": "已有项目：合同报价表",
-    "verification-sheet": "已有项目：月度核销表"
+    "verification-sheet": "已有项目：核销表 + 结算材料"
   };
   const canUseCreateProject = canCreateProject;
   const typeOptions = [
@@ -336,6 +336,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
           </label>
           {!canUseCreateProject && <p className="upload-context-note">你的账号不能创建新项目；可以把成本表、报价表、核销表上传到自己可见的项目。</p>}
           {needsProject && <p className="upload-context-note">已按当前项目预选：{typeLabels[type]}。AI 预览确认前不会写入项目。</p>}
+          {type === "verification-sheet" && <p className="upload-context-note">请将核销表、结算汇总和费用 / KPI 佐证一次选中上传。AI 会区分金额与运营数据，仅在你确认后同步核销金额。</p>}
 
           {needsProject && hasProjects && (
             <label>
