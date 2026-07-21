@@ -384,6 +384,14 @@ body[data-color-scheme="dark"] .settings-form :where(input, select, textarea) {
 .management-cost-breakdown span { border-radius: 999px; background: #eef2ff; padding: 5px 8px; font-size: 12px; }
 .management-cost-detail-row { display: grid; grid-template-columns: 90px 1fr 1fr auto; gap: 10px; align-items: center; border-top: 1px solid #e8ecf4; padding-top: 8px; }
 .management-cost-detail-row em { color: var(--muted); font-style: normal; font-size: 12px; }
+body[data-color-scheme="dark"] .management-cost-dashboard :where(.management-cost-summary, .management-cost-metrics div, .management-cost-project-head, .management-cost-details) {
+  background: #151515 !important;
+  border-color: #343434 !important;
+  color: #ffffff !important;
+}
+body[data-color-scheme="dark"] .management-cost-dashboard .management-cost-summary { background-image: none !important; }
+body[data-color-scheme="dark"] .management-cost-dashboard .management-cost-breakdown span { background: #202020 !important; color: #e6e6e6 !important; }
+body[data-color-scheme="dark"] .management-cost-dashboard .management-cost-toolbar input { background: #080808 !important; border-color: #3a3a3a !important; color: #ffffff !important; }
 @media (max-width: 980px) {
   .advisor-question-list article { grid-template-columns: 32px 1fr; }
   .advisor-question-list label, .advisor-question-list button { grid-column: 2; }

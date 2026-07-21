@@ -298,7 +298,7 @@
 }
 
 .client-library .review-summary {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
 }
 
 .client-library .review-summary .mini {
@@ -309,7 +309,7 @@
   overflow-wrap: normal;
   word-break: keep-all;
   white-space: nowrap;
-  font-size: clamp(16px, 1.55vw, 22px);
+  font-size: clamp(15px, 1.35vw, 21px);
 }
 
 .client-library .client-handoff-actions,
@@ -350,6 +350,16 @@
 body[data-color-scheme="dark"] .client-library :where(.supplier-card, .client-handoff-pack, .client-handoff-actions p, .settings-form) {
   background: #151515 !important;
   border-color: #343434 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .client-library :where(.review-summary .mini, .compact-list > div) {
+  background: #151515 !important;
+  border-color: #343434 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .client-library .review-summary .mini strong {
   color: #ffffff !important;
 }
 

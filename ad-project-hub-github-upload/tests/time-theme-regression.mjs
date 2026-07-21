@@ -21,9 +21,10 @@ for (const moduleName of ["approval-workbench", "supplier-library", "client-libr
 assert(darkStyles.includes(".notification-trigger.has-items") && darkStyles.includes(":where(.fresh, .selected, .active)"), "dark theme should override high-priority light state styles");
 assert(darkStyles.includes(".personal-preference-group label") && darkStyles.includes(".personal-preference-group select"), "personal appearance controls should use dark surfaces instead of fixed white rows");
 for (const [file, selectors] of [
-  ["management.css", [".cash-formula-card span", ".cash-settings-preview.danger"]],
-  ["supplier-client.css", [".client-handoff-actions p", ".client-library .review-summary .mini strong"]],
-  ["closeout.css", [".closeout-complete-box", ".closeout-complete-box textarea"]],
+  ["management.css", [".cash-formula-card span", ".cash-settings-preview.danger", 'body[data-color-scheme="dark"] .management-cost-dashboard', "background-image: none !important"]],
+  ["supplier-client.css", [".client-handoff-actions p", ".client-library .review-summary .mini strong", "repeat(3, minmax(180px, 1fr))"]],
+  ["closeout.css", [".closeout-complete-box", ".closeout-complete-box textarea", ".feature-panel .closeout-complete-box"]],
+  ["collection.css", ['body[data-color-scheme="dark"] .collection-workbench', ".collection-script-card.fresh"]],
   ["ai.css", [".ai-feed-item p", ".ai-workbench .chat-input"]]
 ]) {
   const moduleStyles = await readFile(new URL(`../src/${file}`, import.meta.url), "utf8");

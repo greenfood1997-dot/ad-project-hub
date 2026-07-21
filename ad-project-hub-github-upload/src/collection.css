@@ -259,6 +259,23 @@
   background: #f5fbff;
 }
 
+body[data-color-scheme="dark"] .collection-workbench :where(.collection-generator, .collection-priority-panel, .collection-action-empty, .collection-script-card, .collection-callout, .collection-history-row, .idea-card, .compact-list > div) {
+  background: #151515 !important;
+  border-color: #343434 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .collection-workbench :where(input, select) {
+  background: #080808 !important;
+  border-color: #3a3a3a !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .collection-workbench :where(.collection-priority-panel button, .collection-script-card.fresh) {
+  background: #151515 !important;
+  border-color: #343434 !important;
+}
+
 @media (max-width: 1180px) {
   .collection-workbench,
   .collection-follow-up-form {

@@ -71,6 +71,13 @@ body[data-color-scheme="dark"] .closeout-complete-box {
   color: #ffffff !important;
 }
 
+body[data-color-scheme="dark"] .feature-panel .closeout-complete-box,
+body[data-color-scheme="dark"] .feature-panel .closeout-complete-box label {
+  background: #151515 !important;
+  border-color: #343434 !important;
+  color: #ffffff !important;
+}
+
 body[data-color-scheme="dark"] .closeout-complete-box textarea {
   background: #080808 !important;
   border-color: #3a3a3a !important;
