@@ -1,4 +1,4 @@
-import { mutateDb } from "./db.mjs";
+import { mutateDb, readDb } from "./db.mjs";
 import { claimUploadBatch, finishUploadBatchFile, processClaimedUploadFile } from "./upload-batch-service.mjs";
 
 let running = false;
@@ -8,6 +8,13 @@ export async function runUploadBatchWorkerOnce() {
   if (running) return false;
   running = true;
   try {
+    const snapshot = await readDb();
+    const now = Date.now();
+    const hasWork = (snapshot.parseJobs || []).some((item) => item.id?.startsWith("UB-") && (
+      item.status === "queued" ||
+      (item.status === "processing" && Date.parse(item.extractedFields?.leaseUntil || 0) < now)
+    ));
+    if (!hasWork) return false;
     const claim = await mutateDb((db) => claimUploadBatch(db));
     if (!claim) return false;
     let result;
@@ -27,7 +34,7 @@ export async function runUploadBatchWorkerOnce() {
 
 export function startUploadBatchWorker() {
   if (timer) return;
-  timer = setInterval(() => runUploadBatchWorkerOnce().catch((error) => console.error(`[UPLOAD-BATCH] worker: ${error.message}`)), 2000);
+  timer = setInterval(() => runUploadBatchWorkerOnce().catch((error) => console.error(`[UPLOAD-BATCH] worker: ${error.message}`)), 5000);
   timer.unref?.();
   setTimeout(() => runUploadBatchWorkerOnce().catch((error) => console.error(`[UPLOAD-BATCH] startup: ${error.message}`)), 1000).unref?.();
 }

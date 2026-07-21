@@ -1825,11 +1825,11 @@ export async function testAiSettings(values) {
   }
 }
 
-export async function saveSetting(db, type, values, user) {
+export async function saveSetting(db, type, values, user, options = {}) {
   if (type === "companyFinance") return saveCompanyFinance(db, values, user);
   const current = db.settings?.[type] || {};
   const candidate = type === "aiService" ? { ...current, ...values } : values;
-  const checked = type === "aiService" ? await testAiSettings(candidate) : null;
+  const checked = type === "aiService" ? (options.checked || await testAiSettings(candidate)) : null;
   const normalized = type === "aiService" ? validateAiSettings(candidate) : values;
   const saved = { ...current, ...normalized, connection: checked, savedAt: new Date().toISOString(), savedBy: user.id };
   db.settings[type] = saved;

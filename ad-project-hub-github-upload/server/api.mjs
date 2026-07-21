@@ -1223,7 +1223,13 @@ export async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/settings") {
     if (!requireRole(user, ADMIN_ROLES, res)) return;
     const body = await readBody(req);
-    const data = await mutateDb((db) => saveSetting(db, body.type, body.values, user));
+    let checked = null;
+    if (body.type === "aiService") {
+      const candidate = { ...(snapshot.settings?.aiService || {}), ...(body.values || {}) };
+      checked = await testAiSettings(candidate);
+    }
+    // External AI calls must finish before acquiring the global database mutation lock.
+    const data = await mutateDb((db) => saveSetting(db, body.type, body.values, user, { checked }));
     const scheduler = ["product", "scheduler"].includes(body.type) ? await reloadSystemScheduler() : getSchedulerStatus();
     const safeData = body.type === "aiService"
       ? { ...data, "API Key": undefined, configured: Boolean(data["API Key"]), scheduler }
