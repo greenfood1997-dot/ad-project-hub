@@ -6539,6 +6539,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
     "执行预算占比": "60%",
   });
   const [files, setFiles] = useState(() => initialFiles);
+  const [stagedFiles, setStagedFiles] = useState({});
   const [message, setMessage] = useState("");
   const [uploadError, setUploadError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -6631,13 +6632,38 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
     setPreview(null);
     setConfirmed(false);
     setMessage("");
+    setStagedFiles((current) => {
+      const next = { ...current };
+      delete next[fileKey];
+      return next;
+    });
     setUploadError(null);
   }
 
-  function uploadBody() {
+  function uploadBody(uploadedFiles = files) {
     return type === "create-project"
-      ? { type, values, files }
-      : { type, id: targetProject.id, files };
+      ? { type, values, files: uploadedFiles }
+      : { type, id: targetProject.id, files: uploadedFiles };
+  }
+
+  async function stageFilesForPreview() {
+    const uploaded = [];
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      const key = uploadedFileKey(file);
+      if (stagedFiles[key]) {
+        uploaded.push(stagedFiles[key]);
+        continue;
+      }
+      setProgress({ step: "preview", percent: 20 + Math.round((index / Math.max(files.length, 1)) * 38), text: `正在上传并读取第 ${index + 1}/${files.length} 个文件：${file.name}` });
+      const staged = await apiRequest("/api/projects/upload-file", session, {
+        method: "POST",
+        body: JSON.stringify(type === "create-project" ? { type, file } : { type, id: targetProject.id, file }),
+      });
+      setStagedFiles((current) => ({ ...current, [key]: staged }));
+      uploaded.push(staged);
+    }
+    return uploaded;
   }
 
   async function requestPreview() {
@@ -6664,9 +6690,11 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
       window.setTimeout(() => {
         setProgress((current) => current.step === "preview" ? { step: "preview", percent: 62, text: "正在 OCR / 表格识别，请耐心等待" } : current);
       }, 900);
+      const uploadedFiles = files.length ? await stageFilesForPreview() : [];
+      setProgress({ step: "preview", percent: 62, text: `已上传 ${uploadedFiles.length} 个文件，正在联合 AI/OCR 识别` });
       const data = await apiRequest("/api/projects/upload-preview", session, {
         method: "POST",
-        body: JSON.stringify(uploadBody()),
+        body: JSON.stringify(uploadBody(uploadedFiles)),
       });
       setPreview(data);
       setConfirmed(false);
@@ -6702,6 +6730,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
     setMessage("正在确认入库，请稍候...");
     setUploadError(null);
     try {
+      const uploadedFiles = files.map((file) => stagedFiles[uploadedFileKey(file)] || file);
       if (type === "create-project") {
         await apiRequest("/api/projects", session, {
           method: "POST",
@@ -6711,19 +6740,19 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
       if (type === "cost-sheet") {
         await apiRequest("/api/projects/cost-sheet", session, {
           method: "POST",
-          body: JSON.stringify({ id: targetProject.id, files }),
+          body: JSON.stringify({ id: targetProject.id, files: uploadedFiles }),
         });
       }
       if (type === "quote-sheet") {
         await apiRequest("/api/projects/quote-sheet", session, {
           method: "POST",
-          body: JSON.stringify({ id: targetProject.id, files }),
+          body: JSON.stringify({ id: targetProject.id, files: uploadedFiles }),
         });
       }
       if (type === "verification-sheet") {
         await apiRequest("/api/projects/verification-sheet", session, {
           method: "POST",
-          body: JSON.stringify({ id: targetProject.id, files }),
+          body: JSON.stringify({ id: targetProject.id, files: uploadedFiles }),
         });
       }
       setMessage("上传成功，项目数据已刷新。");

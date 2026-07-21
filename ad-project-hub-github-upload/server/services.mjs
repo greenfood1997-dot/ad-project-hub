@@ -346,6 +346,22 @@ export async function previewProjectUpload(db, body, user) {
   return preview;
 }
 
+export async function stageProjectUploadFile(db, body, user) {
+  const type = body?.type || "create-project";
+  const category = type === "cost-sheet"
+    ? "execution-cost"
+    : type === "quote-sheet"
+      ? "quote-sheet"
+      : type === "verification-sheet"
+        ? "verification-sheet"
+        : "project";
+  const [file] = await normalizeUploadedFiles(body?.file ? [body.file] : [], category, user, new Date().toISOString(), db.settings?.storage || {});
+  if (!file) throw new Error("请选择要上传的文件");
+  // The final batch request only needs extracted content and durable storage references.
+  const { base64, dataUrl, ...reference } = file;
+  return reference;
+}
+
 export async function confirmProjectUpload(db, body, user) {
   const preview = (db.uploadPreviews || []).find((item) => item.id === body.previewId);
   if (!preview || preview.type !== "create-project") throw new Error("预览结果已失效，请重新预览后再入库");
@@ -1566,6 +1582,7 @@ export async function uploadProjectVerificationSheet(db, body, user) {
 
 function fileReference(file = {}) {
   return {
+    id: file.id,
     name: file.name,
     size: file.size,
     type: file.type,
@@ -1576,6 +1593,12 @@ function fileReference(file = {}) {
     uploadedAt: file.uploadedAt,
     uploadedBy: file.uploadedBy,
     uploadedByName: file.uploadedByName,
+    storageUrl: file.storageUrl,
+    storagePath: file.storagePath,
+    storageProvider: file.storageProvider,
+    storageStatus: file.storageStatus,
+    localStorageUrl: file.localStorageUrl,
+    localStoragePath: file.localStoragePath,
     dataUrl: file.dataUrl,
     base64: file.base64
   };

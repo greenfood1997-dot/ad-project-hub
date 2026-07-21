@@ -30,6 +30,7 @@ import {
   handleFeishuPendingFile,
   handleFeishuEvent,
   previewProjectUpload,
+  stageProjectUploadFile,
   recordProjectPayment,
   recordFiles,
   rateSupplier,
@@ -1424,6 +1425,22 @@ export async function handleApi(req, res) {
       return;
     }
     const data = await mutateDb((db) => previewProjectUpload(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/projects/upload-file") {
+    const body = await readBody(req);
+    if (body.type === "create-project") {
+      if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
+    } else if (!requireRole(user, PROJECT_UPLOAD_ROLES, res)) {
+      return;
+    }
+    if (body.type !== "create-project" && !canAccessProject(snapshot, user, body.id)) {
+      sendJson(res, 403, { ok: false, error: "无权限向该项目上传文件" });
+      return;
+    }
+    const data = await mutateDb((db) => stageProjectUploadFile(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }
