@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
 const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+const advisor = await readFile(new URL("../src/ManagementAdvisor.jsx", import.meta.url), "utf8");
+const managementStyles = await readFile(new URL("../src/management.css", import.meta.url), "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -25,7 +27,7 @@ assert(source.includes("公司现金流设置已保存，经营舱已刷新：�
 assert(source.includes("cash-settings-preview") && source.includes("按当前填写，现金还能撑"), "cashflow settings should show an inline runway preview");
 assert(source.includes("const financeTemplates = [") && source.includes("轻团队") && source.includes("拍摄执行期") && source.includes("收缩现金流"), "cashflow settings should provide practical fixed-cost templates");
 assert(source.includes("function applyFinanceTemplate(template)") && source.includes("已套用「${template.label}」现金流模板"), "cashflow templates should be clickable and explain the next save step");
-assert(source.includes("AI 商业顾问") && source.includes("经营建议") && source.includes("判断依据") && source.includes("优先关注项目"), "advisor page should show advice, evidence, and priority projects");
+assert(source.includes("ManagementAdvisor") && advisor.includes("优先决策与止损线") && advisor.includes("内部事实") && advisor.includes("现金情景推演"), "advisor page should show structured decisions, evidence, and scenarios");
 assert(source.includes("function managementLedgerRows(metrics = {}, stats = {}, projects = [])") && source.includes("6个月安全线") && source.includes("现金压力总暴露") && source.includes("AI建议 ${index + 1}") && source.includes("优先项目 ${index + 1}"), "management cockpit should build a CSV operating summary with cash safety line, advisor actions, and priority projects");
 assert(source.includes("const [exportingManagement") && source.includes("async function exportManagementLedger()") && source.includes("downloadCsv(\"公司经营舱摘要.csv\", managementLedgerRows(metrics, stats, projects))"), "management cockpit should export the current operating summary as CSV");
 assert(source.includes("导出经营摘要") && source.includes("公司经营舱摘要 CSV 已导出，包含经营建议、现金安全线和优先项目。"), "management export should show an action and success notice");
@@ -34,8 +36,8 @@ assert(source.includes("function ManagementCockpit({ projects, approvals = [], s
 assert(source.includes("function handleAdvisorAction(action = \"\", index = 0)") && source.includes("onOpenCollections?.(metrics.highRiskProjects[0]") && source.includes("onOpenApprovals?.()"), "advisor actions should route to collection and approval workflows");
 assert(source.includes("function handleRiskProject(project)") && source.includes("onOpenProjectSection?.(project, project.actionTarget === \"costs\" ? \"costs\" : \"progress\"") && source.includes("处理经营舱建议：${project.actionReason}"), "management risk projects should route to project cost/progress sections when collection is not the right action");
 assert(source.includes("已切到现金流压力页，可以先补现金设置") && source.includes("看现金流"), "advisor cash action should route to cashflow page");
-assert(source.includes("advisor-action-card") && source.includes("去催收") && source.includes("去审批") && source.includes("看大盘"), "advisor advice should render as clickable action cards");
-assert(source.includes("management-risk-action") && source.includes("project.actionLabel") && source.includes("project.actionReason"), "priority risk projects should show the exact next action and reason");
+assert(advisor.includes("advisor-decision-list") && advisor.includes("预计影响") && advisor.includes("完成期限") && advisor.includes("止损 / 触发条件"), "advisor decisions should show impact, deadline, and stop-loss");
+assert(advisor.includes("item.action") && advisor.includes("item.rationale") && advisor.includes("item.ownerRole"), "priority decisions should show exact action, rationale, and owner");
 assert(source.includes("onOpenProjectSection={(project = null, focus = \"progress\", message = \"\") =>") && source.includes("setProjectFocus(focus)") && source.includes("成本与审批区"), "management page should route project actions back into the project detail focus area");
 assert(source.includes("危险！你快倒闭啦！需要收缩现金流"), "advisor and scan copy should preserve the user-requested danger wording");
 assert(styles.includes(".management-tab-row"), "management tabs should have dedicated styles");
@@ -43,6 +45,7 @@ assert(styles.includes(".advisor-action-card") && styles.includes(".compact-acti
 assert(styles.includes(".cash-formula-card"), "cashflow formula should have dedicated styles");
 assert(styles.includes(".cash-settings-preview") && styles.includes(".cash-settings-preview.danger") && styles.includes(".cash-settings-preview.warn"), "cashflow preview should have status styles");
 assert(styles.includes(".finance-template-row") && styles.includes(".finance-template-row .tiny"), "cashflow template buttons should have compact responsive styles");
+assert(managementStyles.includes(".advisor-decision-grid") && managementStyles.includes(".advisor-scenario-grid"), "deep advisor should have responsive decision and scenario styles");
 assert(styles.includes(".founder-card .mini strong") && styles.includes("color: #111827") && styles.includes(".feature-panel .review-summary .mini span"), "management cockpit metric mini cards should keep readable contrast");
 
 console.log("frontend management cockpit entry passed");

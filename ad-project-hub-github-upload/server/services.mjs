@@ -3511,6 +3511,227 @@ export async function answerAiAssistant(db, body, user, scopedDb) {
   return rules;
 }
 
+function advisorNumber(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? Math.round(number * 100) / 100 : 0;
+}
+
+function managementAdvisorData(db = {}) {
+  const projects = db.projects || [];
+  const approvals = db.approvals || [];
+  const finance = assistantRunway(db.settings || {});
+  const totals = assistantMetrics(db);
+  const pending = approvals.filter((item) => String(item.status || "").includes("待"));
+  const pendingAmount = (pattern) => pending
+    .filter((item) => pattern.test(String(item.type || item.typeLabel || item.category || "")))
+    .reduce((sum, item) => sum + advisorNumber(item.amount), 0);
+  const projectRows = projects.map((project) => {
+    const contract = advisorNumber(project.contract);
+    const paid = advisorNumber(project.paid);
+    const receivable = advisorNumber(project.receivable) || Math.max(contract - paid, 0);
+    const cost = advisorNumber(project.costUsed || project.executionCost);
+    const timeline = projectTimeline(project);
+    const endDate = timeline.end && !Number.isNaN(timeline.end.valueOf()) ? timeline.end.toISOString().slice(0, 10) : "";
+    const overdue = Boolean(endDate && timeline.end < new Date() && receivable > 0);
+    return {
+      id: project.id,
+      name: String(project.name || "未命名项目").slice(0, 120),
+      client: String(project.client || "未填写").slice(0, 80),
+      status: String(project.status || "未填写").slice(0, 30),
+      risk: String(project.risk || "待判断").slice(0, 10),
+      progress: advisorNumber(project.progress),
+      contract,
+      paid,
+      receivable,
+      cost,
+      grossProfit: contract - cost,
+      grossMargin: contract ? Math.round(((contract - cost) / contract) * 1000) / 10 : 0,
+      serviceEnd: endDate,
+      paymentDue: String(project.paymentDue || project.extractedFields?.paymentDue || "未填写").slice(0, 160),
+      nextMilestone: String(project.nextMilestone || "未填写").slice(0, 160),
+      overdue
+    };
+  });
+  const byReceivable = [...projectRows].sort((a, b) => b.receivable - a.receivable);
+  const byClient = Object.values(projectRows.reduce((result, project) => {
+    const key = project.client || "未填写";
+    result[key] ||= { client: key, contract: 0, paid: 0, receivable: 0, projects: 0 };
+    result[key].contract += project.contract;
+    result[key].paid += project.paid;
+    result[key].receivable += project.receivable;
+    result[key].projects += 1;
+    return result;
+  }, {})).sort((a, b) => b.contract - a.contract);
+  const marketInputs = Array.isArray(db.settings?.product?.marketAssumptions)
+    ? db.settings.product.marketAssumptions.slice(0, 12)
+    : [];
+  const monthlyFixedCost = finance.monthlyFixedCost;
+  const scenarios = [0, 0.25, 0.5, 0.75, 1].map((collectionRate) => {
+    const cashAfterCollection = finance.currentCash + totals.receivable * collectionRate;
+    return {
+      label: collectionRate ? `回收待收款 ${Math.round(collectionRate * 100)}%` : "未来不回款",
+      collectionRate,
+      cashAfterCollection,
+      runwayMonths: monthlyFixedCost ? Math.round((cashAfterCollection / monthlyFixedCost) * 10) / 10 : null,
+      sixMonthGap: Math.max(monthlyFixedCost * 6 - cashAfterCollection, 0)
+    };
+  });
+  return {
+    dataAsOf: new Date().toISOString(),
+    objective: "优先提高公司生存概率和风险调整后的现金回报，不做情绪安慰",
+    cash: {
+      currentCash: finance.currentCash,
+      monthlyFixedCost,
+      runwayMonths: Math.round(finance.runwayMonths * 10) / 10,
+      threeMonthReserve: monthlyFixedCost * 3,
+      sixMonthReserve: finance.safetyReserve,
+      sixMonthGap: finance.gap,
+      fixedCostBreakdown: {
+        labor: advisorNumber(db.settings?.companyFinance?.monthlyLaborCost),
+        rent: advisorNumber(db.settings?.companyFinance?.monthlyRent),
+        loan: advisorNumber(db.settings?.companyFinance?.monthlyLoan),
+        interest: advisorNumber(db.settings?.companyFinance?.monthlyInterest),
+        other: advisorNumber(db.settings?.companyFinance?.monthlyOtherCost)
+      }
+    },
+    portfolio: {
+      projectCount: projectRows.length,
+      activeCount: projectRows.filter((item) => !/已完成|结案|完成/.test(item.status)).length,
+      contract: totals.contract,
+      paid: totals.paid,
+      receivable: totals.receivable,
+      receivableRate: totals.contract ? Math.round((totals.receivable / totals.contract) * 1000) / 10 : 0,
+      cost: totals.spending,
+      grossProfit: totals.profit,
+      grossMargin: totals.margin,
+      overdueReceivable: projectRows.filter((item) => item.overdue).reduce((sum, item) => sum + item.receivable, 0),
+      largestReceivableShare: totals.receivable ? Math.round(((byReceivable[0]?.receivable || 0) / totals.receivable) * 1000) / 10 : 0,
+      largestClientContractShare: totals.contract ? Math.round(((byClient[0]?.contract || 0) / totals.contract) * 1000) / 10 : 0
+    },
+    commitments: {
+      pendingApprovalCount: pending.length,
+      pendingApprovalAmount: pending.reduce((sum, item) => sum + advisorNumber(item.amount), 0),
+      pendingPettyCash: pendingAmount(/petty|备用金/),
+      pendingReimbursement: pendingAmount(/reimbursement|报销/),
+      pendingSupplierPayment: pendingAmount(/supplier|供应商/)
+    },
+    projects: byReceivable.slice(0, 20),
+    clientConcentration: byClient.slice(0, 10),
+    scenarios,
+    marketContext: marketInputs.length ? {
+      mode: "internal-assumptions",
+      warning: "以下为公司录入的内部市场假设，不等于实时外部市场事实。",
+      assumptions: marketInputs
+    } : {
+      mode: "not-connected",
+      warning: "系统尚未接入带来源和日期的实时外部市场数据；禁止把模型常识表述为当前市场事实。",
+      assumptions: []
+    }
+  };
+}
+
+function managementAdvisorFallback(data, reason = "") {
+  const { cash, portfolio, commitments, projects, scenarios, marketContext } = data;
+  const critical = cash.monthlyFixedCost > 0 && cash.runwayMonths < 3;
+  const top = projects[0];
+  const facts = [
+    `账面现金 ${money(cash.currentCash)}，月固定支出 ${money(cash.monthlyFixedCost)}，静态可支撑 ${cash.monthlyFixedCost ? `${cash.runwayMonths} 个月` : "时长无法计算"}。`,
+    `合同总额 ${money(portfolio.contract)}，已回款 ${money(portfolio.paid)}，待回款 ${money(portfolio.receivable)}（${portfolio.receivableRate}%）。`,
+    `待审批 ${commitments.pendingApprovalCount} 笔，潜在现金支出 ${money(commitments.pendingApprovalAmount)}。`,
+    `最大单项目占待回款 ${portfolio.largestReceivableShare}%，最大客户占合同额 ${portfolio.largestClientContractShare}%。`
+  ];
+  const actions = [];
+  if (portfolio.receivable > 0) actions.push({
+    priority: "P0", action: `把「${top?.name || "最高待收项目"}」回款设为第一经营任务`,
+    rationale: `该项目待回款 ${money(top?.receivable)}；当前全部待回款 ${money(portfolio.receivable)}，直接决定现金安全线。`,
+    estimatedImpact: `每回收 25% 全部待收款，可将账面现金提高 ${money(portfolio.receivable * 0.25)}。`,
+    deadline: "7天内取得客户书面付款日期或分期方案", ownerRole: "销售负责人 + 财务", stopLoss: "7天无明确付款日则升级管理层，并暂停新增非必要垫资"
+  });
+  if (critical || cash.sixMonthGap > 0) actions.push({
+    priority: critical ? "P0" : "P1", action: "冻结非交付必需的新支出，按13周滚动现金表管理付款",
+    rationale: `静态现金仅支撑 ${cash.runwayMonths} 个月，距6个月安全线仍差 ${money(cash.sixMonthGap)}。`,
+    estimatedImpact: "每降低10%月固定支出，现金跑道约相应延长11%。", deadline: "48小时内", ownerRole: "股东/管理员 + 财务", stopLoss: "现金跑道恢复至6个月后再逐项解除"
+  });
+  if (commitments.pendingApprovalAmount > 0) actions.push({
+    priority: "P1", action: "逐笔重审待付款承诺，区分保交付、可延期和应取消",
+    rationale: `当前 ${commitments.pendingApprovalCount} 笔待审批合计 ${money(commitments.pendingApprovalAmount)}，会进一步消耗账面现金。`,
+    estimatedImpact: `理论最大保护现金 ${money(commitments.pendingApprovalAmount)}，实际以合同义务为准。`, deadline: "3个工作日内", ownerRole: "财务 + 项目负责人", stopLoss: "不得延期已到期法定义务或会导致核心交付违约的付款"
+  });
+  if (!actions.length) actions.push({
+    priority: "P1", action: "补齐现金、合同付款节点和项目成本数据后重新分析", rationale: "当前关键经营字段不足，继续给方向性建议会产生误导。", estimatedImpact: "先提高判断可靠性", deadline: "本周内", ownerRole: "财务 + 项目负责人", stopLoss: "数据未补齐前不据此做扩张决策"
+  });
+  return {
+    mode: "calculated-fallback",
+    decisionMode: critical ? "生存优先" : cash.runwayMonths < 6 ? "防守与回款优先" : "稳健经营",
+    riskLevel: critical ? "极高" : cash.runwayMonths < 6 || portfolio.receivableRate >= 50 ? "高" : "中",
+    executiveConclusion: critical
+      ? `公司当前首要目标不是增长，而是避免现金断裂：按现有固定成本，账面现金仅支撑 ${cash.runwayMonths} 个月。`
+      : `当前应优先提高回款确定性和现金安全垫，再决定扩张；待回款为 ${money(portfolio.receivable)}。`,
+    facts,
+    marketAssumptions: [{ statement: marketContext.warning, source: "系统数据状态", date: data.dataAsOf.slice(0, 10), confidence: "高" }],
+    actions: actions.slice(0, 5),
+    scenarios: scenarios.map((item) => ({ name: item.label, result: item.runwayMonths == null ? "缺少固定成本，无法计算" : `现金跑道 ${item.runwayMonths} 个月，6个月缺口 ${money(item.sixMonthGap)}`, implication: item.collectionRate >= 0.5 ? "可显著缓解现金压力，但必须以实际到账为准" : "仍需同步控制支出" })),
+    unknowns: [
+      ...(marketContext.mode === "not-connected" ? ["未接入带来源、发布日期的实时行业与宏观市场数据"] : []),
+      ...(!cash.monthlyFixedCost ? ["未完整填写月固定支出"] : []),
+      ...(projects.some((item) => item.paymentDue === "未填写") ? ["部分合同缺少结构化付款日期"] : []),
+      ...(reason ? [`AI 深度分析未成功，当前为确定性计算结果：${reason}`] : [])
+    ],
+    generatedAt: new Date().toISOString(), dataAsOf: data.dataAsOf
+  };
+}
+
+function normalizeManagementAdvisorResult(value, data) {
+  if (!value || typeof value !== "object") throw new Error("AI 未返回有效 JSON");
+  const text = (input, fallback = "") => String(input || fallback).trim().slice(0, 1000);
+  const list = (input, limit) => Array.isArray(input) ? input.slice(0, limit) : [];
+  const normalized = {
+    mode: "ai-deep-analysis",
+    decisionMode: text(value.decisionMode, "理性经营"),
+    riskLevel: text(value.riskLevel, "待判断"),
+    executiveConclusion: text(value.executiveConclusion),
+    facts: list(value.facts, 8).map((item) => text(typeof item === "string" ? item : item?.statement)).filter(Boolean),
+    marketAssumptions: list(value.marketAssumptions, 8).map((item) => ({ statement: text(item?.statement || item), source: text(item?.source, "未提供来源"), date: text(item?.date, "未提供日期"), confidence: text(item?.confidence, "低") })).filter((item) => item.statement),
+    actions: list(value.actions, 6).map((item, index) => ({ priority: text(item?.priority, `P${index}`), action: text(item?.action), rationale: text(item?.rationale), estimatedImpact: text(item?.estimatedImpact), deadline: text(item?.deadline), ownerRole: text(item?.ownerRole), stopLoss: text(item?.stopLoss) })).filter((item) => item.action),
+    scenarios: list(value.scenarios, 6).map((item) => ({ name: text(item?.name), result: text(item?.result), implication: text(item?.implication) })).filter((item) => item.name),
+    unknowns: list(value.unknowns, 10).map((item) => text(item)).filter(Boolean),
+    generatedAt: new Date().toISOString(), dataAsOf: data.dataAsOf
+  };
+  if (!normalized.executiveConclusion || !normalized.actions.length || !normalized.facts.length) throw new Error("AI 分析缺少结论、事实或行动项");
+  if (data.marketContext.mode === "not-connected" && !normalized.unknowns.some((item) => item.includes("市场"))) normalized.unknowns.unshift("未接入带来源和日期的实时外部市场数据");
+  return normalized;
+}
+
+export async function analyzeManagementAdvisor(db, body = {}, user = {}) {
+  const data = managementAdvisorData(db);
+  const fallback = managementAdvisorFallback(data);
+  const ai = resolveAiSettings(db.settings?.aiService || {});
+  if (!ai?.["API Key"]) return fallback;
+  try {
+    const res = await postAi(`${ai["Base URL"].replace(/\/$/, "")}/chat/completions`, ai["API Key"], {
+      model: ai["模型名称"] || "deepseek-chat",
+      temperature: 0.15,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: [
+          "你是广告营销服务公司的首席战略、财务与风险顾问。你的第一理性目标是最大化企业生存概率和风险调整后的现金回报，不提供情绪安慰。",
+          "严格区分内部事实、可复核计算、市场假设和管理判断。不得编造客户、合同条款、市场规模、行业价格、法律结论或实时新闻。",
+          "只有附来源和日期的市场输入才可称为市场事实；否则必须明确写成假设，并降低置信度。每条行动必须引用内部数字或明确假设，包含现金/利润影响、期限、负责人和止损条件。",
+          "优先分析现金断裂、回款集中、客户集中、垫资、付款承诺、低毛利、合同节点和30/60/90天情景。拒绝泛泛而谈。",
+          "只输出 JSON：decisionMode,riskLevel,executiveConclusion,facts[],marketAssumptions[{statement,source,date,confidence}],actions[{priority,action,rationale,estimatedImpact,deadline,ownerRole,stopLoss}],scenarios[{name,result,implication}],unknowns[]。"
+        ].join("\n") },
+        { role: "user", content: `分析对象：${user.name || "管理层"}。\n公司授权经营数据：\n${JSON.stringify(data)}\n\n确定性计算兜底，仅供校验，不要照抄：\n${JSON.stringify(fallback)}` }
+      ]
+    });
+    if (!res.ok) throw new Error(`AI 服务返回 ${res.res.status}：${res.detail || "请求失败"}`);
+    const response = await res.res.json();
+    const raw = String(response.choices?.[0]?.message?.content || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    return normalizeManagementAdvisorResult(JSON.parse(raw), data);
+  } catch (error) {
+    return managementAdvisorFallback(data, error.message);
+  }
+}
+
 export function createApproval(db, body, user) {
   const project = (db.projects || []).find((item) => item.id === body.projectId);
   if (!project) throw new Error("项目不存在");

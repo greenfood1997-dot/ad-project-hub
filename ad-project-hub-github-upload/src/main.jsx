@@ -49,6 +49,7 @@ applyColorScheme(readThemePreferences());
 const AdminShell = React.lazy(() => import("./AdminShell.jsx"));
 const ProjectDetail = React.lazy(() => import("./ProjectDetail.jsx"));
 const ManagementCostDashboard = React.lazy(() => import("./ManagementCostDashboard.jsx"));
+const ManagementAdvisor = React.lazy(() => import("./ManagementAdvisor.jsx"));
 
 const SESSION_KEY = "ad-project-hub-session";
 const BUILD_VERSION = "2026-07-08-ai-task-command-pass";
@@ -6511,44 +6512,7 @@ function ManagementCockpit({ projects, approvals = [], settings = {}, session, s
         </div>
         {financeSettingsForm}
       </>}
-      {showAdvisor && <>
-        <div className="feature-panel founder-card wide-feature">
-          <PanelTitle icon={Bot} title="AI 商业顾问" />
-          <div className="idea-card">
-            <strong>经营建议：{metrics.recommendation}</strong>
-            <p>{evidence.join("；")}。</p>
-          </div>
-          <div className="logic-list advisor-action-list">
-            {metrics.advisorActions.map((action, index) => (
-              <button type="button" className="advisor-action-card" key={action} onClick={() => handleAdvisorAction(action, index)}>
-                <LogicItem title={`建议 ${index + 1}`} text={action} />
-                <span>{/催收|回款|待回款/.test(action) ? "去催收" : /审批|备用金|报销|供应商付款|支出/.test(action) ? "去审批" : /现金|安全线|缺口|固定支出|收缩/.test(action) ? "看现金流" : "看大盘"}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="feature-panel">
-          <PanelTitle icon={BarChart3} title="判断依据" />
-          <div className="compact-list">
-            <div><strong>待回款占比</strong><span>{metrics.receivableRate}%</span></div>
-            <div><strong>综合毛利率</strong><span>{metrics.margin}%</span></div>
-            <div><strong>现金可撑</strong><span>{metrics.runway.monthlyFixedCost ? `${metrics.runway.runwayMonths.toFixed(1)}个月` : "待设置"}</span></div>
-            <div><strong>待处理审批</strong><span>{metrics.pendingApprovals.length} 条</span></div>
-          </div>
-        </div>
-        <div className="feature-panel">
-          <PanelTitle icon={AlertTriangle} title="优先关注项目" />
-          <div className="compact-list">
-            {metrics.highRiskProjects.slice(0, 4).map((project) => (
-              <button type="button" className="compact-action-row management-risk-action" key={project.id} onClick={() => handleRiskProject(project)}>
-                <strong>{project.name}</strong>
-                <span>评分 {project.score} · 待回款 {money(project.receivable)} · 毛利率 {project.projectMargin}%</span>
-                <em>{project.actionLabel} · {project.actionReason}</em>
-              </button>
-            ))}
-          </div>
-        </div>
-      </>}
+      {showAdvisor && <React.Suspense fallback={<ModuleFallback title="AI 商业顾问加载中" />}><ManagementAdvisor session={session} onNotice={onNotice} /></React.Suspense>}
     </section>
   );
 }

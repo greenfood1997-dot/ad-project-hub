@@ -10,6 +10,7 @@ import { approvalCardAction, notifyApprovalInFeishu } from "./approval-feishu-se
 import {
   addComment,
   actOnApproval,
+  analyzeManagementAdvisor,
   archiveComment,
   createApproval,
   advanceParseJob,
@@ -1262,6 +1263,14 @@ export async function handleApi(req, res) {
     if (!requireRole(user, COCKPIT_ROLES, res)) return;
     const body = await readBody(req);
     const data = await mutateDb((db) => saveCompanyFinance(db, body.values || body, ensureMemberFields(user)));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/management/advisor") {
+    if (!requireRole(user, COCKPIT_ROLES, res)) return;
+    const body = await readBody(req);
+    const data = await analyzeManagementAdvisor(snapshot, body, ensureMemberFields(user));
     sendJson(res, 200, { ok: true, data });
     return;
   }
