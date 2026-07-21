@@ -37,6 +37,7 @@ const checks = [
   ["成本复盘入口", "tests/frontend-closeout-review-entry.mjs"],
   ["供应商客户入口", "tests/frontend-supplier-client-entry.mjs"],
   ["经营舱入口", "tests/frontend-management-cockpit-entry.mjs"],
+  ["经营舱样式入口", "tests/frontend-management-style-entry.mjs"],
   ["催收助手入口", "tests/frontend-collection-assistant-entry.mjs"]
 ];
 
