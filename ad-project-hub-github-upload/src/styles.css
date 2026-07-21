@@ -4742,6 +4742,20 @@ main.dashboard-main > .notice-bar {
   overflow: hidden;
 }
 
+.personal-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: rgba(15, 23, 42, 0.42);
+  padding: 24px;
+  box-sizing: border-box;
+}
+
 .account-pin-dialog {
   width: min(440px, calc(100vw - 32px));
   padding: 24px;
@@ -4764,6 +4778,8 @@ main.dashboard-main > .notice-bar {
   background: #fff;
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
   padding: 22px;
+  margin: auto;
+  box-sizing: border-box;
 }
 
 .personal-settings-head,

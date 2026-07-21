@@ -2083,7 +2083,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
           </div>
         )}
         {notice && <div className="notice-bar"><span>{notice}</span><button type="button" onClick={() => setNotice("")}>知道了</button></div>}
-        {personalSettingsOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setPersonalSettingsOpen(false)}>
+        {personalSettingsOpen && createPortal(<div className="personal-settings-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setPersonalSettingsOpen(false)}>
           <section className="personal-settings-dialog">
             <div className="personal-settings-head"><div><h2>个人设置</h2><span>{session.name} · {roleLabel(session.role)}</span></div><button type="button" className="ghost" onClick={() => setPersonalSettingsOpen(false)}>关闭</button></div>
             <div className="personal-settings-group"><strong>账号</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setPinDialogOpen(true); }}><span><LockKeyhole size={17} /><b>修改登录 PIN</b></span><em>维护自己的登录凭据</em></button></div>
@@ -2093,8 +2093,8 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             {!isAdmin && canManageAssignments && <div className="personal-settings-group"><strong>工作权限</strong><button type="button" onClick={() => { setPersonalSettingsOpen(false); setView("admin:assignments"); }}><span><UserCog size={17} /><b>项目分派</b></span><em>仅开放总监分派权限</em></button></div>}
             <button type="button" className="personal-settings-logout" onClick={onLogout}><LogOut size={17} />退出登录</button>
           </section>
-        </div>}
-        {pinDialogOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setPinDialogOpen(false)}>
+        </div>, document.body)}
+        {pinDialogOpen && createPortal(<div className="personal-settings-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setPinDialogOpen(false)}>
           <form className="account-pin-dialog" onSubmit={changeOwnPin}>
             <div className="section-head"><div><h2>修改登录 PIN</h2><span>修改后下次登录立即使用新 PIN</span></div></div>
             <label><span>当前 PIN</span><input type="password" inputMode="numeric" autoComplete="current-password" value={pinForm.currentPin} onChange={(event) => setPinForm({ ...pinForm, currentPin: event.target.value })} /></label>
@@ -2102,7 +2102,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
             <label><span>确认新 PIN</span><input type="password" inputMode="numeric" autoComplete="new-password" value={pinForm.confirmPin} onChange={(event) => setPinForm({ ...pinForm, confirmPin: event.target.value })} /></label>
             <div className="modal-actions"><button type="button" className="ghost" onClick={() => setPinDialogOpen(false)}>取消</button><button type="submit" className="primary" disabled={changingPin}>{changingPin ? "保存中" : "保存新 PIN"}</button></div>
           </form>
-        </div>}
+        </div>, document.body)}
         {notificationsOpen && <NotificationDrawer
           items={systemNotifications}
           onClose={() => setNotificationsOpen(false)}
@@ -2515,7 +2515,7 @@ function NotificationDrawer({
     if (item.actionView === "project-detail") return "下一步：打开项目详情，检查进度、材料和待处理事项。";
     return "下一步：打开相关页面处理这个待办。";
   }
-  return (
+  return createPortal(
     <div className="notification-backdrop" onClick={onClose}>
       <aside className="notification-drawer" onClick={(event) => event.stopPropagation()}>
         <div className="notification-head">
@@ -2591,7 +2591,8 @@ function NotificationDrawer({
           )}
         </div>
       </aside>
-    </div>
+    </div>,
+    document.body
   );
 }
 
