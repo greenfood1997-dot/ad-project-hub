@@ -3,6 +3,7 @@ import { getCurrentUser, readBody, requireRole, sendJson } from "./http-utils.mj
 import { clearLoginFailures, hashPin, isLoginLimited, issueAuthToken, issuePasswordChangeToken, loginLimitKey, recordLoginFailure, verifyPasswordChangeToken, verifyPin } from "./auth.mjs";
 import { getSchedulerStatus, reloadSystemScheduler } from "./scheduler.mjs";
 import { objectStorageReady, resolveStorageSettings } from "./storage-settings.mjs";
+import { createUploadBatch, uploadBatchForUser } from "./upload-batch-service.mjs";
 import { compensationOverview, generateLaborAllocation, saveCompensationMember, saveProjectDividend } from "./compensation-service.mjs";
 import { listCloudRecycleBin, restoreRecycledProject } from "./cloud-recycle-service.mjs";
 import { exchangeFeishuLoginCode, feishuLoginUrl, upsertFeishuIdentity } from "./feishu-identity-service.mjs";
@@ -1442,6 +1443,32 @@ export async function handleApi(req, res) {
     }
     const data = await mutateDb((db) => stageProjectUploadFile(db, body, user));
     sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/upload-batches") {
+    if (!requireRole(user, PROJECT_UPLOAD_ROLES, res)) return;
+    const body = await readBody(req);
+    if (body.type === "create-project" && !PROJECT_WRITE_ROLES.includes(user.role)) {
+      sendJson(res, 403, { ok: false, error: "无权限创建项目上传批次" });
+      return;
+    }
+    if (body.type !== "create-project" && !canAccessProject(snapshot, user, body.id)) {
+      sendJson(res, 403, { ok: false, error: "无权限向该项目上传文件" });
+      return;
+    }
+    const data = await mutateDb((db) => createUploadBatch(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname.startsWith("/api/upload-batches/")) {
+    const id = decodeURIComponent(url.pathname.slice("/api/upload-batches/".length));
+    try {
+      sendJson(res, 200, { ok: true, data: uploadBatchForUser(snapshot, id, user) });
+    } catch (error) {
+      sendJson(res, 404, { ok: false, error: error.message });
+    }
     return;
   }
 

@@ -1,4 +1,5 @@
 import { recognizeFileWithTencentOcr, recognizeFileWithTencentOcrDetailed, tencentOcrConfigured } from "./tencent-ocr.mjs";
+import { extractPptxContent } from "./pptx-extraction-service.mjs";
 
 export async function extractFileContent(file, options = {}) {
   const shouldUseOcrForPdf = typeof options.shouldUseOcrForPdf === "function"
@@ -77,6 +78,11 @@ export async function extractFileContent(file, options = {}) {
       const mammoth = await import("mammoth");
       const parsed = await mammoth.extractRawText({ buffer });
       return { ...file, text: parsed.value || "", extractionStatus: parsed.value ? "Word 文本提取成功" : "Word 未提取到文本" };
+    }
+
+    if (lowerName.endsWith(".pptx") || type.includes("presentationml")) {
+      const parsed = await extractPptxContent(file);
+      return { ...file, ...parsed };
     }
 
     if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsm") || type.includes("spreadsheet")) {

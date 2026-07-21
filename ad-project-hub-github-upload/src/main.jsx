@@ -6666,6 +6666,16 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
     return uploaded;
   }
 
+  async function waitForUploadBatch(id) {
+    for (;;) {
+      const batch = await apiRequest(`/api/upload-batches/${encodeURIComponent(id)}`, session);
+      setProgress({ step: "preview", percent: batch.progress, text: batch.status === "ready" ? "文件解析完成，正在生成整批预览" : `后台解析中：${batch.files.filter((file) => file.taskStatus === "completed").length}/${batch.files.length} 个文件` });
+      if (batch.status === "ready") return batch.files;
+      if (batch.status === "failed") throw new Error(batch.error || "部分文件后台解析失败，请重试");
+      await new Promise((resolve) => window.setTimeout(resolve, 1800));
+    }
+  }
+
   async function requestPreview() {
     if (type === "create-project" && !canUseCreateProject) {
       setMessage("当前账号不能创建新项目，请让销售、PM 或管理层上传合同创建项目。");
@@ -6691,10 +6701,19 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
         setProgress((current) => current.step === "preview" ? { step: "preview", percent: 62, text: "正在 OCR / 表格识别，请耐心等待" } : current);
       }, 900);
       const uploadedFiles = files.length ? await stageFilesForPreview() : [];
+      let parsedFiles = uploadedFiles;
+      if (uploadedFiles.length) {
+        const batch = await apiRequest("/api/upload-batches", session, {
+          method: "POST",
+          body: JSON.stringify(type === "create-project" ? { type, values, files: uploadedFiles } : { type, id: targetProject.id, projectName: targetProject.name, files: uploadedFiles }),
+        });
+        parsedFiles = await waitForUploadBatch(batch.id);
+        setStagedFiles(Object.fromEntries(files.map((file, index) => [uploadedFileKey(file), parsedFiles[index]])));
+      }
       setProgress({ step: "preview", percent: 62, text: `已上传 ${uploadedFiles.length} 个文件，正在联合 AI/OCR 识别` });
       const data = await apiRequest("/api/projects/upload-preview", session, {
         method: "POST",
-        body: JSON.stringify(uploadBody(uploadedFiles)),
+        body: JSON.stringify(uploadBody(parsedFiles)),
       });
       setPreview(data);
       setConfirmed(false);

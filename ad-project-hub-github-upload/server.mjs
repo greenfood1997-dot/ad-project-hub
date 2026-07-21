@@ -6,6 +6,7 @@ import { sendCorsPreflight, sendJson } from "./server/http-utils.mjs";
 import { startSystemScheduler } from "./server/scheduler.mjs";
 import { bootstrapPostgresAdminFromEnv } from "./server/bootstrap-admin.mjs";
 import { isTransientDatabaseError, publicServerError } from "./server/database-errors.mjs";
+import { startUploadBatchWorker } from "./server/upload-batch-worker.mjs";
 
 const bootstrap = await bootstrapPostgresAdminFromEnv();
 if (bootstrap.applied) {
@@ -38,4 +39,5 @@ server.listen(port, host, () => {
   startSystemScheduler().then((status) => {
     console.log(`System scheduler ${status.enabled ? "enabled" : "disabled"} · interval ${Math.round(status.intervalMs / 1000)}s`);
   }).catch((error) => console.error("System scheduler failed to start", error));
+  startUploadBatchWorker();
 });

@@ -34,8 +34,10 @@ body[data-color-scheme="dark"] :where(
   [class*="history"], [class*="toolbar"], [class*="accordion"], [class*="empty"], [class*="settings"],
   [class*="status-grid"], [class*="metrics"], [class*="steps"], [class*="strip"], [class*="callout"]
 ) {
+  background-color: #111111 !important;
   border-color: #2c2c2c !important;
   color: #fff !important;
+  box-shadow: none !important;
 }
 
 body[data-color-scheme="dark"] :where(
@@ -165,4 +167,121 @@ body[data-color-scheme="dark"] .personal-settings-dialog :where(button, label) >
 body[data-color-scheme="dark"] .personal-settings-dialog :where(button, label) em,
 body[data-color-scheme="dark"] .personal-settings-group > strong {
   color: #b5b5b5 !important;
+}
+
+/* Complete product surface coverage. Lazy modules may inject their light CSS after this file. */
+body[data-color-scheme="dark"] :where(
+  .dashboard-main, .overview-center, .project-detail-shell, .project-detail-content,
+  .project-detail-section, .project-detail-section-trigger, .project-detail-section-body,
+  .ai-activity-panel, .ai-workbench, .approval-workbench, .closeout-review,
+  .supplier-library, .client-library, .collection-workbench, .management-cockpit,
+  .management-advisor, .management-cost-dashboard, .admin-shell, .admin-content,
+  .upload-modal, .upload-modal-body, .upload-modal-content, .notification-drawer,
+  .personal-settings-dialog, .account-pin-dialog
+) {
+  background: #111111 !important;
+  border-color: #303030 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+body[data-color-scheme="dark"] :where(
+  .overview-layout .metric, .overview-layout .panel, .overview-layout .employee-hero,
+  .project-card, .project-list, .detail-section, .detail-form-grid label, .detail-list > div,
+  .project-overview-card, .client-handoff, .client-handoff-pack, .project-command-center,
+  .parse-job-card, .material-intake-strip, .material-intake-item, .material-card,
+  .ai-activity-head, .ai-project-context, .ai-feed-item p, .ai-compose, .ai-drop-hint,
+  .approval-card, .approval-detail, .approval-form-context, .approval-impact-preview,
+  .approval-priority-panel, .approval-next-panel, .workbench-block,
+  .closeout-card, .closeout-summary, .closeout-section,
+  .supplier-card, .supplier-detail-panel, .supplier-settlement-note,
+  .client-card, .client-profile, .collection-generator, .collection-script-card,
+  .collection-priority-panel, .management-switcher, .management-cost-projects article,
+  .management-cost-details, .advisor-decision-list > article, .advisor-question-list label > div,
+  .member-table, .member-form, .member-check, .assignment-accordion,
+  .assignment-accordion-trigger, .assignment-accordion-body, .settings-block,
+  .product-settings-content, .product-settings-nav, .feishu-bot-panel,
+  .feishu-guide > div, .feishu-health-card, .feishu-status-grid > div,
+  .backup-diff-preview, .deploy-health-panel, .interest-rate-panel, .project-cleanup-panel,
+  .upload-context-note, .upload-head-progress, .upload-progress-panel, .upload-preview,
+  .preview-section, .preview-fields > div, .preview-table > div, .file-drop, .file-list > div,
+  .notification-card, .notification-priority-panel, .notice-bar, .empty-project-state,
+  .module-fallback
+) {
+  background: #181818 !important;
+  border-color: #343434 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+body[data-color-scheme="dark"] :where(
+  input, select, textarea, .search, .chat-input, .ai-compose input,
+  .management-cost-toolbar input, .detail-form-grid input
+) {
+  background: #090909 !important;
+  border-color: #414141 !important;
+  color: #ffffff !important;
+  caret-color: #ffffff;
+}
+
+body[data-color-scheme="dark"] :where(input, textarea)::placeholder {
+  color: #858b96 !important;
+  opacity: 1;
+}
+
+body[data-color-scheme="dark"] :where(
+  .project-detail-section-trigger:hover, .project-detail-section.open > .project-detail-section-trigger,
+  .material-intake-item:hover, .assignment-accordion-trigger:hover,
+  .project-card:hover, .supplier-card:hover, .client-card:hover
+) {
+  background: #202020 !important;
+}
+
+body[data-color-scheme="dark"] :where(
+  .detail-section.fresh, .detail-list > div.fresh, .parse-job-card.running,
+  .material-intake-item.parsed, .selected, .fresh
+) {
+  background: #162033 !important;
+  border-color: #365a9d !important;
+}
+
+body[data-color-scheme="dark"] :where(
+  .alert-item, .parse-job-card.failed, .danger-callout, .upload-error-card
+) {
+  background: #2a1717 !important;
+  border-color: #713737 !important;
+  color: #ffd2d2 !important;
+}
+
+body[data-color-scheme="dark"] :where(
+  .parse-job-card.done, .preview-progress-note, .success-callout
+) {
+  background: #14251c !important;
+  border-color: #315f43 !important;
+  color: #c7f9d8 !important;
+}
+
+body[data-color-scheme="dark"] :where(
+  .preview-warnings, .warning-callout, .storage-test-result.warn,
+  .advisor-risk, .notification-trigger.has-items
+) {
+  background: #2a2416 !important;
+  border-color: #6b5725 !important;
+  color: #ffe0a3 !important;
+}
+
+body[data-color-scheme="dark"] :where(
+  .project-detail-section, .ai-activity-panel, .upload-modal, .notification-drawer,
+  .personal-settings-dialog, .account-pin-dialog, .approval-card, .supplier-card,
+  .client-card, .collection-script-card, .management-cost-projects article
+) :where(h1, h2, h3, h4, strong, b, label) {
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] :where(
+  .project-detail-section, .ai-activity-panel, .upload-modal, .notification-drawer,
+  .personal-settings-dialog, .account-pin-dialog, .approval-card, .supplier-card,
+  .client-card, .collection-script-card, .management-cost-projects article
+) :where(p, span, small, em) {
+  color: #b8bdc7;
 }

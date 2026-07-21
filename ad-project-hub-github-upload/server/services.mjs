@@ -5,6 +5,7 @@ import { recognizeFileWithTencentOcr, recognizeFileWithTencentOcrDetailed, tence
 import { rootDir } from "./config.mjs";
 import { resolveStorageSettings } from "./storage-settings.mjs";
 import { projectRecycleSnapshot } from "./cloud-recycle-service.mjs";
+import { extractPptxContent } from "./pptx-extraction-service.mjs";
 
 export function projectTaxSnapshot(amount, rate = 0, taxIncluded = true) {
   const enteredAmount = Math.max(0, parseMoney(amount));
@@ -355,11 +356,12 @@ export async function stageProjectUploadFile(db, body, user) {
       : type === "verification-sheet"
         ? "verification-sheet"
         : "project";
-  const [file] = await normalizeUploadedFiles(body?.file ? [body.file] : [], category, user, new Date().toISOString(), db.settings?.storage || {});
-  if (!file) throw new Error("请选择要上传的文件");
+  if (!body?.file) throw new Error("请选择要上传的文件");
+  const now = new Date().toISOString();
+  const file = await persistLocalUploadFile({ ...body.file, id: body.file.id || nextFileId() }, category, now, resolveStorageSettings(db.settings?.storage || {}));
   // The final batch request only needs extracted content and durable storage references.
   const { base64, dataUrl, ...reference } = file;
-  return reference;
+  return { ...reference, category, uploadedAt: reference.uploadedAt || now, uploadedBy: user.id, uploadedByName: user.name };
 }
 
 export async function confirmProjectUpload(db, body, user) {
@@ -5912,6 +5914,11 @@ async function extractFileContent(file) {
       const mammoth = await import("mammoth");
       const parsed = await mammoth.extractRawText({ buffer });
       return { ...file, text: parsed.value || "", extractionStatus: parsed.value ? "Word 文本提取成功" : "Word 未提取到文本" };
+    }
+
+    if (lowerName.endsWith(".pptx") || type.includes("presentationml")) {
+      const parsed = await extractPptxContent(file);
+      return { ...file, ...parsed };
     }
 
     if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls") || lowerName.endsWith(".xlsm") || type.includes("spreadsheet")) {
