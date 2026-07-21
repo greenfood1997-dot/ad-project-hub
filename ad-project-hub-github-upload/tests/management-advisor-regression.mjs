@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { analyzeManagementAdvisor } from "../server/services.mjs";
+import { analyzeManagementAdvisor, saveManagementAdvisorInputs } from "../server/services.mjs";
 
 const db = {
   settings: { companyFinance: { currentCash: 500000, monthlyLaborCost: 204000, monthlyRent: 35000, monthlyOtherCost: 15000 } },
@@ -29,6 +29,24 @@ assert.deepEqual(fallback.decisionSequence, ["现金生存", "客户续单与集
 assert(fallback.frameworkLenses.some((item) => item.framework.includes("麦肯锡")), "advisor must include McKinsey as one lens rather than the only framework");
 assert(fallback.unknowns.some((item) => item.includes("真实续单率")), "missing renewal outcomes must be disclosed");
 assert(fallback.unknowns.some((item) => item.includes("工时") && item.includes("负载")), "missing workforce capacity must be disclosed");
+assert(fallback.diagnosticQuestions.some((item) => item.id === "renewalEligibleContracts" && item.decision.includes("续单")), "missing renewal data must become a concrete question");
+assert(fallback.diagnosticQuestions.some((item) => item.id === "availableCapacityHours" && item.why), "missing capacity data must explain why it is needed");
+
+saveManagementAdvisorInputs(db, {
+  renewalEligibleContracts: 4,
+  renewedContracts: 3,
+  availableCapacityHours: 1000,
+  billableProjectHours: 820,
+  standardizedDeliveryPercent: 60,
+  founderDependencyPercent: 70
+}, { id: "u-1", name: "股东" });
+const enriched = await analyzeManagementAdvisor(db, {}, { name: "管理层", role: "shareholder" });
+assert.equal(enriched.customerHealth.trueRenewalRate, 75, "saved facts must calculate true renewal rate");
+assert.equal(enriched.capacity.utilizationPercent, 82, "saved facts must calculate capacity utilization");
+assert.equal(enriched.diagnosticQuestions.length, 0, "answered questions must leave the follow-up queue");
+assert(!enriched.unknowns.some((item) => item.includes("真实续单率")), "answered renewal questions must clear the corresponding uncertainty");
+assert(db.auditLogs.some((item) => item.action === "answer-diagnostic-question"), "answers must be auditable");
+assert.throws(() => saveManagementAdvisorInputs(db, { renewalEligibleContracts: 2, renewedContracts: 3 }, { name: "股东" }), /不能大于/, "invalid renewal facts must be rejected");
 
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async () => new Response(JSON.stringify({ choices: [{ message: { content: "not-json" } }] }), { status: 200, headers: { "content-type": "application/json" } });
@@ -40,8 +58,9 @@ assert(malformed.unknowns.some((item) => item.includes("AI 深度分析未成功
 const apiSource = await readFile(new URL("../server/api.mjs", import.meta.url), "utf8");
 assert(apiSource.includes('url.pathname === "/api/management/advisor"'));
 assert(apiSource.includes('if (!requireRole(user, COCKPIT_ROLES, res)) return;\n    const body = await readBody(req);\n    const data = await analyzeManagementAdvisor'), "advisor endpoint must be cockpit-role protected");
+assert(apiSource.includes('url.pathname === "/api/management/advisor/inputs"') && apiSource.includes("saveManagementAdvisorInputs"), "diagnostic answers must use a dedicated protected API");
 
 const uiSource = await readFile(new URL("../src/ManagementAdvisor.jsx", import.meta.url), "utf8");
-for (const field of ["公司发展阶段诊断", "人员与组织", "客户与续单", "优先决策与止损线", "内部事实", "市场依据边界", "综合决策方法", "现金情景推演", "当前缺失信息与结论边界"]) assert(uiSource.includes(field));
+for (const field of ["公司发展阶段诊断", "人员与组织", "客户与续单", "AI 需要你补充的经营事实", "保存并重新分析", "优先决策与止损线", "内部事实", "市场依据边界", "综合决策方法", "现金情景推演", "当前缺失信息与结论边界"]) assert(uiSource.includes(field));
 
 console.log("management advisor regression passed");

@@ -12,6 +12,8 @@ export default function ManagementAdvisor({ session, onNotice }) {
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [answers, setAnswers] = useState({});
+  const [savingQuestion, setSavingQuestion] = useState("");
 
   async function loadAnalysis(force = false) {
     setLoading(true);
@@ -29,6 +31,25 @@ export default function ManagementAdvisor({ session, onNotice }) {
   }
 
   useEffect(() => { loadAnalysis(false); }, [session?.id]);
+
+  async function saveAnswer(question) {
+    const value = answers[question.id];
+    if (value === "" || value == null) {
+      onNotice?.("请先填写答案；如果暂时不知道，可以保留问题，AI 会继续降低相关结论置信度。");
+      return;
+    }
+    setSavingQuestion(question.id);
+    try {
+      await apiRequest("/api/management/advisor/inputs", session, { method: "POST", body: JSON.stringify({ values: { [question.id]: value } }) });
+      setAnswers((current) => ({ ...current, [question.id]: "" }));
+      await loadAnalysis(true);
+      onNotice?.(`已保存「${question.label}」，并按新事实重新分析。`);
+    } catch (saveError) {
+      onNotice?.(saveError.message);
+    } finally {
+      setSavingQuestion("");
+    }
+  }
 
   if (!analysis && loading) return <div className="feature-panel wide-feature advisor-loading"><Bot size={22} /><strong>正在读取合同、回款、成本和现金流，生成公司级分析...</strong><span>深度分析通常需要几秒，请不要关闭页面。</span></div>;
   if (!analysis) return <div className="feature-panel wide-feature advisor-loading danger"><AlertTriangle size={22} /><strong>暂时无法生成经营分析</strong><span>{error || "请稍后重试"}</span><button type="button" className="primary" onClick={() => loadAnalysis(true)}>重新分析</button></div>;
@@ -65,6 +86,16 @@ export default function ManagementAdvisor({ session, onNotice }) {
         <span>历史复购代理 {analysis.customerHealth?.repeatClientProxy == null ? "样本不足" : `${analysis.customerHealth.repeatClientProxy}%`} · 最大客户占比 {analysis.customerHealth?.largestClientShare ?? 0}%</span>
         <p>{analysis.customerHealth?.metricDefinition}</p>
       </div>
+    </div>}
+    {(analysis.diagnosticQuestions || []).length > 0 && <div className="feature-panel wide-feature advisor-questions-panel">
+      <div className="panel-title"><AlertTriangle size={18} /><h2>AI 需要你补充的经营事实</h2></div>
+      <p className="advisor-question-intro">以下问题没有可靠答案，AI 不会自行猜测。补充后会保存为公司经营事实，并立即重新分析；暂时不回答时，相关结论继续保持低置信度。</p>
+      <div className="advisor-question-list">{analysis.diagnosticQuestions.map((question, index) => <article key={question.id}>
+        <div className="advisor-question-number">{index + 1}</div>
+        <div className="advisor-question-copy"><strong>{question.prompt}</strong><span>影响判断：{question.decision}</span><p>{question.why}</p></div>
+        <label><span>{question.label}</span><div><input type="number" min="0" step="0.01" value={answers[question.id] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))} placeholder={`填写${question.unit}`} /><em>{question.unit}</em></div></label>
+        <button type="button" className="primary" disabled={savingQuestion === question.id} onClick={() => saveAnswer(question)}>{savingQuestion === question.id ? "保存中" : "保存并重新分析"}</button>
+      </article>)}</div>
     </div>}
     <div className="feature-panel wide-feature">
       <div className="panel-title"><Bot size={18} /><h2>优先决策与止损线</h2></div>

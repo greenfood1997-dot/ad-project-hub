@@ -3516,7 +3516,58 @@ function advisorNumber(value) {
   return Number.isFinite(number) ? Math.round(number * 100) / 100 : 0;
 }
 
-function managementGrowthDiagnosis({ projects, clientRows, totals, finance, users }) {
+const MANAGEMENT_ADVISOR_INPUT_RULES = {
+  renewalEligibleContracts: { min: 0, max: 100000, integer: true },
+  renewedContracts: { min: 0, max: 100000, integer: true },
+  availableCapacityHours: { min: 0, max: 1000000 },
+  billableProjectHours: { min: 0, max: 1000000 },
+  standardizedDeliveryPercent: { min: 0, max: 100 },
+  founderDependencyPercent: { min: 0, max: 100 }
+};
+
+function managementDiagnosticQuestions(inputs = {}) {
+  const questions = [
+    { id: "renewalEligibleContracts", label: "过去12个月具备续约条件的到期合同数", prompt: "过去12个月内，有多少份合同已经到期，并且业务上具备续约条件？", unit: "份", decision: "真实续单率与客户稳定性", why: "只有先确定续约样本总数，才能避免把历史多项目客户误当成真实续单。" },
+    { id: "renewedContracts", label: "过去12个月实际续约合同数", prompt: "上述合同中，有多少份已经正式续约或签订后续合同？", unit: "份", decision: "真实续单率与增长质量", why: "用于计算真实合同续单率，并判断增长主要来自复购还是一次性项目。" },
+    { id: "availableCapacityHours", label: "最近3个月月均可用工时", prompt: "最近3个月，全体交付人员每月平均可用于项目的总工时是多少？", unit: "小时/月", decision: "人员产能与扩招", why: "没有可用产能分母，系统不能判断团队是否满负荷。" },
+    { id: "billableProjectHours", label: "最近3个月月均项目工时", prompt: "最近3个月，全体交付人员每月平均实际投入客户项目的工时是多少？", unit: "小时/月", decision: "人员负载与冗余风险", why: "与可用工时对比后才能计算产能利用率，避免凭感觉扩招或裁减。" },
+    { id: "standardizedDeliveryPercent", label: "标准化交付覆盖率", prompt: "当前项目中，可按标准报价、流程、模板和验收口径重复交付的项目约占多少？", unit: "%", decision: "是否具备复制扩张条件", why: "交付尚未标准化时，增加客户通常只会同步增加管理复杂度。" },
+    { id: "founderDependencyPercent", label: "创始人关键决策依赖度", prompt: "目前有多少比例的项目，报价、客户关系或交付决策必须由创始人亲自推动？", unit: "%", decision: "组织可复制性", why: "创始人依赖过高时，规模增长会首先遇到管理瓶颈。" }
+  ];
+  return questions.filter((item) => inputs[item.id] == null || inputs[item.id] === "");
+}
+
+export function saveManagementAdvisorInputs(db, values = {}, user = {}) {
+  db.settings = db.settings || {};
+  const current = db.settings.managementAdvisorInputs || {};
+  const saved = { ...current };
+  for (const [key, raw] of Object.entries(values || {})) {
+    const rule = MANAGEMENT_ADVISOR_INPUT_RULES[key];
+    if (!rule) continue;
+    if (raw === "" || raw == null) {
+      delete saved[key];
+      continue;
+    }
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < rule.min || value > rule.max) throw new Error(`经营诊断字段 ${key} 数值无效`);
+    saved[key] = rule.integer ? Math.round(value) : Math.round(value * 100) / 100;
+  }
+  if (saved.renewedContracts != null && saved.renewalEligibleContracts != null && saved.renewedContracts > saved.renewalEligibleContracts) {
+    throw new Error("实际续约合同数不能大于具备续约条件的到期合同数");
+  }
+  if (saved.billableProjectHours != null && saved.availableCapacityHours != null && saved.billableProjectHours > saved.availableCapacityHours * 1.5) {
+    throw new Error("项目工时显著超过可用工时，请核对两个字段是否采用相同统计周期");
+  }
+  saved.savedAt = new Date().toISOString();
+  saved.savedBy = user.id || "";
+  saved.savedByName = user.name || "";
+  db.settings.managementAdvisorInputs = saved;
+  db.auditLogs = db.auditLogs || [];
+  db.auditLogs.unshift({ type: "management-advisor", target: "diagnostic-inputs", action: "answer-diagnostic-question", user: user.name || "", at: saved.savedAt, meta: { fields: Object.keys(values || {}).filter((key) => MANAGEMENT_ADVISOR_INPUT_RULES[key]) } });
+  return saved;
+}
+
+function managementGrowthDiagnosis({ projects, clientRows, totals, finance, users, inputs }) {
   const knownClients = clientRows.filter((item) => item.client !== "未填写");
   const repeatClients = knownClients.filter((item) => item.projects >= 2);
   const activeUsers = (users || []).filter((item) => item.status !== "disabled" && item.role !== "viewer");
@@ -3528,6 +3579,12 @@ function managementGrowthDiagnosis({ projects, clientRows, totals, finance, user
   const projectCount = projects.length;
   const clientCount = knownClients.length;
   const repeatClientProxy = clientCount ? Math.round((repeatClients.length / clientCount) * 1000) / 10 : null;
+  const trueRenewalRate = advisorNumber(inputs.renewalEligibleContracts) > 0 && inputs.renewedContracts != null
+    ? Math.round((advisorNumber(inputs.renewedContracts) / advisorNumber(inputs.renewalEligibleContracts)) * 1000) / 10
+    : null;
+  const capacityUtilization = advisorNumber(inputs.availableCapacityHours) > 0 && inputs.billableProjectHours != null
+    ? Math.round((advisorNumber(inputs.billableProjectHours) / advisorNumber(inputs.availableCapacityHours)) * 1000) / 10
+    : null;
   const largestClientShare = totals.contract ? Math.round(((clientRows[0]?.contract || 0) / totals.contract) * 1000) / 10 : 0;
   const revenuePerPerson = activeUsers.length ? Math.round(totals.contract / activeUsers.length) : null;
   const monthlyLaborPerPerson = activeUsers.length ? Math.round(advisorNumber(finance.monthlyLaborCost) / activeUsers.length) : null;
@@ -3571,19 +3628,27 @@ function managementGrowthDiagnosis({ projects, clientRows, totals, finance, user
       roleCounts,
       revenuePerPerson,
       monthlyLaborPerPerson,
-      peopleDataStatus: activeUsers.length ? "已读取在职成员及角色；尚无工时、人员负载和可计费产出" : "缺少有效成员数据"
+      peopleDataStatus: !activeUsers.length ? "缺少有效成员数据" : capacityUtilization == null ? "已读取在职成员及角色；尚无完整工时与人员负载" : `已补充工时口径，当前产能利用率 ${capacityUtilization}%`
     },
     customerHealth: {
       clientCount,
       repeatClientCount: repeatClients.length,
       repeatClientProxy,
       metricDefinition: "历史复购代理 = 有2个及以上项目的客户数 ÷ 有效客户数；不等于合同续单率",
-      trueRenewalRate: null,
+      trueRenewalRate,
       largestClientShare
     },
     primaryConstraint: constraints[0] || { code: "standardization", label: "标准化证据", evidence: "当前硬性风险较低，下一约束需由交付复用率和人员负载确认" },
     constraints,
     decisionSequence: ["现金生存", "客户续单与集中度", "项目单位经济性", "人员产能", "交付标准化", "扩张与新业务"],
+    capacity: {
+      availableCapacityHours: inputs.availableCapacityHours ?? null,
+      billableProjectHours: inputs.billableProjectHours ?? null,
+      utilizationPercent: capacityUtilization,
+      standardizedDeliveryPercent: inputs.standardizedDeliveryPercent ?? null,
+      founderDependencyPercent: inputs.founderDependencyPercent ?? null
+    },
+    diagnosticQuestions: managementDiagnosticQuestions(inputs),
     frameworkLenses: [
       { framework: "第一性原理", use: "先判断现金是否允许公司继续存在，再讨论增长" },
       { framework: "约束理论", use: `当前优先约束：${constraints[0]?.label || "标准化证据"}` },
@@ -3646,7 +3711,8 @@ function managementAdvisorData(db = {}) {
     clientRows: byClient,
     totals,
     finance: { ...finance, ...(db.settings?.companyFinance || {}) },
-    users: db.users || []
+    users: db.users || [],
+    inputs: db.settings?.managementAdvisorInputs || {}
   });
   const marketInputs = Array.isArray(db.settings?.product?.marketAssumptions)
     ? db.settings.product.marketAssumptions.slice(0, 12)
@@ -3757,9 +3823,11 @@ function managementAdvisorFallback(data, reason = "") {
     businessStage: growth.businessStage,
     organization: growth.organization,
     customerHealth: growth.customerHealth,
+    capacity: growth.capacity,
     primaryConstraint: growth.primaryConstraint,
     decisionSequence: growth.decisionSequence,
     frameworkLenses: growth.frameworkLenses,
+    diagnosticQuestions: growth.diagnosticQuestions,
     facts,
     marketAssumptions: [{ statement: marketContext.warning, source: "系统数据状态", date: data.dataAsOf.slice(0, 10), confidence: "高" }],
     actions: actions.slice(0, 5),
@@ -3768,8 +3836,8 @@ function managementAdvisorFallback(data, reason = "") {
       ...(marketContext.mode === "not-connected" ? ["未接入带来源、发布日期的实时行业与宏观市场数据"] : []),
       ...(!cash.monthlyFixedCost ? ["未完整填写月固定支出"] : []),
       ...(projects.some((item) => item.paymentDue === "未填写") ? ["部分合同缺少结构化付款日期"] : []),
-      ...(growth.customerHealth.trueRenewalRate == null ? ["尚未记录合同到期、续约机会、已续约/流失，当前只能计算历史复购代理，不能计算真实续单率"] : []),
-      ...(growth.organization.activePeople > 0 ? ["人员体系尚未记录工时、项目负载和可计费产出，暂不能可靠判断扩招或冗余"] : ["缺少有效人员数据"]),
+      ...(growth.customerHealth.trueRenewalRate == null ? ["尚未补齐到期合同和实际续约数量，当前只能计算历史复购代理，不能计算真实续单率"] : []),
+      ...(growth.organization.activePeople > 0 && growth.capacity.utilizationPercent == null ? ["尚未补齐可用工时和项目工时，无法计算人员负载，暂不能可靠判断扩招或冗余"] : growth.organization.activePeople ? [] : ["缺少有效人员数据"]),
       ...(reason ? [`AI 深度分析未成功，当前为确定性计算结果：${reason}`] : [])
     ],
     generatedAt: new Date().toISOString(), dataAsOf: data.dataAsOf
@@ -3795,12 +3863,14 @@ function normalizeManagementAdvisorResult(value, data) {
     },
     organization: data.growth.organization,
     customerHealth: data.growth.customerHealth,
+    capacity: data.growth.capacity,
     primaryConstraint: {
       label: text(value.primaryConstraint?.label, data.growth.primaryConstraint.label),
       evidence: text(value.primaryConstraint?.evidence, data.growth.primaryConstraint.evidence)
     },
     decisionSequence: data.growth.decisionSequence,
     frameworkLenses: data.growth.frameworkLenses,
+    diagnosticQuestions: data.growth.diagnosticQuestions,
     facts: list(value.facts, 8).map((item) => text(typeof item === "string" ? item : item?.statement)).filter(Boolean),
     marketAssumptions: list(value.marketAssumptions, 8).map((item) => ({ statement: text(item?.statement || item), source: text(item?.source, "未提供来源"), date: text(item?.date, "未提供日期"), confidence: text(item?.confidence, "低") })).filter((item) => item.statement),
     actions: list(value.actions, 6).map((item, index) => ({ priority: text(item?.priority, `P${index}`), action: text(item?.action), rationale: text(item?.rationale), estimatedImpact: text(item?.estimatedImpact), deadline: text(item?.deadline), ownerRole: text(item?.ownerRole), stopLoss: text(item?.stopLoss) })).filter((item) => item.action),
