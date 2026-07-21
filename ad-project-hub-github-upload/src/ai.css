@@ -547,3 +547,48 @@ body[data-color-scheme="dark"] .ai-workbench .chat-input input {
   background: transparent !important;
   color: #ffffff !important;
 }
+
+body[data-color-scheme="dark"] .ai-activity-panel {
+  background: #111111 !important;
+  border-color: #2c2c2c !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+body[data-color-scheme="dark"] .ai-activity-panel :where(.ai-activity-head, .ai-project-context, .ai-feed-item p, .ai-filing-actions, .ai-file-project-actions, .ai-compose) {
+  background: #181818 !important;
+  border-color: #343434 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+body[data-color-scheme="dark"] .ai-activity-panel :where(.ai-profile strong, .ai-activity-head strong, .ai-project-context strong, .ai-feed-item p, .ai-compose input) {
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .ai-activity-panel :where(.ai-profile span, .ai-activity-head span, .ai-project-context span, .ai-feed-item span) {
+  color: #b5b5b5 !important;
+}
+
+body[data-color-scheme="dark"] .ai-activity-panel .ai-quick-tags button {
+  background: #181818 !important;
+  border: 1px solid #383838 !important;
+  color: #ffffff !important;
+}
+
+body[data-color-scheme="dark"] .ai-activity-panel .ai-drop-hint {
+  background: #101010 !important;
+  border-color: #40506f !important;
+  color: #c7d2e8 !important;
+}
+
+body[data-color-scheme="dark"] .ai-activity-panel :where(.ai-panel-toggle, .ai-collapsed-button) {
+  background: #181818 !important;
+  border-color: #383838 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+body[data-color-scheme="dark"] .ai-activity-panel .ai-feed-item.user p {
+  background: #28345d !important;
+}

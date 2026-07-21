@@ -25,7 +25,7 @@ for (const [file, selectors] of [
   ["supplier-client.css", [".client-handoff-actions p", ".client-library .review-summary .mini strong", "repeat(3, minmax(180px, 1fr))"]],
   ["closeout.css", [".closeout-complete-box", ".closeout-complete-box textarea", ".feature-panel .closeout-complete-box"]],
   ["collection.css", ['body[data-color-scheme="dark"] .collection-workbench', ".collection-script-card.fresh"]],
-  ["ai.css", [".ai-feed-item p", ".ai-workbench .chat-input"]]
+  ["ai.css", [".ai-feed-item p", ".ai-workbench .chat-input", 'body[data-color-scheme="dark"] .ai-activity-panel', ".ai-activity-panel .ai-quick-tags button", ".ai-activity-panel .ai-drop-hint"]]
 ]) {
   const moduleStyles = await readFile(new URL(`../src/${file}`, import.meta.url), "utf8");
   for (const selector of selectors) assert(moduleStyles.includes(selector), `${file} should cover screenshot regression selector ${selector}`);
