@@ -108,6 +108,21 @@
   align-self: start;
 }
 
+.supplier-library .review-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.supplier-library .review-summary .mini {
+  min-width: 0;
+}
+
+.supplier-library .review-summary .mini strong {
+  overflow-wrap: normal;
+  word-break: keep-all;
+  white-space: nowrap;
+  font-size: clamp(16px, 1.25vw, 20px);
+}
+
 .client-handoff-pack {
   display: grid;
   gap: 10px;
@@ -340,6 +355,7 @@
 }
 
 @media (max-width: 760px) {
+  .supplier-library .review-summary,
   .client-library .review-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

@@ -7,6 +7,7 @@ export default function LazyChart({ option }) {
     let disposed = false;
     let chart = null;
     let observer = null;
+    let resizeObserver = null;
     let idleHandle = null;
 
     async function mountChart() {
@@ -16,6 +17,10 @@ export default function LazyChart({ option }) {
       if (disposed || !nodeRef.current) return;
       chart = echarts.init(node);
       chart.setOption(option);
+      if ("ResizeObserver" in window) {
+        resizeObserver = new ResizeObserver(() => chart?.resize());
+        resizeObserver.observe(node);
+      }
     }
 
     const onResize = () => chart?.resize();
@@ -46,6 +51,7 @@ export default function LazyChart({ option }) {
     return () => {
       disposed = true;
       observer?.disconnect();
+      resizeObserver?.disconnect();
       if (idleHandle && "cancelIdleCallback" in window) window.cancelIdleCallback(idleHandle);
       else if (idleHandle) window.clearTimeout(idleHandle);
       window.removeEventListener("resize", onResize);

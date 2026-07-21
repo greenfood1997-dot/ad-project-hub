@@ -1869,19 +1869,35 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   }), [visibleProjects]);
 
   const cashOption = useMemo(() => ({
-    grid: { left: 46, right: 14, top: 24, bottom: 32 },
+    grid: { left: 10, right: 12, top: 24, bottom: 54, containLabel: true },
     tooltip: { trigger: "axis" },
     textStyle: { color: "#4e5969", fontFamily: "Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif", fontSize: 12 },
     xAxis: {
       type: "category",
       data: visibleProjects.map((item) => item.client),
-      axisLabel: { interval: 0, color: "#6b778c", fontSize: 12 },
+      axisLabel: {
+        interval: 0,
+        color: "#6b778c",
+        fontSize: 11,
+        width: 96,
+        overflow: "truncate",
+        formatter: (value) => String(value || "未命名客户").length > 9 ? `${String(value).slice(0, 9)}…` : value
+      },
       axisLine: { lineStyle: { color: "#d8dee9" } },
       axisTick: { show: false }
     },
     yAxis: {
       type: "value",
-      axisLabel: { formatter: (v) => money(v), color: "#6b778c", fontSize: 12 },
+      axisLabel: {
+        formatter: (value) => {
+          const amount = Number(value || 0);
+          if (Math.abs(amount) >= 1000000) return `¥${(amount / 1000000).toFixed(1)}m`;
+          if (Math.abs(amount) >= 10000) return `¥${(amount / 10000).toFixed(0)}万`;
+          return `¥${amount.toFixed(0)}`;
+        },
+        color: "#6b778c",
+        fontSize: 11
+      },
       splitLine: { lineStyle: { color: "#edf1f7" } }
     },
     color: ["#3370ff", "#8fb4ff"],
