@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 const checks = [
   ["数据库恢复重试", "tests/database-recovery-regression.mjs"],
   ["Postgres 跨实例写入锁", "tests/postgres-cross-instance-mutation-lock-regression.mjs"],
+  ["Postgres 旧快照保险丝", "tests/postgres-stale-snapshot-fuse-regression.mjs"],
   ["AI 配置密钥安全", "tests/ai-settings-secret-regression.mjs"],
   ["多人写入串行化", "tests/db-mutation-serialization-regression.mjs"],
   ["财务写入幂等", "tests/financial-idempotency-regression.mjs"],

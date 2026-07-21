@@ -9,6 +9,7 @@ export function deleteProject(db, body, user) {
   };
 
   db.projects = (db.projects || []).filter((item) => item.id !== project.id);
+  db.__deletedProjectIds = [...new Set([...(db.__deletedProjectIds || []), project.id])];
   db.parseJobs = (db.parseJobs || []).filter((item) => !isProjectRecord(item));
   db.files = (db.files || []).filter((item) => !isProjectRecord(item));
   db.suppliers = (db.suppliers || []).filter((item) => !isProjectRecord(item));

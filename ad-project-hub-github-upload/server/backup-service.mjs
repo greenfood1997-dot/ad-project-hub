@@ -301,6 +301,11 @@ export function restoreBackupSnapshot(db, body = {}, user = {}) {
   const validation = validateBackupSnapshot(db, backup, user);
   if (!validation.ok) throw new Error(validation.error || "备份校验未通过，不能恢复。");
   const data = backup.data || {};
+  const backupProjectIds = new Set((data.projects || []).map((project) => project.id));
+  db.__deletedProjectIds = [...new Set([
+    ...(db.__deletedProjectIds || []),
+    ...(db.projects || []).filter((project) => !backupProjectIds.has(project.id)).map((project) => project.id)
+  ])];
   const beforeCounts = {};
   const afterCounts = {};
   for (const key of BACKUP_COLLECTIONS) beforeCounts[key] = arrayCount(db[key]);

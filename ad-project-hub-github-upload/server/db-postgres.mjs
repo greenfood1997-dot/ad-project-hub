@@ -24,7 +24,15 @@ export async function migratePostgres() {
 
 export async function readPostgresDb(client = null) {
   if (!client) await migratePostgres();
-  const db = client || await getPool();
+  const activeDb = client || await getPool();
+  let queryQueue = Promise.resolve();
+  const db = client ? {
+    query(...args) {
+      const query = queryQueue.then(() => activeDb.query(...args));
+      queryQueue = query.catch(() => undefined);
+      return query;
+    }
+  } : activeDb;
   const [
     users,
     settingsRows,
@@ -301,6 +309,13 @@ export async function writePostgresDbFromSnapshot(snapshot, client = null) {
   try {
     await db.query("begin");
     try {
+      const currentProjects = await db.query("select id, name from projects");
+      const snapshotIds = new Set((snapshot.projects || []).map((project) => project.id));
+      const explicitlyDeleted = new Set(snapshot.__deletedProjectIds || []);
+      const missingProjects = currentProjects.rows.filter((project) => !snapshotIds.has(project.id) && !explicitlyDeleted.has(project.id));
+      if (missingProjects.length) {
+        throw new Error(`检测到旧数据快照，已阻止覆盖 ${missingProjects.length} 个现有项目：${missingProjects.map((project) => project.name).join("、")}`);
+      }
       await db.query("delete from audit_logs");
       await db.query("delete from system_notifications");
       await db.query("delete from feishu_pending_files");

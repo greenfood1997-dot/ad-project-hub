@@ -1104,6 +1104,7 @@ export function deleteProject(db, body, user) {
   const at = new Date().toISOString();
   projectRecycleSnapshot(db, project, isProjectRecord, user, at);
   db.projects = (db.projects || []).filter((item) => item.id !== project.id);
+  db.__deletedProjectIds = [...new Set([...(db.__deletedProjectIds || []), project.id])];
   db.parseJobs = (db.parseJobs || []).filter((item) => !isProjectRecord(item));
   db.files = (db.files || []).filter((item) => !isProjectRecord(item));
   db.suppliers = (db.suppliers || []).filter((item) => !isProjectRecord(item));
@@ -3999,6 +4000,11 @@ export function restoreBackupSnapshot(db, body = {}, user = {}) {
   const validation = validateBackupSnapshot(db, backup, user);
   if (!validation.ok) throw new Error(validation.error || "备份校验未通过，不能恢复。");
   const data = backup.data || {};
+  const backupProjectIds = new Set((data.projects || []).map((project) => project.id));
+  db.__deletedProjectIds = [...new Set([
+    ...(db.__deletedProjectIds || []),
+    ...(db.projects || []).filter((project) => !backupProjectIds.has(project.id)).map((project) => project.id)
+  ])];
   const beforeCounts = {};
   const afterCounts = {};
   for (const key of BACKUP_COLLECTIONS) beforeCounts[key] = arrayCount(db[key]);
