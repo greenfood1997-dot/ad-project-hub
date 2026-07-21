@@ -3516,6 +3516,85 @@ function advisorNumber(value) {
   return Number.isFinite(number) ? Math.round(number * 100) / 100 : 0;
 }
 
+function managementGrowthDiagnosis({ projects, clientRows, totals, finance, users }) {
+  const knownClients = clientRows.filter((item) => item.client !== "未填写");
+  const repeatClients = knownClients.filter((item) => item.projects >= 2);
+  const activeUsers = (users || []).filter((item) => item.status !== "disabled" && item.role !== "viewer");
+  const roleCounts = activeUsers.reduce((result, item) => {
+    const role = String(item.role || "unknown");
+    result[role] = (result[role] || 0) + 1;
+    return result;
+  }, {});
+  const projectCount = projects.length;
+  const clientCount = knownClients.length;
+  const repeatClientProxy = clientCount ? Math.round((repeatClients.length / clientCount) * 1000) / 10 : null;
+  const largestClientShare = totals.contract ? Math.round(((clientRows[0]?.contract || 0) / totals.contract) * 1000) / 10 : 0;
+  const revenuePerPerson = activeUsers.length ? Math.round(totals.contract / activeUsers.length) : null;
+  const monthlyLaborPerPerson = activeUsers.length ? Math.round(advisorNumber(finance.monthlyLaborCost) / activeUsers.length) : null;
+  let stage = "0→1 商业验证期";
+  let stageGoal = "验证稳定付费需求，形成可复用的交付样板";
+  let nextGate = "至少形成3个可复盘项目、2个有效客户，并记录首轮真实续单结果";
+  if (projectCount >= 3 && clientCount >= 2) {
+    stage = "1→2 稳定经营期";
+    stageGoal = "降低单一客户依赖，稳定回款与复购，完成基本流程标准化";
+    nextGate = "现金跑道≥6个月、客户集中度≤60%、历史复购代理≥30%、项目毛利口径完整";
+  }
+  if (projectCount >= 6 && clientCount >= 3 && repeatClientProxy >= 30 && finance.runwayMonths >= 6 && totals.margin >= 25 && largestClientShare <= 60) {
+    stage = "2→5 可复制增长期";
+    stageGoal = "复制高毛利客户与交付模型，提高人效并减少创始人依赖";
+    nextGate = "连续两个经营周期保持现金跑道≥9个月、客户集中度≤40%、复购代理≥40%且团队负载可量化";
+  }
+  if (projectCount >= 12 && clientCount >= 5 && repeatClientProxy >= 40 && finance.runwayMonths >= 9 && largestClientShare <= 40 && activeUsers.length >= 8) {
+    stage = "5→10 规模化治理期";
+    stageGoal = "用组织、数据和标准化系统替代个人推动，控制规模化失真";
+    nextGate = "建立分业务利润、真实续约率、产能利用率与管理梯队指标后再扩大组织";
+  }
+  const confidenceSignals = [projectCount >= 3, clientCount >= 2, activeUsers.length > 0, finance.monthlyFixedCost > 0];
+  const confidence = confidenceSignals.filter(Boolean).length >= 4 ? "中高" : confidenceSignals.filter(Boolean).length >= 2 ? "中" : "低";
+  const constraints = [
+    finance.monthlyFixedCost > 0 && finance.runwayMonths < 3 ? { code: "cash-survival", label: "现金生存", evidence: `现金仅支撑 ${Math.round(finance.runwayMonths * 10) / 10} 个月` } : null,
+    largestClientShare > 60 ? { code: "client-concentration", label: "单一客户依赖", evidence: `最大客户占合同额 ${largestClientShare}%` } : null,
+    totals.contract > 0 && totals.receivable / totals.contract >= 0.5 ? { code: "collection", label: "回款转化", evidence: `待回款占合同 ${Math.round((totals.receivable / totals.contract) * 1000) / 10}%` } : null,
+    repeatClientProxy == null || repeatClients.length === 0 ? { code: "retention-proof", label: "续单证据不足", evidence: "尚无结构化续约记录，历史项目也未形成可验证复购样本" } : null,
+    totals.margin < 25 ? { code: "unit-economics", label: "单位经济性", evidence: `当前项目综合毛利率 ${totals.margin}%` } : null
+  ].filter(Boolean);
+  return {
+    businessStage: {
+      stage,
+      confidence,
+      basis: "内部阶段启发式模型，不是同行业统计结论",
+      stageGoal,
+      nextGate
+    },
+    organization: {
+      activePeople: activeUsers.length,
+      roleCounts,
+      revenuePerPerson,
+      monthlyLaborPerPerson,
+      peopleDataStatus: activeUsers.length ? "已读取在职成员及角色；尚无工时、人员负载和可计费产出" : "缺少有效成员数据"
+    },
+    customerHealth: {
+      clientCount,
+      repeatClientCount: repeatClients.length,
+      repeatClientProxy,
+      metricDefinition: "历史复购代理 = 有2个及以上项目的客户数 ÷ 有效客户数；不等于合同续单率",
+      trueRenewalRate: null,
+      largestClientShare
+    },
+    primaryConstraint: constraints[0] || { code: "standardization", label: "标准化证据", evidence: "当前硬性风险较低，下一约束需由交付复用率和人员负载确认" },
+    constraints,
+    decisionSequence: ["现金生存", "客户续单与集中度", "项目单位经济性", "人员产能", "交付标准化", "扩张与新业务"],
+    frameworkLenses: [
+      { framework: "第一性原理", use: "先判断现金是否允许公司继续存在，再讨论增长" },
+      { framework: "约束理论", use: `当前优先约束：${constraints[0]?.label || "标准化证据"}` },
+      { framework: "单位经济模型", use: "按客户和项目判断收入、成本、毛利与回款质量" },
+      { framework: "麦肯锡 MECE / 7S", use: "检查战略、结构、系统、人员与能力是否互相匹配；缺数据的维度不强行评分" },
+      { framework: "精益创业", use: "新业务先设置低成本实验、成功指标和止损线" },
+      { framework: "三层增长", use: "先守住核心现金业务，再验证邻近增长，最后才投入远期探索" }
+    ]
+  };
+}
+
 function managementAdvisorData(db = {}) {
   const projects = db.projects || [];
   const approvals = db.approvals || [];
@@ -3562,6 +3641,13 @@ function managementAdvisorData(db = {}) {
     result[key].projects += 1;
     return result;
   }, {})).sort((a, b) => b.contract - a.contract);
+  const growth = managementGrowthDiagnosis({
+    projects: projectRows,
+    clientRows: byClient,
+    totals,
+    finance: { ...finance, ...(db.settings?.companyFinance || {}) },
+    users: db.users || []
+  });
   const marketInputs = Array.isArray(db.settings?.product?.marketAssumptions)
     ? db.settings.product.marketAssumptions.slice(0, 12)
     : [];
@@ -3617,6 +3703,7 @@ function managementAdvisorData(db = {}) {
     },
     projects: byReceivable.slice(0, 20),
     clientConcentration: byClient.slice(0, 10),
+    growth,
     scenarios,
     marketContext: marketInputs.length ? {
       mode: "internal-assumptions",
@@ -3631,7 +3718,7 @@ function managementAdvisorData(db = {}) {
 }
 
 function managementAdvisorFallback(data, reason = "") {
-  const { cash, portfolio, commitments, projects, scenarios, marketContext } = data;
+  const { cash, portfolio, commitments, projects, scenarios, marketContext, growth } = data;
   const critical = cash.monthlyFixedCost > 0 && cash.runwayMonths < 3;
   const top = projects[0];
   const facts = [
@@ -3667,6 +3754,12 @@ function managementAdvisorFallback(data, reason = "") {
     executiveConclusion: critical
       ? `公司当前首要目标不是增长，而是避免现金断裂：按现有固定成本，账面现金仅支撑 ${cash.runwayMonths} 个月。`
       : `当前应优先提高回款确定性和现金安全垫，再决定扩张；待回款为 ${money(portfolio.receivable)}。`,
+    businessStage: growth.businessStage,
+    organization: growth.organization,
+    customerHealth: growth.customerHealth,
+    primaryConstraint: growth.primaryConstraint,
+    decisionSequence: growth.decisionSequence,
+    frameworkLenses: growth.frameworkLenses,
     facts,
     marketAssumptions: [{ statement: marketContext.warning, source: "系统数据状态", date: data.dataAsOf.slice(0, 10), confidence: "高" }],
     actions: actions.slice(0, 5),
@@ -3675,6 +3768,8 @@ function managementAdvisorFallback(data, reason = "") {
       ...(marketContext.mode === "not-connected" ? ["未接入带来源、发布日期的实时行业与宏观市场数据"] : []),
       ...(!cash.monthlyFixedCost ? ["未完整填写月固定支出"] : []),
       ...(projects.some((item) => item.paymentDue === "未填写") ? ["部分合同缺少结构化付款日期"] : []),
+      ...(growth.customerHealth.trueRenewalRate == null ? ["尚未记录合同到期、续约机会、已续约/流失，当前只能计算历史复购代理，不能计算真实续单率"] : []),
+      ...(growth.organization.activePeople > 0 ? ["人员体系尚未记录工时、项目负载和可计费产出，暂不能可靠判断扩招或冗余"] : ["缺少有效人员数据"]),
       ...(reason ? [`AI 深度分析未成功，当前为确定性计算结果：${reason}`] : [])
     ],
     generatedAt: new Date().toISOString(), dataAsOf: data.dataAsOf
@@ -3690,6 +3785,22 @@ function normalizeManagementAdvisorResult(value, data) {
     decisionMode: text(value.decisionMode, "理性经营"),
     riskLevel: text(value.riskLevel, "待判断"),
     executiveConclusion: text(value.executiveConclusion),
+    businessStage: {
+      ...data.growth.businessStage,
+      stage: text(value.businessStage?.stage, data.growth.businessStage.stage),
+      confidence: text(value.businessStage?.confidence, data.growth.businessStage.confidence),
+      basis: text(value.businessStage?.basis, data.growth.businessStage.basis),
+      stageGoal: text(value.businessStage?.stageGoal, data.growth.businessStage.stageGoal),
+      nextGate: text(value.businessStage?.nextGate, data.growth.businessStage.nextGate)
+    },
+    organization: data.growth.organization,
+    customerHealth: data.growth.customerHealth,
+    primaryConstraint: {
+      label: text(value.primaryConstraint?.label, data.growth.primaryConstraint.label),
+      evidence: text(value.primaryConstraint?.evidence, data.growth.primaryConstraint.evidence)
+    },
+    decisionSequence: data.growth.decisionSequence,
+    frameworkLenses: data.growth.frameworkLenses,
     facts: list(value.facts, 8).map((item) => text(typeof item === "string" ? item : item?.statement)).filter(Boolean),
     marketAssumptions: list(value.marketAssumptions, 8).map((item) => ({ statement: text(item?.statement || item), source: text(item?.source, "未提供来源"), date: text(item?.date, "未提供日期"), confidence: text(item?.confidence, "低") })).filter((item) => item.statement),
     actions: list(value.actions, 6).map((item, index) => ({ priority: text(item?.priority, `P${index}`), action: text(item?.action), rationale: text(item?.rationale), estimatedImpact: text(item?.estimatedImpact), deadline: text(item?.deadline), ownerRole: text(item?.ownerRole), stopLoss: text(item?.stopLoss) })).filter((item) => item.action),
@@ -3717,8 +3828,12 @@ export async function analyzeManagementAdvisor(db, body = {}, user = {}) {
           "你是广告营销服务公司的首席战略、财务与风险顾问。你的第一理性目标是最大化企业生存概率和风险调整后的现金回报，不提供情绪安慰。",
           "严格区分内部事实、可复核计算、市场假设和管理判断。不得编造客户、合同条款、市场规模、行业价格、法律结论或实时新闻。",
           "只有附来源和日期的市场输入才可称为市场事实；否则必须明确写成假设，并降低置信度。每条行动必须引用内部数字或明确假设，包含现金/利润影响、期限、负责人和止损条件。",
+          "固定决策顺序：现金生存 → 客户续单与集中度 → 项目单位经济性 → 人员产能 → 交付标准化 → 扩张。前序未过关不得跳到扩张建议。",
+          "综合使用第一性原理、约束理论、单位经济模型、麦肯锡 MECE/7S、精益创业、三层增长与情景规划；框架只用于推理，不得堆理论名词。",
+          "判断公司处于0→1商业验证、1→2稳定经营、2→5可复制增长或5→10规模治理阶段，但必须说明依据、置信度、当前阶段目标和进入下一阶段的量化门槛。",
+          "历史复购代理不等于真实续单率；没有合同到期与续约结果时必须声明无法计算真实续单率。没有工时、负载和可计费产出时不得判断员工冗余或建议扩招。",
           "优先分析现金断裂、回款集中、客户集中、垫资、付款承诺、低毛利、合同节点和30/60/90天情景。拒绝泛泛而谈。",
-          "只输出 JSON：decisionMode,riskLevel,executiveConclusion,facts[],marketAssumptions[{statement,source,date,confidence}],actions[{priority,action,rationale,estimatedImpact,deadline,ownerRole,stopLoss}],scenarios[{name,result,implication}],unknowns[]。"
+          "只输出 JSON：decisionMode,riskLevel,executiveConclusion,businessStage{stage,confidence,basis,stageGoal,nextGate},primaryConstraint{label,evidence},facts[],marketAssumptions[{statement,source,date,confidence}],actions[{priority,action,rationale,estimatedImpact,deadline,ownerRole,stopLoss}],scenarios[{name,result,implication}],unknowns[]。"
         ].join("\n") },
         { role: "user", content: `分析对象：${user.name || "管理层"}。\n公司授权经营数据：\n${JSON.stringify(data)}\n\n确定性计算兜底，仅供校验，不要照抄：\n${JSON.stringify(fallback)}` }
       ]

@@ -42,6 +42,30 @@ export default function ManagementAdvisor({ session, onNotice }) {
       <h2>{analysis.executiveConclusion}</h2>
       <p className="advisor-meta">分析数据截至 {displayTime(analysis.dataAsOf)} · 生成于 {displayTime(analysis.generatedAt)} · {analysis.mode === "ai-deep-analysis" ? "AI 深度分析" : "确定性计算兜底（非 AI 生成）"}</p>
     </div>
+    {analysis.businessStage && <div className="feature-panel wide-feature advisor-stage-panel">
+      <div className="panel-title"><Bot size={18} /><h2>公司发展阶段诊断</h2></div>
+      <div className="advisor-stage-grid">
+        <article><small>当前阶段</small><strong>{analysis.businessStage.stage}</strong><span>置信度：{analysis.businessStage.confidence} · {analysis.businessStage.basis}</span></article>
+        <article><small>现阶段唯一主任务</small><strong>{analysis.businessStage.stageGoal}</strong></article>
+        <article><small>进入下一阶段门槛</small><strong>{analysis.businessStage.nextGate}</strong></article>
+        <article className="constraint"><small>当前第一约束</small><strong>{analysis.primaryConstraint?.label || "待判断"}</strong><span>{analysis.primaryConstraint?.evidence}</span></article>
+      </div>
+      <div className="advisor-sequence">{(analysis.decisionSequence || []).map((item, index) => <React.Fragment key={item}><span>{index + 1}. {item}</span>{index < analysis.decisionSequence.length - 1 && <b>→</b>}</React.Fragment>)}</div>
+    </div>}
+    {(analysis.organization || analysis.customerHealth) && <div className="feature-panel wide-feature advisor-company-dimensions">
+      <div>
+        <h3>人员与组织</h3>
+        <strong>{analysis.organization?.activePeople ?? "未知"} 名有效成员</strong>
+        <span>合同额人均 {analysis.organization?.revenuePerPerson == null ? "待计算" : `¥${Number(analysis.organization.revenuePerPerson).toLocaleString("zh-CN")}`}</span>
+        <p>{analysis.organization?.peopleDataStatus}</p>
+      </div>
+      <div>
+        <h3>客户与续单</h3>
+        <strong>{analysis.customerHealth?.clientCount ?? 0} 个有效客户 · {analysis.customerHealth?.repeatClientCount ?? 0} 个历史复购客户</strong>
+        <span>历史复购代理 {analysis.customerHealth?.repeatClientProxy == null ? "样本不足" : `${analysis.customerHealth.repeatClientProxy}%`} · 最大客户占比 {analysis.customerHealth?.largestClientShare ?? 0}%</span>
+        <p>{analysis.customerHealth?.metricDefinition}</p>
+      </div>
+    </div>}
     <div className="feature-panel wide-feature">
       <div className="panel-title"><Bot size={18} /><h2>优先决策与止损线</h2></div>
       <div className="advisor-decision-list">{(analysis.actions || []).map((item, index) => <article key={`${item.priority}-${item.action}-${index}`}>
@@ -51,6 +75,7 @@ export default function ManagementAdvisor({ session, onNotice }) {
     </div>
     <div className="feature-panel"><div className="panel-title"><Bot size={18} /><h2>内部事实</h2></div><div className="compact-list advisor-fact-list">{(analysis.facts || []).map((fact, index) => <div key={`${fact}-${index}`}><strong>{index + 1}</strong><span>{fact}</span></div>)}</div></div>
     <div className="feature-panel"><div className="panel-title"><AlertTriangle size={18} /><h2>市场依据边界</h2></div><div className="advisor-market-list">{(analysis.marketAssumptions || []).map((item, index) => <article key={`${item.statement}-${index}`}><strong>{item.statement}</strong><span>来源：{item.source} · 日期：{item.date} · 置信度：{item.confidence}</span></article>)}</div></div>
+    <div className="feature-panel"><div className="panel-title"><Bot size={18} /><h2>综合决策方法</h2></div><div className="advisor-framework-list">{(analysis.frameworkLenses || []).map((item) => <article key={item.framework}><strong>{item.framework}</strong><span>{item.use}</span></article>)}</div></div>
     <div className="feature-panel wide-feature"><div className="panel-title"><Bot size={18} /><h2>现金情景推演</h2></div><div className="advisor-scenario-grid">{(analysis.scenarios || []).map((item, index) => <article key={`${item.name}-${index}`}><strong>{item.name}</strong><b>{item.result}</b><span>{item.implication}</span></article>)}</div></div>
     {(analysis.unknowns || []).length > 0 && <div className="feature-panel wide-feature advisor-unknowns"><div className="panel-title"><AlertTriangle size={18} /><h2>当前缺失信息与结论边界</h2></div><div className="compact-list">{analysis.unknowns.map((item, index) => <div key={`${item}-${index}`}><strong>待补充</strong><span>{item}</span></div>)}</div></div>}
   </>;

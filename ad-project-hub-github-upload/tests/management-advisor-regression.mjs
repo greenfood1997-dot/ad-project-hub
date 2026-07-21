@@ -4,6 +4,11 @@ import { analyzeManagementAdvisor } from "../server/services.mjs";
 
 const db = {
   settings: { companyFinance: { currentCash: 500000, monthlyLaborCost: 204000, monthlyRent: 35000, monthlyOtherCost: 15000 } },
+  users: [
+    { id: "u-1", name: "股东", role: "shareholder", status: "active" },
+    { id: "u-2", name: "项目经理", role: "pm", status: "active" },
+    { id: "u-3", name: "离职成员", role: "member", status: "disabled" }
+  ],
   projects: [{ id: "p-1", name: "高集中项目", client: "客户A", status: "执行中", contract: 2000000, paid: 0, receivable: 2000000, costUsed: 300000, paymentDue: "未填写" }],
   approvals: [{ id: "a-1", type: "supplier_payment", status: "待审批", amount: 100000 }]
 };
@@ -15,6 +20,15 @@ assert(fallback.executiveConclusion.includes("1.97") || fallback.executiveConclu
 assert(fallback.actions.some((item) => item.priority === "P0" && item.stopLoss), "must return P0 action with stop-loss");
 assert.equal(fallback.scenarios.length, 5, "must compare collection scenarios");
 assert(fallback.unknowns.some((item) => item.includes("实时") && item.includes("市场")), "must disclose missing live market data");
+assert.equal(fallback.businessStage.stage, "0→1 商业验证期", "single-client sample must remain in validation stage");
+assert.equal(fallback.organization.activePeople, 2, "organization diagnosis must count active people only");
+assert.equal(fallback.customerHealth.repeatClientProxy, 0, "single project must not be reported as repeat business");
+assert.equal(fallback.customerHealth.trueRenewalRate, null, "proxy repeat business must not masquerade as true renewal rate");
+assert.equal(fallback.primaryConstraint.label, "现金生存", "decision sequence must surface cash as the first constraint");
+assert.deepEqual(fallback.decisionSequence, ["现金生存", "客户续单与集中度", "项目单位经济性", "人员产能", "交付标准化", "扩张与新业务"]);
+assert(fallback.frameworkLenses.some((item) => item.framework.includes("麦肯锡")), "advisor must include McKinsey as one lens rather than the only framework");
+assert(fallback.unknowns.some((item) => item.includes("真实续单率")), "missing renewal outcomes must be disclosed");
+assert(fallback.unknowns.some((item) => item.includes("工时") && item.includes("负载")), "missing workforce capacity must be disclosed");
 
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async () => new Response(JSON.stringify({ choices: [{ message: { content: "not-json" } }] }), { status: 200, headers: { "content-type": "application/json" } });
@@ -28,6 +42,6 @@ assert(apiSource.includes('url.pathname === "/api/management/advisor"'));
 assert(apiSource.includes('if (!requireRole(user, COCKPIT_ROLES, res)) return;\n    const body = await readBody(req);\n    const data = await analyzeManagementAdvisor'), "advisor endpoint must be cockpit-role protected");
 
 const uiSource = await readFile(new URL("../src/ManagementAdvisor.jsx", import.meta.url), "utf8");
-for (const field of ["优先决策与止损线", "内部事实", "市场依据边界", "现金情景推演", "当前缺失信息与结论边界"]) assert(uiSource.includes(field));
+for (const field of ["公司发展阶段诊断", "人员与组织", "客户与续单", "优先决策与止损线", "内部事实", "市场依据边界", "综合决策方法", "现金情景推演", "当前缺失信息与结论边界"]) assert(uiSource.includes(field));
 
 console.log("management advisor regression passed");
