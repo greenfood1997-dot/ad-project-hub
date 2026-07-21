@@ -1438,6 +1438,18 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   }, [personalPreferences]);
   const [changingPin, setChangingPin] = useState(false);
   const [exportingProjectLedger, setExportingProjectLedger] = useState(false);
+
+  function openPersonalSettings() {
+    setNotificationsOpen(false);
+    setPinDialogOpen(false);
+    setPersonalSettingsOpen(true);
+  }
+
+  function openNotifications() {
+    setPersonalSettingsOpen(false);
+    setPinDialogOpen(false);
+    setNotificationsOpen(true);
+  }
   const [searchText, setSearchText] = useState("");
   const [projectFilters, setProjectFilters] = useState({ risk: "全部风险", status: "全部状态", money: "全部资金", material: "全部材料" });
   const [health, setHealth] = useState(null);
@@ -2038,7 +2050,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         </nav>
         <div className="integration">
           <p>{session.name} · {roleLabel(session.role)}</p>
-          <button type="button" className="personal-settings-trigger" onClick={() => setPersonalSettingsOpen(true)}><Settings2 size={16} />个人设置</button>
+          <button type="button" className="personal-settings-trigger" onClick={openPersonalSettings}><Settings2 size={16} />个人设置</button>
         </div>
       </aside>
 
@@ -2055,7 +2067,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
               <FileSpreadsheet size={16} />{exportingProjectLedger ? "导出中" : "导出台账"}
             </button>
             {["shareholder", "admin", "director", "finance"].includes(session.role) && <button type="button" className="ghost" onClick={exportMonthlyProjectCosts}><FileSpreadsheet size={16} />导出本月全成本</button>}
-            <button type="button" className={`ghost notification-trigger ${systemNotifications.length ? "has-items" : ""}`} onClick={() => setNotificationsOpen(true)}>
+            <button type="button" className={`ghost notification-trigger ${systemNotifications.length ? "has-items" : ""}`} onClick={openNotifications}>
               <BellRing size={16} />待办
               {systemNotifications.length > 0 && <b>{systemNotifications.length}</b>}
             </button>
