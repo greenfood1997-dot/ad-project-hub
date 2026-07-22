@@ -40,7 +40,7 @@ assert(source.includes('return createPortal(\n      <div className="upload-mini-
 assert(source.includes("const uploadNextAction = loading") && source.includes("点开后开始 AI 预览识别") && source.includes("点开后确认入库"), "minimized upload task should explain the next action");
 assert(source.includes("const uploadTargetName") && source.includes("upload-mini-meta") && source.includes("{uploadTargetName} · {files.length} 个文件"), "minimized upload task should show target project and file count");
 assert(source.includes("const canCloseUpload = !loading") && source.includes("const canEditUploadFiles = !loading && !confirmed"), "upload dialog should separate close/edit safety from background processing");
-assert(source.includes("处理中，缩到后台"), "upload dialog should guide users to minimize instead of closing while processing");
+assert(source.includes('{hasProgress && <button type="button" className="ghost" onClick={onMinimize}') && source.includes("缩到后台继续"), "upload dialog should keep the background action available while processing");
 assert(source.includes('disabled={!canEditUploadFiles}') && source.includes('loading ? "处理中" : "移除"'), "upload files should not be removable while an upload/recognition request is running");
 assert(source.includes("/api/projects/upload-preview"), "upload dialog should preview through backend before writing data");
 assert(source.includes("预览阶段不会写入项目"), "upload dialog should make preview-before-write behavior clear");

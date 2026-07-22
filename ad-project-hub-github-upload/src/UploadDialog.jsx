@@ -364,9 +364,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
               </div>
             )}
             {hasProgress && <button type="button" className="ghost" onClick={onMinimize}><Minimize2 size={15} />缩到后台继续</button>}
-            {canCloseUpload
-              ? <button type="button" className="ghost" onClick={onClose}>关闭</button>
-              : <button type="button" className="ghost" onClick={onMinimize}>处理中，缩到后台</button>}
+            {canCloseUpload && <button type="button" className="ghost" onClick={onClose}>关闭</button>}
           </div>
         </div>
 
@@ -459,9 +457,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
             <span>{uploadNextAction}</span>
           </div>
           <div className="upload-action-buttons">
-            {canCloseUpload
-              ? <button type="button" className="ghost" onClick={onClose}>取消</button>
-              : <button type="button" className="ghost" onClick={onMinimize}>处理中，缩到后台</button>}
+            {canCloseUpload && <button type="button" className="ghost" onClick={onClose}>取消</button>}
             {hasProgress && <button type="button" className="ghost" onClick={onMinimize}>缩到后台继续</button>}
             {preview && <button type="button" className="ghost" onClick={showPreview}>查看识别结果</button>}
             {preview && !confirmed && <button type="button" className="ghost" onClick={requestPreview} disabled={loading}>重新预览</button>}

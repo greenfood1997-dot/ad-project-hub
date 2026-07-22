@@ -83,6 +83,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
   const [archivingActivityKey, setArchivingActivityKey] = useState("");
   const [exportingActivityLedger, setExportingActivityLedger] = useState(false);
   const [quickUploadType, setQuickUploadType] = useState("");
+  const [quickUploadMinimized, setQuickUploadMinimized] = useState(false);
   const [localFocusTarget, setLocalFocusTarget] = useState("");
   const [approvalForm, setApprovalForm] = useState({ type: "reimbursement", amount: "", payee: "", reason: "" });
   const [submittingApproval, setSubmittingApproval] = useState(false);
@@ -1109,12 +1110,19 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           projects={[project]}
           selected={project}
           initialType={quickUploadType}
-          onClose={() => setQuickUploadType("")}
+          minimized={quickUploadMinimized}
+          onMinimize={() => setQuickUploadMinimized(true)}
+          onExpand={() => setQuickUploadMinimized(false)}
+          onClose={() => {
+            setQuickUploadType("");
+            setQuickUploadMinimized(false);
+          }}
           onDone={async () => {
             await onDone();
             setLocalFocusTarget("files");
             onNotice("文件已处理，已回到文件与 AI 解析区。");
             setQuickUploadType("");
+            setQuickUploadMinimized(false);
           }}
         />
       </Suspense>}

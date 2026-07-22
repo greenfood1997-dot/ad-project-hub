@@ -3082,6 +3082,7 @@ function LegacyProjectDetail({ project, isManagement, session, files, parseJobs,
   const [archivingActivityKey, setArchivingActivityKey] = useState("");
   const [exportingActivityLedger, setExportingActivityLedger] = useState(false);
   const [quickUploadType, setQuickUploadType] = useState("");
+  const [quickUploadMinimized, setQuickUploadMinimized] = useState(false);
   const [localFocusTarget, setLocalFocusTarget] = useState("");
   const [approvalForm, setApprovalForm] = useState({ type: "reimbursement", amount: "", payee: "", reason: "" });
   const [submittingApproval, setSubmittingApproval] = useState(false);
@@ -4444,12 +4445,19 @@ function LegacyProjectDetail({ project, isManagement, session, files, parseJobs,
         projects={[project]}
         selected={project}
         initialType={quickUploadType}
-        onClose={() => setQuickUploadType("")}
+        minimized={quickUploadMinimized}
+        onMinimize={() => setQuickUploadMinimized(true)}
+        onExpand={() => setQuickUploadMinimized(false)}
+        onClose={() => {
+          setQuickUploadType("");
+          setQuickUploadMinimized(false);
+        }}
         onDone={async () => {
           await onDone();
           setLocalFocusTarget("files");
           onNotice("文件已处理，已回到文件与 AI 解析区。");
           setQuickUploadType("");
+          setQuickUploadMinimized(false);
         }}
       />}
     </div>
@@ -6899,9 +6907,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
           <div className="modal-head-actions">
             {preview && <button type="button" className="ghost" onClick={showPreview}>查看识别结果</button>}
             {hasProgress && <button type="button" className="ghost" onClick={onMinimize}><Minimize2 size={15} />缩到后台继续</button>}
-            {canCloseUpload
-              ? <button type="button" className="ghost" onClick={onClose}>关闭</button>
-              : <button type="button" className="ghost" onClick={onMinimize}>处理中，缩到后台</button>}
+            {canCloseUpload && <button type="button" className="ghost" onClick={onClose}>关闭</button>}
           </div>
         </div>
 
@@ -6988,9 +6994,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
           {uploadError && <UploadErrorHint error={uploadError} />}
         </div>
         <div className="modal-actions">
-          {canCloseUpload
-            ? <button type="button" className="ghost" onClick={onClose}>取消</button>
-            : <button type="button" className="ghost" onClick={onMinimize}>处理中，缩到后台</button>}
+          {canCloseUpload && <button type="button" className="ghost" onClick={onClose}>取消</button>}
           {hasProgress && <button type="button" className="ghost" onClick={onMinimize}>缩到后台继续</button>}
           {preview && <button type="button" className="ghost" onClick={showPreview}>查看识别结果</button>}
           {preview && !confirmed && <button type="button" className="ghost" onClick={requestPreview} disabled={loading}>重新预览</button>}
