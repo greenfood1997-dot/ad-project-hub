@@ -1515,7 +1515,10 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
         setState(payload.data);
         setNotice((current) => current === "项目数据连接暂时中断，正在自动重试；已保留上次成功数据。" ? "项目数据连接已恢复。" : current);
         const first = payload.data?.projects?.[0];
-        if (first?.id && !payload.data.projects.some((project) => project.id === selectedId)) setSelectedId(first.id);
+        setSelectedId((currentId) => {
+          if (currentId && payload.data.projects.some((project) => project.id === currentId)) return currentId;
+          return first?.id || "";
+        });
       })
       .catch((error) => {
         setNotice(error.message === "登录已失效，请重新登录"
