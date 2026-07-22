@@ -1,9 +1,9 @@
-import { readDb, mutateDb, dbMode } from "./db.mjs";
+import { readDb, mutateDb, insertUploadBatch, persistProjectQuoteResult, dbMode } from "./db.mjs";
 import { getCurrentUser, readBody, readRawBody, requireRole, sendJson } from "./http-utils.mjs";
 import { clearLoginFailures, hashPin, isLoginLimited, issueAuthToken, issuePasswordChangeToken, loginLimitKey, recordLoginFailure, verifyPasswordChangeToken, verifyPin } from "./auth.mjs";
 import { getSchedulerStatus, reloadSystemScheduler } from "./scheduler.mjs";
 import { objectStorageReady, resolveStorageSettings } from "./storage-settings.mjs";
-import { createUploadBatch, uploadBatchForUser } from "./upload-batch-service.mjs";
+import { buildUploadBatch, publicUploadBatch, uploadBatchForUser } from "./upload-batch-service.mjs";
 import { createPresignedUpload } from "./upload-storage-service.mjs";
 import { compensationOverview, generateLaborAllocation, saveCompensationMember, saveProjectDividend } from "./compensation-service.mjs";
 import { listCloudRecycleBin, restoreRecycledProject } from "./cloud-recycle-service.mjs";
@@ -1494,7 +1494,9 @@ export async function handleApi(req, res) {
       sendJson(res, 403, { ok: false, error: "无权限向该项目上传文件" });
       return;
     }
-    const data = await mutateDb((db) => createUploadBatch(db, body, user));
+    const job = buildUploadBatch(body, user);
+    await insertUploadBatch(job);
+    const data = publicUploadBatch(job);
     sendJson(res, 200, { ok: true, data });
     return;
   }
@@ -1578,7 +1580,8 @@ export async function handleApi(req, res) {
       sendJson(res, 403, { ok: false, error: "无权限向该项目上传报价表" });
       return;
     }
-    const data = await mutateDb((db) => uploadProjectQuoteSheet(db, body, user));
+    const data = await uploadProjectQuoteSheet(snapshot, body, user);
+    await persistProjectQuoteResult({ ...data, userName: user.name, at: new Date().toISOString() }, snapshot.settings?.parserSkills || []);
     sendJson(res, 200, { ok: true, data });
     return;
   }

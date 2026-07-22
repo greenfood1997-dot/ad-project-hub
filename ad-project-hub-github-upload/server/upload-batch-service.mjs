@@ -28,6 +28,13 @@ function publicBatch(job = {}) {
 }
 
 export function createUploadBatch(db, body, user) {
+  const job = buildUploadBatch(body, user);
+  db.parseJobs = db.parseJobs || [];
+  db.parseJobs.unshift(job);
+  return publicBatch(job);
+}
+
+export function buildUploadBatch(body, user) {
   const now = new Date().toISOString();
   const files = (body.files || []).map((file, index) => ({
     ...file,
@@ -54,8 +61,10 @@ export function createUploadBatch(db, body, user) {
     createdAt: now,
     updatedAt: now
   };
-  db.parseJobs = db.parseJobs || [];
-  db.parseJobs.unshift(job);
+  return job;
+}
+
+export function publicUploadBatch(job) {
   return publicBatch(job);
 }
 

@@ -1610,9 +1610,11 @@ async function normalizeUploadedFiles(files, category, user, now, storageSetting
   storageSettings = resolveStorageSettings(storageSettings);
   return Promise.all((Array.isArray(files) ? files : []).map(async (file) => {
     const withId = { ...file, id: file.id || nextFileId() };
+    // Legacy/browser payloads still carry their bytes here. Extract before
+    // persistence strips base64/buffer; staged worker results already have text.
+    const shouldExtract = (withId.base64 || withId.buffer) && !withId.text;
+    const extracted = shouldExtract ? await extractFileContent(withId) : withId;
     const stored = await persistLocalUploadFile(withId, category, now, storageSettings);
-    const shouldExtract = stored.base64 && (/\.(xlsx|xls|xlsm)$/i.test(stored.name || "") || String(stored.type || "").includes("spreadsheet"));
-    const extracted = shouldExtract || !stored.text ? await extractFileContent(stored) : stored;
     const tableRows = extracted.tableRows || file.tableRows || [];
     const tableText = tableRowsToText(tableRows);
     const extractedText = extracted.extractionStatus === "仅记录文件信息" ? "" : extracted.text;

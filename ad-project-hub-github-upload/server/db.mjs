@@ -51,6 +51,34 @@ export async function mutateUploadBatch(selectJob, mutateJob) {
   });
 }
 
+export async function insertUploadBatch(job) {
+  if (usePostgres) {
+    const { insertPostgresUploadBatch } = await getPostgres();
+    return await retryTransientDatabase(() => insertPostgresUploadBatch(job));
+  }
+  return await mutateDb((db) => {
+    db.parseJobs = db.parseJobs || [];
+    db.parseJobs.unshift(job);
+    return job;
+  });
+}
+
+export async function persistProjectQuoteResult(result, parserSkills = []) {
+  if (usePostgres) {
+    const { persistPostgresProjectQuoteResult } = await getPostgres();
+    return await retryTransientDatabase(() => persistPostgresProjectQuoteResult(result, parserSkills));
+  }
+  return await mutateDb((db) => {
+    const index = (db.projects || []).findIndex((item) => item.id === result.project.id);
+    if (index < 0) throw new Error("项目不存在");
+    db.projects[index] = result.project;
+    db.files.unshift({ files: result.files, projectId: result.project.id, projectName: result.project.name, type: "quote-sheet", user: result.userName, at: result.at });
+    db.settings.parserSkills = parserSkills;
+    db.auditLogs.unshift({ type: "upload", target: result.project.name, action: "quote-sheet", user: result.userName, meta: { count: result.files.length }, at: result.at });
+    return result;
+  });
+}
+
 export function dbMode() {
   return usePostgres ? "postgres" : "json";
 }

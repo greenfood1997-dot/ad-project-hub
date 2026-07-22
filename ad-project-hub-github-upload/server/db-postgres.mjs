@@ -835,3 +835,56 @@ export async function mutateUploadBatchJob(selectJob, mutateJob) {
     db.release();
   }
 }
+
+export async function insertPostgresUploadBatch(job) {
+  await migratePostgres();
+  const activePool = await getPool();
+  await activePool.query(
+    `insert into parse_jobs (
+      id, project_id, project_name, status, progress, steps, files,
+      source_values, extracted_fields, created_at, updated_at
+    ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [
+      job.id, job.projectId, job.projectName, job.status, job.progress,
+      JSON.stringify(job.steps || []), JSON.stringify(job.files || []),
+      JSON.stringify(job.sourceValues || {}), JSON.stringify(job.extractedFields || {}),
+      job.createdAt, job.updatedAt
+    ]
+  );
+  return job;
+}
+
+export async function persistPostgresProjectQuoteResult(result, parserSkills = []) {
+  await migratePostgres();
+  const activePool = await getPool();
+  const db = await activePool.connect();
+  try {
+    await db.query("begin");
+    const locked = await db.query("select id from projects where id=$1 for update", [result.project.id]);
+    if (!locked.rowCount) throw new Error("项目不存在");
+    await db.query(
+      `update projects set ai_summary=$2, extracted_fields=$3 where id=$1`,
+      [result.project.id, result.project.aiSummary || "", JSON.stringify(result.project.extractedFields || {})]
+    );
+    for (const file of result.files || []) {
+      await db.query("delete from project_files where project_id=$1 and name=$2 and size=$3 and coalesce(mime_type,'')=$4", [result.project.id, file.name, file.size || 0, file.type || ""]);
+      await insertProjectFile(db, result.project, file);
+    }
+    await db.query(
+      `insert into settings (type, config_values, saved_at) values ('parserSkills',$1,$2)
+       on conflict (type) do update set config_values=excluded.config_values, saved_at=excluded.saved_at`,
+      [JSON.stringify(parserSkills || []), result.at]
+    );
+    await db.query(
+      "insert into audit_logs (type,target,action,user_name,meta,created_at) values ('upload',$1,'quote-sheet',$2,$3,$4)",
+      [result.project.name, result.userName, JSON.stringify({ count: result.files.length }), result.at]
+    );
+    await db.query("commit");
+    return result;
+  } catch (error) {
+    await db.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    db.release();
+  }
+}
