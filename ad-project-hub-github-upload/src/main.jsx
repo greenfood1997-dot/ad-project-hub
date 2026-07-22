@@ -43,6 +43,7 @@ import { canSeeManagement } from "./utils/permissions.js";
 import ModuleFallback from "./ModuleFallback.jsx";
 import ApprovalFundsPanel from "./ApprovalFunds.jsx";
 import { applyColorScheme, readThemePreferences, THEME_PREFERENCE_KEY } from "./utils/theme.js";
+import { handleUnauthorizedResponse, SESSION_EXPIRED_EVENT } from "./utils/session.js";
 
 applyColorScheme(readThemePreferences());
 
@@ -267,6 +268,7 @@ async function apiRequest(path, session, options = {}) {
     },
   });
   const payload = await res.json();
+  handleUnauthorizedResponse(res, payload);
   if (!payload.ok) {
     const error = new Error(payload.error || "请求失败");
     error.data = payload.data;
@@ -1506,14 +1508,20 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
 
   function loadState() {
     return fetch("/api/state", { headers: { authorization: `Bearer ${session.token || ""}` } })
-      .then((res) => res.json())
-      .then((payload) => {
+      .then(async (res) => ({ res, payload: await res.json() }))
+      .then(({ res, payload }) => {
+        if (handleUnauthorizedResponse(res, payload)) return;
         if (!payload.ok) throw new Error(payload.error || "读取项目数据失败");
         setState(payload.data);
+        setNotice((current) => current === "项目数据连接暂时中断，正在自动重试；已保留上次成功数据。" ? "项目数据连接已恢复。" : current);
         const first = payload.data?.projects?.[0];
         if (first?.id && !payload.data.projects.some((project) => project.id === selectedId)) setSelectedId(first.id);
       })
-      .catch(() => setState({ projects: [] }));
+      .catch((error) => {
+        setNotice(error.message === "登录已失效，请重新登录"
+          ? error.message
+          : "项目数据连接暂时中断，正在自动重试；已保留上次成功数据。");
+      });
   }
 
   useEffect(() => {
@@ -1523,6 +1531,13 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
   useEffect(() => {
     if (!view.startsWith("admin")) loadState();
   }, [view]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (!document.hidden && !view.startsWith("admin")) loadState();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [session.id, view]);
 
   useEffect(() => {
     fetch("/api/health")
@@ -7101,7 +7116,7 @@ function BackupDiffPreview({ diff }) {
   );
 }
 
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin, notice = "" }) {
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
@@ -7171,6 +7186,7 @@ function LoginScreen({ onLogin }) {
           </div>
         </div>
         <form onSubmit={resetToken ? changePassword : submit}>
+          {notice && <p className="login-session-notice">{notice}</p>}
           {resetToken && <p className="login-hint">这是临时 PIN，请先设置新的 6-12 位数字 PIN。</p>}
           {!resetToken && <>
           <label>
@@ -7304,6 +7320,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
       },
     });
     const payload = await res.json();
+    handleUnauthorizedResponse(res, payload);
     if (!payload.ok) throw new Error(payload.error || "请求失败");
     return payload.data;
   }
@@ -7323,6 +7340,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
   async function loadSettings() {
     const res = await fetch("/api/state", { headers: { authorization: `Bearer ${session.token || ""}` } });
     const payload = await res.json();
+    if (handleUnauthorizedResponse(res, payload)) return;
     if (!payload.ok) throw new Error(payload.error || "读取设置失败");
     const settings = payload.data?.settings || {};
     setFeishuBindings(payload.data?.feishuProjectBindings || []);
@@ -7723,6 +7741,7 @@ function AdminMembers({ session, setView, onLogout, initialTab = "members" }) {
     setFeishuBindings(await api("/api/integrations/feishu/bindings"));
     const res = await fetch("/api/state", { headers: { authorization: `Bearer ${session.token || ""}` } });
     const payload = await res.json();
+    if (handleUnauthorizedResponse(res, payload)) return;
     if (payload.ok) {
       setFeishuEvents(payload.data?.feishuEvents || []);
       setFeishuPendingFiles(payload.data?.feishuPendingFiles || []);
@@ -8827,14 +8846,27 @@ function AppShell() {
     }
   });
   const [view, setView] = useState("app");
+  const [loginNotice, setLoginNotice] = useState("");
+
+  useEffect(() => {
+    function handleSessionExpired(event) {
+      localStorage.removeItem(SESSION_KEY);
+      setSession(null);
+      setView("app");
+      setLoginNotice(event.detail?.message || "登录已失效，请重新登录");
+    }
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+  }, []);
 
   function logout() {
     localStorage.removeItem(SESSION_KEY);
     setSession(null);
     setView("app");
+    setLoginNotice("");
   }
 
-  if (!session) return <LoginScreen onLogin={setSession} />;
+  if (!session) return <LoginScreen onLogin={(data) => { setLoginNotice(""); setSession(data); }} sessionKey={SESSION_KEY} notice={loginNotice} />;
   const adminRouteMap = {
     admin: "members",
     "admin:ai": "ai",

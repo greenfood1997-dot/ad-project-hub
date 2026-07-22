@@ -55,3 +55,13 @@
 .login-divider::before, .login-divider::after { content: ""; flex: 1; height: 1px; background: #e2e8f0; }
 .feishu-login-button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; border: 1px solid #3370ff; border-radius: 9px; color: #245bdb; font-weight: 700; text-decoration: none; }
 .feishu-login-button:hover { background: #f2f6ff; }
+.login-session-notice {
+  margin: 0 0 12px;
+  border: 1px solid #f5c2bd;
+  border-radius: 8px;
+  background: #fff2f0;
+  color: #b42318;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}

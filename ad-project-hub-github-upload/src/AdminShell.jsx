@@ -1,6 +1,7 @@
 import React, { Suspense, useEffect, useRef, useState } from "react";
 import { Bot, ChevronRight, Cloud, Coins, DatabaseBackup, HeartPulse, LayoutDashboard, LogOut, Plus, Settings2, Trash2, UserCog, UsersRound, WalletCards } from "lucide-react";
 import { downloadFile, readApiPayload } from "./utils/api.js";
+import { handleUnauthorizedResponse } from "./utils/session.js";
 import { money } from "./utils/format.js";
 import { canManageAssignmentsRole, canUseAdminRole, roleLabel, roleOptions } from "./utils/permissions.js";
 import { deployReadinessActions } from "./utils/deployReadiness.js";
@@ -163,6 +164,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
       },
     });
     const payload = await readApiPayload(res);
+    handleUnauthorizedResponse(res, payload);
     if (!payload.ok) throw new Error(payload.error || "请求失败");
     return payload.data;
   }
@@ -182,6 +184,7 @@ export default function AdminShell({ session, setView, onLogout, initialTab = "m
   async function loadSettings() {
     const res = await fetch("/api/state", { headers: { authorization: `Bearer ${session.token || ""}`, "x-user-id": session.id } });
     const payload = await readApiPayload(res, "读取设置失败，请稍后重试");
+    if (handleUnauthorizedResponse(res, payload)) return;
     if (!payload.ok) throw new Error(payload.error || "读取设置失败");
     const settings = payload.data?.settings || {};
     setProjectRecords(payload.data?.projects || []);

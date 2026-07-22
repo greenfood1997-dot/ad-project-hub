@@ -1,3 +1,5 @@
+import { handleUnauthorizedResponse } from "./session.js";
+
 const IDEMPOTENT_PATHS = new Set(["/api/payments", "/api/approvals", "/api/projects/cost-sheet"]);
 const idempotencyKeys = new Map();
 
@@ -35,6 +37,7 @@ export async function apiRequest(path, session, options = {}) {
     },
   });
   const payload = await readApiPayload(res);
+  handleUnauthorizedResponse(res, payload);
   if (!payload.ok) {
     const error = new Error(payload.error || "请求失败");
     error.data = payload.data;
@@ -50,6 +53,7 @@ export async function downloadFile(path, session, filename) {
       "x-user-id": session.id,
     },
   });
+  if (handleUnauthorizedResponse(res)) throw new Error("登录已失效，请重新登录");
   if (!res.ok) throw new Error("导出失败，请稍后再试");
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

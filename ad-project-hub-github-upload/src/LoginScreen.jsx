@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { LockKeyhole, Mail, MessageSquare } from "lucide-react";
 import "./login.css";
 
-export default function LoginScreen({ onLogin, sessionKey }) {
+export default function LoginScreen({ onLogin, sessionKey, notice = "" }) {
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
@@ -52,6 +52,7 @@ export default function LoginScreen({ onLogin, sessionKey }) {
           </div>
         </div>
         <form onSubmit={submit}>
+          {notice && <p className="login-session-notice">{notice}</p>}
           <label>
             <span>邮箱</span>
             <div className="input-row"><Mail size={16} /><input value={email} onChange={(event) => setEmail(event.target.value)} /></div>
