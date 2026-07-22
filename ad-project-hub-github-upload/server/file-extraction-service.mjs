@@ -48,6 +48,9 @@ export async function extractFileContent(file, options = {}) {
       if (shouldUseOcrForPdf(text) && !tencentOcrConfigured()) {
         console.warn(`[OCR] ${name}: Tencent OCR is not configured`);
       }
+      if (!shouldUseOcrForPdf(text)) {
+        console.log(`[OCR] ${name}: skipped because PDF text already contains recognizable amount/date fields`);
+      }
       return {
         ...file,
         text,

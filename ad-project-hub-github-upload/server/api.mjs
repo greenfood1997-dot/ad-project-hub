@@ -1447,7 +1447,8 @@ export async function handleApi(req, res) {
       sendJson(res, 403, { ok: false, error: "无权限向该项目上传文件" });
       return;
     }
-    const data = await mutateDb((db) => stageProjectUploadFile(db, body, user));
+    // File persistence can take minutes for large evidence packs and must never hold the global DB write lock.
+    const data = await stageProjectUploadFile(snapshot, body, user);
     sendJson(res, 200, { ok: true, data });
     return;
   }

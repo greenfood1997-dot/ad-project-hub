@@ -104,14 +104,18 @@ export async function hydrateStoredFile(file = {}) {
 }
 
 export async function processClaimedUploadFile(claim) {
+  console.log(`[UPLOAD-BATCH] ${claim.batchId} file ${claim.batchIndex + 1}: loading ${claim.file.name || "unnamed file"}`);
   const hydrated = await hydrateStoredFile(claim.file);
-  return await extractFileContent(hydrated, {
+  console.log(`[UPLOAD-BATCH] ${claim.batchId} file ${claim.batchIndex + 1}: extracting ${claim.file.name || "unnamed file"}`);
+  const result = await extractFileContent(hydrated, {
     shouldUseOcrForPdf(text = "") {
       const normalized = String(text).trim();
       if (!normalized) return true;
       return !/\d[\d,.]*\s*(?:元|万元|人民币)/.test(normalized) && !/\d{4}[年\-/]\d{1,2}/.test(normalized);
     }
   });
+  console.log(`[UPLOAD-BATCH] ${claim.batchId} file ${claim.batchIndex + 1}: completed ${result.extractionStatus || "content extraction"}`);
+  return result;
 }
 
 export function finishUploadBatchFile(db, claim, result, error = null) {

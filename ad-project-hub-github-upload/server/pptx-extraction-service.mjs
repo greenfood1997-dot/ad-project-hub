@@ -95,6 +95,7 @@ export async function extractPptxContent(file = {}) {
     slide.ocrText && `图片OCR：\n${slide.ocrText}`
   ].filter(Boolean).join("\n")).join("\n\n");
   const ocrSlides = slides.filter((slide) => slide.ocrText).length;
+  console.log(`[OCR] ${file.name || "PPTX"}: ${tencentOcrConfigured() ? `processed ${slides.length} slides, ${ocrSlides} with image OCR text` : "skipped because Tencent OCR is not configured"}`);
   return {
     text,
     tableRows,
