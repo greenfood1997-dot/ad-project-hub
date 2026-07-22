@@ -1047,9 +1047,9 @@ export async function handleApi(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/state") {
-    await mutateDb((db) => scanSystemNotifications(db, { id: "system", name: "系统扫描" }));
-    const fresh = await readDb();
-    const scoped = scopedSnapshot(fresh, ensureMemberFields(user));
+    // State polling is read-only. Notification generation is handled by the
+    // scheduler and explicit actions, so a page refresh must never rewrite DB.
+    const scoped = scopedSnapshot(snapshot, ensureMemberFields(user));
     sendJson(res, 200, {
       ok: true,
       data: publicState(scoped, ensureMemberFields(user)),
