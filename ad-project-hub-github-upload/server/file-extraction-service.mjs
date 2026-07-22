@@ -15,10 +15,10 @@ export async function extractFileContent(file, options = {}) {
   };
 
   try {
-    if (file.text && !file.base64) return { ...file, extractionStatus: "浏览器已读取文本" };
-    if (!file.base64) return fallback;
+    if (file.text && !file.base64 && !file.buffer) return { ...file, extractionStatus: "浏览器已读取文本" };
+    if (!file.base64 && !file.buffer) return fallback;
 
-    const buffer = Buffer.from(file.base64, "base64");
+    const buffer = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(file.base64, "base64");
     if (lowerName.endsWith(".pdf") || type === "application/pdf") {
       const pdfParse = (await import("pdf-parse")).default;
       const parsed = await pdfParse(buffer);
@@ -27,7 +27,7 @@ export async function extractFileContent(file, options = {}) {
         const reason = text ? "PDF 文本缺少可解析金额/日期" : "PDF 未提取到文本";
         console.log(`[OCR] ${name}: ${reason}; calling Tencent OCR`);
         try {
-          const ocr = await recognizeFileWithTencentOcrDetailed(file, { isPdf: true, pageCount: parsed.numpages });
+          const ocr = await recognizeFileWithTencentOcrDetailed({ ...file, base64: file.base64 || buffer.toString("base64") }, { isPdf: true, pageCount: parsed.numpages });
           console.log(`[OCR] ${name}: Tencent OCR returned ${ocr.text.length} characters`);
           return {
             ...file,
@@ -61,7 +61,7 @@ export async function extractFileContent(file, options = {}) {
       if (!tencentOcrConfigured()) return fallback;
       try {
         console.log(`[OCR] ${name}: calling Tencent OCR for image`);
-        const ocrText = await recognizeFileWithTencentOcr(file, { isPdf: false });
+        const ocrText = await recognizeFileWithTencentOcr({ ...file, base64: file.base64 || buffer.toString("base64") }, { isPdf: false });
         console.log(`[OCR] ${name}: Tencent OCR returned ${ocrText.length} characters`);
         return {
           ...file,

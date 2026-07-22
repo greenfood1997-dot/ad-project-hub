@@ -8,10 +8,12 @@ const zip = new JSZip();
 zip.file("ppt/slides/slide1.xml", '<p:sld><a:t>12月结算材料</a:t><a:t>申报金额 220209.52 元</a:t></p:sld>');
 const base64 = await zip.generateAsync({ type: "base64" });
 const result = await extractPptxContent({ name: "结算材料.pptx", type: "application/vnd.openxmlformats-officedocument.presentationml.presentation", base64 });
+const bufferResult = await extractPptxContent({ name: "结算材料.pptx", type: "application/vnd.openxmlformats-officedocument.presentationml.presentation", buffer: Buffer.from(base64, "base64") });
 
 assert.equal(result.pageCount, 1);
 assert.match(result.text, /12月结算材料/);
 assert.match(result.text, /220209\.52/);
 assert.equal(result.tableRows[0].sheetName, "PPT第1页");
+assert.equal(bufferResult.text, result.text, "PPTX extraction should accept a memory-efficient binary buffer");
 
 console.log("pptx extraction regression passed");

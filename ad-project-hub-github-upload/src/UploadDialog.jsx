@@ -154,8 +154,19 @@ export default function UploadDialog({ session, projects, selected, initialType 
   }
 
   async function waitForUploadBatch(id) {
+    let temporaryFailures = 0;
     for (;;) {
-      const batch = await apiRequest(`/api/upload-batches/${encodeURIComponent(id)}`, session);
+      let batch;
+      try {
+        batch = await apiRequest(`/api/upload-batches/${encodeURIComponent(id)}`, session);
+        temporaryFailures = 0;
+      } catch (error) {
+        if (!/服务正在重启|暂时不可用|Failed to fetch|network|连接|502|503|504/i.test(String(error?.message || error))) throw error;
+        temporaryFailures += 1;
+        setProgress({ step: "preview", percent: 62, text: `服务短暂恢复中，后台任务仍保留，正在第 ${temporaryFailures} 次重连` });
+        await new Promise((resolve) => window.setTimeout(resolve, 3000));
+        continue;
+      }
       setProgress({ step: "preview", percent: batch.progress, text: batch.status === "ready" ? "文件解析完成，正在生成整批预览" : `后台解析中：${batch.files.filter((file) => file.taskStatus === "completed").length}/${batch.files.length} 个文件` });
       if (batch.status === "ready") return batch.files;
       if (batch.status === "failed") throw new Error(batch.error || "部分文件后台解析失败，请重试");

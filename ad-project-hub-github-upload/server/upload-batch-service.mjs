@@ -84,12 +84,12 @@ export function claimUploadBatch(db) {
 }
 
 export async function hydrateStoredFile(file = {}) {
-  if (file.base64) return file;
+  if (file.buffer || file.base64) return file;
   const localPath = file.localStoragePath || (file.storageProvider === "local" ? file.storagePath : "");
   if (localPath) {
     try {
       const buffer = await readFile(join(rootDir, localPath));
-      return { ...file, base64: buffer.toString("base64") };
+      return { ...file, buffer };
     } catch (error) {
       if (!/^https?:\/\//i.test(file.storageUrl || "")) throw error;
       // Render local disks are ephemeral; fall back to durable object storage after a restart.
@@ -98,7 +98,7 @@ export async function hydrateStoredFile(file = {}) {
   if (/^https?:\/\//i.test(file.storageUrl || "")) {
     const response = await fetch(file.storageUrl);
     if (!response.ok) throw new Error(`对象存储读取失败：${response.status}`);
-    return { ...file, base64: Buffer.from(await response.arrayBuffer()).toString("base64") };
+    return { ...file, buffer: Buffer.from(await response.arrayBuffer()) };
   }
   throw new Error("文件没有可恢复的存储地址");
 }
@@ -122,7 +122,7 @@ export function finishUploadBatchFile(db, claim, result, error = null) {
     file.error = error.message;
     file.taskStatus = file.attempts < MAX_ATTEMPTS ? "queued" : "failed";
   } else {
-    const { base64, dataUrl, ...reference } = result;
+    const { base64, buffer, dataUrl, ...reference } = result;
     Object.assign(file, reference, { taskStatus: "completed", error: "", leaseUntil: "" });
   }
   const completed = job.files.filter((item) => item.taskStatus === "completed").length;

@@ -28,7 +28,8 @@ const server = createServer((req, res) => {
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const port = server.address().port;
 const hydrated = await hydrateStoredFile({ localStoragePath: "uploads/missing.pdf", storageUrl: `http://127.0.0.1:${port}/file.pdf` });
-assert.equal(Buffer.from(hydrated.base64, "base64").toString(), "durable-object");
+assert.equal(hydrated.buffer.toString(), "durable-object");
+assert.equal(hydrated.base64, undefined, "background hydration should not create another large base64 copy");
 server.close();
 
 console.log("upload batch worker regression passed");

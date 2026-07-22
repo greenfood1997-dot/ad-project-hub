@@ -45,7 +45,7 @@ function imageMimeType(path = "") {
 }
 
 export async function extractPptxContent(file = {}) {
-  const buffer = Buffer.from(String(file.base64 || ""), "base64");
+  const buffer = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(String(file.base64 || ""), "base64");
   if (!buffer.length) throw new Error("PPTX 缺少文件内容");
   const zip = await JSZip.loadAsync(buffer);
   const slidePaths = Object.keys(zip.files)
