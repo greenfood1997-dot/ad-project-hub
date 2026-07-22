@@ -5,6 +5,7 @@ import { defaultDb } from "./default-db.mjs";
 import { isTransientDatabaseError } from "./database-errors.mjs";
 
 let pool;
+let migrationPromise;
 const MUTATION_LOCK_KEY = 1463899201;
 
 async function getPool() {
@@ -16,10 +17,19 @@ async function getPool() {
 }
 
 export async function migratePostgres() {
-  const sqlPath = fileURLToPath(new URL("../db/schema.postgres.sql", import.meta.url));
-  const sql = await readFile(sqlPath, "utf8");
-  const db = await getPool();
-  await db.query(sql);
+  if (!migrationPromise) {
+    migrationPromise = (async () => {
+      const sqlPath = fileURLToPath(new URL("../db/schema.postgres.sql", import.meta.url));
+      const sql = await readFile(sqlPath, "utf8");
+      const db = await getPool();
+      await db.query(sql);
+    })().catch((error) => {
+      // A failed startup/recovery attempt must remain retryable.
+      migrationPromise = undefined;
+      throw error;
+    });
+  }
+  return await migrationPromise;
 }
 
 export async function readPostgresDb(client = null) {

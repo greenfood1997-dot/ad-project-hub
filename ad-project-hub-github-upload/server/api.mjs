@@ -1432,7 +1432,9 @@ export async function handleApi(req, res) {
       sendJson(res, 403, { ok: false, error: "无权限向该项目上传文件" });
       return;
     }
-    const data = await mutateDb((db) => previewProjectUpload(db, body, user));
+    // Preview only derives a response from the request snapshot. Rewriting the
+    // entire database here creates needless lock contention during OCR jobs.
+    const data = await previewProjectUpload(snapshot, body, user);
     sendJson(res, 200, { ok: true, data });
     return;
   }
