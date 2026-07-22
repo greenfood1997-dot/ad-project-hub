@@ -13,7 +13,7 @@ function safeFileName(name = "file") {
   return `${base}${ext || ""}`;
 }
 
-function storageObjectKey(file = {}, category = "file", now = new Date().toISOString(), settings = {}) {
+export function storageObjectKey(file = {}, category = "file", now = new Date().toISOString(), settings = {}) {
   const prefix = String(settings.pathPrefix || settings.prefix || "ad-project-hub").replace(/^\/+|\/+$/g, "");
   const day = now.slice(0, 10);
   const id = file.id || nextFileId();
@@ -31,6 +31,56 @@ function s3PublicUrl(settings = {}, objectKey = "") {
   const endpoint = String(settings.endpoint || "").replace(/\/+$/, "");
   if (!endpoint) return "";
   return `${endpoint}/${settings.bucket}/${objectKey.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function s3RequestTarget(settings = {}, objectKey = "") {
+  const endpointUrl = new URL(String(settings.endpoint || `https://${settings.bucket}.s3.${settings.region || "us-east-1"}.amazonaws.com`).replace(/\/+$/, ""));
+  const pathStyle = settings.pathStyle === true || settings.pathStyle === "true" || endpointUrl.hostname.includes("r2.cloudflarestorage.com") || endpointUrl.hostname.includes("localhost") || endpointUrl.hostname.includes("127.0.0.1");
+  const canonicalUri = `/${[pathStyle ? settings.bucket : "", objectKey].filter(Boolean).join("/").split("/").map(encodeURIComponent).join("/")}`;
+  const host = pathStyle ? endpointUrl.host : `${settings.bucket}.${endpointUrl.host}`;
+  return { endpointUrl, canonicalUri, host };
+}
+
+function awsEncode(value = "") {
+  return encodeURIComponent(String(value)).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+export function createPresignedUpload(file = {}, category = "file", settings = {}, expiresSeconds = 600) {
+  if (!s3Enabled(settings)) throw new Error("对象存储未配置，无法生成直传地址");
+  const now = new Date();
+  const objectKey = storageObjectKey(file, category, now.toISOString(), settings);
+  const { endpointUrl, canonicalUri, host } = s3RequestTarget(settings, objectKey);
+  const region = String(settings.region || "us-east-1");
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const date = amzDate.slice(0, 8);
+  const credentialScope = `${date}/${region}/s3/aws4_request`;
+  const params = {
+    "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+    "X-Amz-Credential": `${settings.accessKeyId}/${credentialScope}`,
+    "X-Amz-Date": amzDate,
+    "X-Amz-Expires": String(Math.max(60, Math.min(Number(expiresSeconds) || 600, 900))),
+    "X-Amz-SignedHeaders": "host"
+  };
+  const canonicalQuery = Object.entries(params).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => `${awsEncode(key)}=${awsEncode(value)}`).join("&");
+  const canonicalRequest = ["PUT", canonicalUri, canonicalQuery, `host:${host}\n`, "host", "UNSIGNED-PAYLOAD"].join("\n");
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credentialScope, sha256Hex(canonicalRequest)].join("\n");
+  const signingKey = hmacBuffer(hmacBuffer(hmacBuffer(hmacBuffer(`AWS4${settings.secretAccessKey}`, date), region), "s3"), "aws4_request");
+  const signature = hmacHex(signingKey, stringToSign);
+  return {
+    uploadUrl: `${endpointUrl.protocol}//${host}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`,
+    objectKey,
+    storageUrl: s3PublicUrl(settings, objectKey),
+    storageProvider: settings.provider || "s3-compatible",
+    expiresIn: Number(params["X-Amz-Expires"])
+  };
+}
+
+export async function downloadStoredObject(file = {}, settings = {}) {
+  if (!s3Enabled(settings) || !file.storagePath) throw new Error("对象存储下载配置不完整");
+  const { url, headers } = s3SignedHeaders({ settings, objectKey: file.storagePath, method: "GET" });
+  const response = await fetch(url, { headers });
+  if (!response.ok) throw new Error(`对象存储读取失败：${response.status}`);
+  return Buffer.from(await response.arrayBuffer());
 }
 
 function s3SignedHeaders({ settings = {}, objectKey = "", buffer = Buffer.alloc(0), contentType = "application/octet-stream", method = "PUT", now = new Date() }) {

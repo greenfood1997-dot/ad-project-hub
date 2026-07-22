@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { rootDir } from "./config.mjs";
 import { extractFileContent } from "./file-extraction-service.mjs";
+import { resolveStorageSettings } from "./storage-settings.mjs";
+import { downloadStoredObject } from "./upload-storage-service.mjs";
 
 const LEASE_MS = 5 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
@@ -107,6 +109,10 @@ export async function hydrateStoredFile(file = {}) {
     }
   }
   if (/^https?:\/\//i.test(file.storageUrl || "")) {
+    const settings = resolveStorageSettings({});
+    if (file.storagePath && file.storageProvider !== "local") {
+      return { ...file, buffer: await downloadStoredObject(file, settings) };
+    }
     const response = await fetch(file.storageUrl);
     if (!response.ok) throw new Error(`对象存储读取失败：${response.status}`);
     return { ...file, buffer: Buffer.from(await response.arrayBuffer()) };

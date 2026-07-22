@@ -72,6 +72,22 @@ export async function uploadFileBinary(file, metadata, session) {
   return payload.data;
 }
 
+export async function uploadFileDirect(file, metadata, session) {
+  const signed = await apiRequest("/api/uploads/presign", session, {
+    method: "POST",
+    body: JSON.stringify({ ...metadata, name: file.name, size: file.size, mimeType: file.type }),
+  });
+  const response = await fetch(signed.uploadUrl, { method: "PUT", body: file });
+  if (!response.ok) throw new Error(`COS 直传失败：${response.status}`);
+  return {
+    ...signed.file,
+    storageUrl: signed.storageUrl,
+    storagePath: signed.objectKey,
+    storageProvider: signed.storageProvider,
+    storageStatus: "浏览器已直传对象存储",
+  };
+}
+
 export async function downloadFile(path, session, filename) {
   const res = await fetch(path, {
     headers: {

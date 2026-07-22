@@ -4,6 +4,7 @@ import { clearLoginFailures, hashPin, isLoginLimited, issueAuthToken, issuePassw
 import { getSchedulerStatus, reloadSystemScheduler } from "./scheduler.mjs";
 import { objectStorageReady, resolveStorageSettings } from "./storage-settings.mjs";
 import { createUploadBatch, uploadBatchForUser } from "./upload-batch-service.mjs";
+import { createPresignedUpload } from "./upload-storage-service.mjs";
 import { compensationOverview, generateLaborAllocation, saveCompensationMember, saveProjectDividend } from "./compensation-service.mjs";
 import { listCloudRecycleBin, restoreRecycledProject } from "./cloud-recycle-service.mjs";
 import { exchangeFeishuLoginCode, feishuLoginUrl, upsertFeishuIdentity } from "./feishu-identity-service.mjs";
@@ -1459,6 +1460,24 @@ export async function handleApi(req, res) {
     // File persistence can take minutes for large evidence packs and must never hold the global DB write lock.
     const data = await stageProjectUploadFile(snapshot, body, user);
     sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/uploads/presign") {
+    const body = await readBody(req);
+    if (body.type === "create-project") {
+      if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
+    } else if (!requireRole(user, PROJECT_UPLOAD_ROLES, res)) {
+      return;
+    }
+    if (body.type !== "create-project" && !canAccessProject(snapshot, user, body.id)) {
+      sendJson(res, 403, { ok: false, error: "无权限向该项目上传文件" });
+      return;
+    }
+    const category = body.type === "cost-sheet" ? "execution-cost" : body.type === "quote-sheet" ? "quote-sheet" : body.type === "verification-sheet" ? "verification-sheet" : "project";
+    const file = { id: `F-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name: body.name, size: Number(body.size || 0), type: body.mimeType || "application/octet-stream" };
+    const signed = createPresignedUpload(file, category, resolveStorageSettings(snapshot.settings?.storage || {}));
+    sendJson(res, 200, { ok: true, data: { ...signed, file: { ...file, category } } });
     return;
   }
 

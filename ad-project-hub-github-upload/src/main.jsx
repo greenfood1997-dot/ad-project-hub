@@ -296,6 +296,16 @@ async function uploadFileBinary(file, metadata, session) {
   return payload.data;
 }
 
+async function uploadFileDirect(file, metadata, session) {
+  const signed = await apiRequest("/api/uploads/presign", session, {
+    method: "POST",
+    body: JSON.stringify({ ...metadata, name: file.name, size: file.size, mimeType: file.type }),
+  });
+  const response = await fetch(signed.uploadUrl, { method: "PUT", body: file });
+  if (!response.ok) throw new Error(`COS 直传失败：${response.status}`);
+  return { ...signed.file, storageUrl: signed.storageUrl, storagePath: signed.objectKey, storageProvider: signed.storageProvider, storageStatus: "浏览器已直传对象存储" };
+}
+
 function explainUploadError(error) {
   const raw = String(error?.message || error || "识别失败，请稍后重试。");
   const compact = raw.replace(/^Error:\s*/i, "").trim();
@@ -6717,7 +6727,14 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
         continue;
       }
       setProgress({ step: "preview", percent: 20 + Math.round((index / Math.max(files.length, 1)) * 38), text: `正在上传并读取第 ${index + 1}/${files.length} 个文件：${file.name}` });
-      const staged = await uploadFileBinary(file, type === "create-project" ? { type } : { type, id: targetProject.id }, session);
+      const metadata = type === "create-project" ? { type } : { type, id: targetProject.id };
+      let staged;
+      try {
+        staged = await uploadFileDirect(file, metadata, session);
+      } catch (error) {
+        if (!/对象存储未配置|直传|Failed to fetch|network/i.test(String(error?.message || error))) throw error;
+        staged = await uploadFileBinary(file, metadata, session);
+      }
       setStagedFiles((current) => ({ ...current, [key]: staged }));
       uploaded.push(staged);
     }

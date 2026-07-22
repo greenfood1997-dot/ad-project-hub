@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Minimize2, UploadCloud } from "lucide-react";
-import { apiRequest, uploadFileBinary, uploadedFileKey } from "./utils/api.js";
+import { apiRequest, uploadFileBinary, uploadFileDirect, uploadedFileKey } from "./utils/api.js";
 import { fileSize, money } from "./utils/format.js";
 import { canCreateProjectRole } from "./utils/permissions.js";
 import { explainUploadError } from "./utils/uploadErrors.js";
@@ -143,7 +143,14 @@ export default function UploadDialog({ session, projects, selected, initialType 
         continue;
       }
       setProgress({ step: "preview", percent: 20 + Math.round((index / Math.max(files.length, 1)) * 38), text: `正在上传并读取第 ${index + 1}/${files.length} 个文件：${file.name}` });
-      const staged = await uploadFileBinary(file, type === "create-project" ? { type } : { type, id: targetProject.id }, session);
+      const metadata = type === "create-project" ? { type } : { type, id: targetProject.id };
+      let staged;
+      try {
+        staged = await uploadFileDirect(file, metadata, session);
+      } catch (error) {
+        if (!/对象存储未配置|直传|Failed to fetch|network/i.test(String(error?.message || error))) throw error;
+        staged = await uploadFileBinary(file, metadata, session);
+      }
       setStagedFiles((current) => ({ ...current, [key]: staged }));
       uploaded.push(staged);
     }
