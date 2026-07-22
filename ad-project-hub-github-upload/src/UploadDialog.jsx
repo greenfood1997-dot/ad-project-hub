@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Minimize2, UploadCloud } from "lucide-react";
-import { apiRequest, fileToPayload, uploadedFileKey } from "./utils/api.js";
+import { apiRequest, uploadFileBinary, uploadedFileKey } from "./utils/api.js";
 import { fileSize, money } from "./utils/format.js";
 import { canCreateProjectRole } from "./utils/permissions.js";
 import { explainUploadError } from "./utils/uploadErrors.js";
@@ -75,7 +75,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
   async function appendPickedFiles(picked = []) {
     setMessage("");
     setUploadError(null);
-    const payloads = await Promise.all(picked.map(fileToPayload));
+    const payloads = picked;
     const oversized = picked.find((file) => file.size > 40 * 1024 * 1024 && /pdf/i.test(file.type || file.name));
     setFiles((current) => {
       const merged = [...current];
@@ -143,10 +143,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
         continue;
       }
       setProgress({ step: "preview", percent: 20 + Math.round((index / Math.max(files.length, 1)) * 38), text: `正在上传并读取第 ${index + 1}/${files.length} 个文件：${file.name}` });
-      const staged = await apiRequest("/api/projects/upload-file", session, {
-        method: "POST",
-        body: JSON.stringify(type === "create-project" ? { type, file } : { type, id: targetProject.id, file }),
-      });
+      const staged = await uploadFileBinary(file, type === "create-project" ? { type } : { type, id: targetProject.id }, session);
       setStagedFiles((current) => ({ ...current, [key]: staged }));
       uploaded.push(staged);
     }

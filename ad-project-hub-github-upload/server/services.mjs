@@ -2121,8 +2121,8 @@ function storedFileContentType(file = {}) {
 
 async function persistLocalUploadFile(file = {}, category = "file", now = new Date().toISOString(), storageSettings = {}) {
   if (file.storageUrl || file.storagePath) return file;
-  if (!file.base64) return { ...file, storageStatus: file.storageStatus || "仅记录文件信息" };
-  const buffer = Buffer.from(String(file.base64 || ""), "base64");
+  if (!file.base64 && !file.buffer) return { ...file, storageStatus: file.storageStatus || "仅记录文件信息" };
+  const buffer = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(String(file.base64 || ""), "base64");
   if (!buffer.length) return { ...file, storageStatus: "仅记录文件信息" };
   const day = now.slice(0, 10);
   const id = file.id || nextFileId();
@@ -2131,8 +2131,9 @@ async function persistLocalUploadFile(file = {}, category = "file", now = new Da
   const name = `${id}-${safeFileName(file.name || "upload")}`;
   const diskPath = join(folder, name);
   await writeFile(diskPath, buffer);
+  const { base64, buffer: rawBuffer, ...fileReference } = file;
   const localRecord = {
-    ...file,
+    ...fileReference,
     id,
     storageUrl: `/uploads/${day}/${encodeURIComponent(name)}`,
     storagePath: `uploads/${day}/${name}`,

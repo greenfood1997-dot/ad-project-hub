@@ -41,7 +41,7 @@ const supplierSource = await readFile(new URL("../src/SupplierLibrary.jsx", impo
 assert(mainSource.includes('import { apiRequest } from "./utils/api.js";'), "main should use shared API helper");
 assert(adminShellSource.includes('import { downloadFile } from "./utils/api.js";'), "admin shell should use shared download helper");
 assert(projectDetailSource.includes('import { apiRequest, uploadedFileKey } from "./utils/api.js";'), "project detail should use shared request/upload key helpers");
-assert(uploadSource.includes('import { apiRequest, fileToPayload, uploadedFileKey } from "./utils/api.js";'), "upload dialog should use shared upload helpers");
+assert(uploadSource.includes('import { apiRequest, uploadFileBinary, uploadedFileKey } from "./utils/api.js";'), "upload dialog should use shared binary upload helpers");
 assert(aiSource.includes('import { apiRequest, fileToPayload } from "./utils/api.js";'), "AI workspace should use shared request/file helpers");
 assert(supplierSource.includes('import { apiRequest, downloadFile } from "./utils/api.js";'), "supplier library should use shared request/download helpers");
 assert(!mainSource.includes("apiRequest={apiRequest}") && !mainSource.includes("downloadFile={downloadFile}"), "supplier library should not receive duplicated helper props");

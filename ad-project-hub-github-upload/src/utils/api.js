@@ -46,6 +46,32 @@ export async function apiRequest(path, session, options = {}) {
   return payload.data;
 }
 
+export async function uploadFileBinary(file, metadata, session) {
+  if (!(file instanceof Blob)) {
+    return await apiRequest("/api/projects/upload-file", session, {
+      method: "POST",
+      body: JSON.stringify({ ...metadata, file }),
+    });
+  }
+  const res = await fetch("/api/projects/upload-file", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${session.token || ""}`,
+      "x-user-id": session.id,
+      "content-type": file.type || "application/octet-stream",
+      "x-upload-name": encodeURIComponent(file.name || "upload.bin"),
+      "x-upload-type": file.type || "application/octet-stream",
+      "x-upload-kind": metadata.type || "",
+      "x-project-id": metadata.id || "",
+    },
+    body: file,
+  });
+  const payload = await readApiPayload(res);
+  handleUnauthorizedResponse(res, payload);
+  if (!payload.ok) throw new Error(payload.error || "文件上传失败");
+  return payload.data;
+}
+
 export async function downloadFile(path, session, filename) {
   const res = await fetch(path, {
     headers: {

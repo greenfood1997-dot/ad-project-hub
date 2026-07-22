@@ -1,5 +1,5 @@
 import { readDb, mutateDb, dbMode } from "./db.mjs";
-import { getCurrentUser, readBody, requireRole, sendJson } from "./http-utils.mjs";
+import { getCurrentUser, readBody, readRawBody, requireRole, sendJson } from "./http-utils.mjs";
 import { clearLoginFailures, hashPin, isLoginLimited, issueAuthToken, issuePasswordChangeToken, loginLimitKey, recordLoginFailure, verifyPasswordChangeToken, verifyPin } from "./auth.mjs";
 import { getSchedulerStatus, reloadSystemScheduler } from "./scheduler.mjs";
 import { objectStorageReady, resolveStorageSettings } from "./storage-settings.mjs";
@@ -1437,7 +1437,16 @@ export async function handleApi(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/projects/upload-file") {
-    const body = await readBody(req);
+    const binaryUpload = !String(req.headers["content-type"] || "").includes("application/json");
+    const body = binaryUpload ? {
+      type: String(req.headers["x-upload-kind"] || ""),
+      id: String(req.headers["x-project-id"] || ""),
+      file: {
+        name: decodeURIComponent(String(req.headers["x-upload-name"] || "upload.bin")),
+        type: String(req.headers["x-upload-type"] || "application/octet-stream"),
+        buffer: await readRawBody(req)
+      }
+    } : await readBody(req);
     if (body.type === "create-project") {
       if (!requireRole(user, PROJECT_WRITE_ROLES, res)) return;
     } else if (!requireRole(user, PROJECT_UPLOAD_ROLES, res)) {

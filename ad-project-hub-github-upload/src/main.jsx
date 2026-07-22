@@ -277,6 +277,25 @@ async function apiRequest(path, session, options = {}) {
   return payload.data;
 }
 
+async function uploadFileBinary(file, metadata, session) {
+  const res = await fetch("/api/projects/upload-file", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${session.token || ""}`,
+      "content-type": file.type || "application/octet-stream",
+      "x-upload-name": encodeURIComponent(file.name || "upload.bin"),
+      "x-upload-type": file.type || "application/octet-stream",
+      "x-upload-kind": metadata.type || "",
+      "x-project-id": metadata.id || "",
+    },
+    body: file,
+  });
+  const payload = await res.json();
+  handleUnauthorizedResponse(res, payload);
+  if (!payload.ok) throw new Error(payload.error || "文件上传失败");
+  return payload.data;
+}
+
 function explainUploadError(error) {
   const raw = String(error?.message || error || "识别失败，请稍后重试。");
   const compact = raw.replace(/^Error:\s*/i, "").trim();
@@ -6630,7 +6649,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
   async function appendPickedFiles(picked = []) {
     setMessage("");
     setUploadError(null);
-    const payloads = await Promise.all(picked.map(fileToPayload));
+    const payloads = picked;
     const oversized = picked.find((file) => file.size > 40 * 1024 * 1024 && /pdf/i.test(file.type || file.name));
     setFiles((current) => {
       const merged = [...current];
@@ -6698,10 +6717,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
         continue;
       }
       setProgress({ step: "preview", percent: 20 + Math.round((index / Math.max(files.length, 1)) * 38), text: `正在上传并读取第 ${index + 1}/${files.length} 个文件：${file.name}` });
-      const staged = await apiRequest("/api/projects/upload-file", session, {
-        method: "POST",
-        body: JSON.stringify(type === "create-project" ? { type, file } : { type, id: targetProject.id, file }),
-      });
+      const staged = await uploadFileBinary(file, type === "create-project" ? { type } : { type, id: targetProject.id }, session);
       setStagedFiles((current) => ({ ...current, [key]: staged }));
       uploaded.push(staged);
     }

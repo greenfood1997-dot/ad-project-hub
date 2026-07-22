@@ -5,12 +5,18 @@ export async function readBody(req) {
   return text ? JSON.parse(text) : {};
 }
 
+export async function readRawBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
 export function sendJson(res, status, body) {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type,authorization"
+    "access-control-allow-headers": "content-type,authorization,x-upload-name,x-upload-type,x-upload-kind,x-project-id"
   });
   res.end(JSON.stringify(body));
 }
@@ -19,7 +25,7 @@ export function sendCorsPreflight(res) {
   res.writeHead(204, {
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type,authorization,idempotency-key",
+    "access-control-allow-headers": "content-type,authorization,idempotency-key,x-upload-name,x-upload-type,x-upload-kind,x-project-id",
     "access-control-max-age": "86400"
   });
   res.end();
