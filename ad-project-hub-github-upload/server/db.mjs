@@ -40,6 +40,17 @@ export async function mutateDb(mutator) {
   return await run;
 }
 
+export async function mutateUploadBatch(selectJob, mutateJob) {
+  if (usePostgres) {
+    const { mutateUploadBatchJob } = await getPostgres();
+    return await retryTransientDatabase(() => mutateUploadBatchJob(selectJob, mutateJob));
+  }
+  return await mutateDb((db) => {
+    const job = (db.parseJobs || []).find(selectJob);
+    return job ? mutateJob(job) : null;
+  });
+}
+
 export function dbMode() {
   return usePostgres ? "postgres" : "json";
 }

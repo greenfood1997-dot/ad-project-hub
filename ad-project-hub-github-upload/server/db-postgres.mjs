@@ -794,3 +794,34 @@ export async function mutatePostgresDb(mutator) {
     db.release(connectionBroken);
   }
 }
+
+export async function mutateUploadBatchJob(selectJob, mutateJob) {
+  await migratePostgres();
+  const activePool = await getPool();
+  const db = await activePool.connect();
+  try {
+    await db.query("begin");
+    const rows = await db.query(`select id, project_id as "projectId", project_name as "projectName",
+      status, progress, steps, files, source_values as "sourceValues",
+      extracted_fields as "extractedFields", created_at as "createdAt", updated_at as "updatedAt"
+      from parse_jobs where id like 'UB-%' order by created_at asc for update skip locked`);
+    const job = rows.rows.find(selectJob);
+    if (!job) {
+      await db.query("commit");
+      return null;
+    }
+    const result = mutateJob(job);
+    await db.query(`update parse_jobs set status=$2, progress=$3, steps=$4, files=$5,
+      source_values=$6, extracted_fields=$7, updated_at=$8 where id=$1`, [
+      job.id, job.status, job.progress, JSON.stringify(job.steps || []), JSON.stringify(job.files || []),
+      JSON.stringify(job.sourceValues || {}), JSON.stringify(job.extractedFields || {}), job.updatedAt || new Date().toISOString()
+    ]);
+    await db.query("commit");
+    return result;
+  } catch (error) {
+    await db.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    db.release();
+  }
+}

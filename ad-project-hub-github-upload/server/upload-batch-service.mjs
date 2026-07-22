@@ -83,6 +83,17 @@ export function claimUploadBatch(db) {
   return { batchId: job.id, batchIndex: file.batchIndex, file: { ...file } };
 }
 
+export function uploadBatchIsClaimable(item, now = Date.now()) {
+  return item.id?.startsWith("UB-") && (
+    item.status === "queued" ||
+    (item.status === "processing" && Date.parse(item.extractedFields?.leaseUntil || 0) < now)
+  );
+}
+
+export function claimUploadBatchJob(job) {
+  return claimUploadBatch({ parseJobs: [job] });
+}
+
 export async function hydrateStoredFile(file = {}) {
   if (file.buffer || file.base64) return file;
   const localPath = file.localStoragePath || (file.storageProvider === "local" ? file.storagePath : "");
@@ -139,4 +150,8 @@ export function finishUploadBatchFile(db, claim, result, error = null) {
   job.extractedFields = { ...(job.extractedFields || {}), leaseUntil: "", error: failed ? `${failed} 个文件解析失败` : "" };
   job.updatedAt = new Date().toISOString();
   return publicBatch(job);
+}
+
+export function finishUploadBatchJob(job, claim, result, error = null) {
+  return finishUploadBatchFile({ parseJobs: [job] }, claim, result, error);
 }
