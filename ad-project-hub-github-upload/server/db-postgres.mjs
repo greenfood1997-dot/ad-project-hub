@@ -373,7 +373,7 @@ export async function writePostgresDbFromSnapshot(snapshot, client = null) {
       if (values) {
         await db.query(
           "insert into settings (type, config_values, saved_by, saved_at) values ($1, $2, $3, $4)",
-          [type, values, values.savedBy || null, values.savedAt || new Date().toISOString()]
+          [type, JSON.stringify(values), values.savedBy || null, values.savedAt || new Date().toISOString()]
         );
       }
     }

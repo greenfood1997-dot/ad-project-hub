@@ -10,6 +10,7 @@ assert(schema.includes("config_values jsonb not null"), "settings must use a Pos
 assert(schema.includes("approval_role text"), "approvals must use a PostgreSQL-safe role column name");
 assert(adapter.includes('config_values as "values"'), "adapter must preserve the in-memory settings row shape");
 assert(adapter.includes("insert into settings (type, config_values, saved_by, saved_at)"), "settings writes must target the safe column name");
+assert(adapter.includes("[type, JSON.stringify(values), values.savedBy"), "settings JSONB values must be serialized before snapshot writes");
 assert(adapter.includes('approval_role as "currentRole"'), "adapter must preserve the in-memory approval role shape");
 
 console.log("postgres schema syntax regression passed");
