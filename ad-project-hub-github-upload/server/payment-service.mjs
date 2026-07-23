@@ -164,7 +164,8 @@ function syncCollectionScriptsAfterPayment(db, project = {}, user = {}, action =
 
 function refreshProjectAfterPayment(project, { inferRisk, projectRiskAlerts }) {
   const contract = parseMoney(project.contract);
-  project.receivable = Math.max(contract - Number(project.paid || 0), 0);
+  const recognizedRevenue = Number(project.extractedFields?.revenueRecognition?.recognizedRevenue || 0);
+  project.receivable = Math.max(contract - recognizedRevenue - Number(project.paid || 0), 0);
   project.risk = inferRisk({
     contract,
     costBudget: project.costBudget,

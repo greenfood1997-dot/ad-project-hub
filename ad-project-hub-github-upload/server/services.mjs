@@ -1598,7 +1598,7 @@ export async function uploadProjectVerificationSheet(db, body, user) {
       updatedAt: now
     }
   };
-  project.receivable = Math.max(Number(project.contract || 0) - paid, 0);
+  project.receivable = Math.max(Number(project.contract || 0) - recognizedTotal - paid, 0);
   project.aiSummary = `${project.aiSummary || "文件已解析。"} 本次核销确认收入 ${recognizedRevenue}，状态：${record.status}。`;
   project.updatedAt = now;
   db.files.unshift({ files, projectId: project.id, projectName: project.name, type: "verification-sheet", user: user.name, at: now });

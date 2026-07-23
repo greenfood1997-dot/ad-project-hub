@@ -210,6 +210,7 @@ const materialFiles = [{
 }];
 const materialResult = await uploadProjectVerificationSheet(materialDb, { id: "P-1", files: materialFiles }, user);
 assert.equal(materialResult.record.amount, 220209.52);
+assert.equal(materialResult.project.receivable, 779790.48, "verification revenue should reduce project receivable");
 assert.equal(materialResult.record.summary.breakdown.length, 3);
 assert.equal(materialResult.record.summary.breakdown.reduce((sum, item) => sum + item.amount, 0), 220209.52);
 await assert.rejects(
