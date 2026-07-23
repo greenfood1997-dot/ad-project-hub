@@ -133,6 +133,12 @@ export async function previewProjectUpload(db, body, user) {
 
   if (type === "quote-sheet") {
     const rules = extractQuoteRules(files);
+    if (!rules.length && looksLikeVerificationEvidence(files)) {
+      const corrected = await previewProjectUpload(db, { ...body, type: "verification-sheet", files }, user);
+      corrected.autoCorrectedFrom = "quote-sheet";
+      corrected.warnings.unshift("检测到这是核销/结算材料，已自动从“合同报价表”切换为“核销表 + 结算材料”。");
+      return corrected;
+    }
     if (!rules.length) warnings.push("未识别到报价核销规则，请检查是否包含服务内容、数量、单位、单价、小计等字段。");
     preview.sections.push({
       title: "报价规则",
@@ -154,12 +160,6 @@ export async function previewProjectUpload(db, body, user) {
   if (type === "verification-sheet") {
     const revenue = targetProject.extractedFields?.revenueRecognition || {};
     const quoteRules = Array.isArray(revenue.quoteRules) ? revenue.quoteRules : [];
-    if (!quoteRules.length) {
-      warnings.push("当前项目还没有报价规则库，请先上传合同报价表。");
-      preview.canConfirm = false;
-      preview.summary = "缺少报价规则，暂不能确认核销入库。";
-      return preview;
-    }
     const verificationItems = extractVerificationItems(files);
     const verificationSummary = verificationItems.summary || {};
     const matchedItems = matchVerificationItems(verificationItems, quoteRules, {
@@ -168,6 +168,17 @@ export async function previewProjectUpload(db, body, user) {
       records: revenue.verificationRecords || []
     });
     const recognizedRevenue = verificationSummary.totalAmount || matchedItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const recognizedTotal = Number(revenue.recognizedRevenue || 0) + recognizedRevenue;
+    if (!quoteRules.length) {
+      warnings.push("项目没有分项报价规则，已按合同总额核销；请人工复核结算金额和佐证材料。");
+      if (!Number(targetProject.contract || 0)) {
+        warnings.push("项目没有合同总金额，无法校验核销上限。");
+        preview.canConfirm = false;
+      } else if (recognizedTotal > Number(targetProject.contract || 0)) {
+        warnings.push(`累计核销 ${recognizedTotal} 元超过合同总额 ${Number(targetProject.contract || 0)} 元。`);
+        preview.canConfirm = false;
+      }
+    }
     const breakdownTotal = (verificationSummary.breakdown || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const summaryDifference = verificationSummary.totalAmount && breakdownTotal
       ? Math.round((verificationSummary.totalAmount - breakdownTotal) * 100) / 100
@@ -180,7 +191,7 @@ export async function previewProjectUpload(db, body, user) {
       "核销月份": inferVerificationMonth(files) || monthKey(new Date(now)),
       "确认收入": recognizedRevenue,
       "上传材料": `${files.length} 个文件`,
-      "匹配状态": matchedItems.some((item) => item.status !== "自动通过") ? "待复核" : "自动通过"
+      "匹配状态": !quoteRules.length ? "按合同总额·待人工复核" : matchedItems.some((item) => item.status !== "自动通过") ? "待复核" : "自动通过"
     };
     if (summaryDifference) warnings.push(`结算汇总与费用分项相差 ${summaryDifference} 元，请核对后再确认入库。`);
     preview.sections.push({
@@ -345,6 +356,17 @@ export async function previewProjectUpload(db, body, user) {
     usedAt: ""
   });
   return preview;
+}
+
+function looksLikeVerificationEvidence(files = []) {
+  const text = files.map((file) => `${file.name || ""}\n${file.text || ""}`).join("\n");
+  const signals = [
+    /季度核销|月度核销|核销价格|核销类型/,
+    /运营结算金额汇总|结算金额汇总|结算材料/,
+    /内容制作费用明细|账户运营维护费用明细|投放充值费用/,
+    /合计[（(]?(?:含税)?[）)]?\s*[￥¥]?\s*\d{4,}/
+  ];
+  return signals.filter((pattern) => pattern.test(text)).length >= 2;
 }
 
 export async function stageProjectUploadFile(db, body, user) {
@@ -1527,7 +1549,6 @@ export async function uploadProjectVerificationSheet(db, body, user) {
   learnParserSkills(db, files, "verification-sheet", user, now);
   const revenue = project.extractedFields?.revenueRecognition || {};
   const quoteRules = Array.isArray(revenue.quoteRules) ? revenue.quoteRules : [];
-  if (!quoteRules.length) throw new Error("当前项目还没有报价规则库，请先上传合同报价表。");
   const incomingKeys = files.map(uploadedFileKey).sort().join("|");
   const duplicateRecord = (revenue.verificationRecords || []).find((item) => {
     const existingKeys = (item.files || []).map(uploadedFileKey).sort().join("|");
@@ -1544,6 +1565,10 @@ export async function uploadProjectVerificationSheet(db, body, user) {
   });
   const recognizedRevenue = verificationSummary.totalAmount || matchedItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const recognizedTotal = Number(revenue.recognizedRevenue || 0) + recognizedRevenue;
+  if (!quoteRules.length) {
+    if (!Number(project.contract || 0)) throw new Error("项目没有合同总金额，无法按合同总额核销，请先补充合同金额。");
+    if (recognizedTotal > Number(project.contract || 0)) throw new Error(`累计核销 ${recognizedTotal} 元超过合同总额 ${Number(project.contract || 0)} 元，请复核。`);
+  }
   const paid = Number(project.paid || 0);
   const record = {
     id: `VR-${Date.now()}`,
@@ -1552,7 +1577,7 @@ export async function uploadProjectVerificationSheet(db, body, user) {
     paidAmount: 0,
     unpaidAmount: recognizedRevenue,
     paymentStatus: "未回款",
-    status: matchedItems.some((item) => item.status !== "自动通过") ? "待复核" : "自动通过",
+    status: !quoteRules.length ? "按合同总额·待人工复核" : matchedItems.some((item) => item.status !== "自动通过") ? "待复核" : "自动通过",
     uploadedAt: now,
     uploadedBy: user.id,
     uploadedByName: user.name,

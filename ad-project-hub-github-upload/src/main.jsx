@@ -6801,6 +6801,7 @@ function UploadDialog({ session, projects, selected, initialType = "create-proje
         method: "POST",
         body: JSON.stringify(uploadBody(parsedFiles)),
       });
+      if (data.type && data.type !== type) setType(data.type);
       setPreview(data);
       setConfirmed(false);
       setProgress({ step: "review", percent: data.canConfirm ? 82 : 70, text: data.canConfirm ? "识别完成，等待你确认入库" : "识别完成，但需要先处理提示" });
