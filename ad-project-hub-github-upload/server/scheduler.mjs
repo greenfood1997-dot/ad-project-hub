@@ -1,4 +1,4 @@
-import { mutateDb, readDb } from "./db.mjs";
+import { mutateDb, readDb, dbMode } from "./db.mjs";
 import { scanSystemNotifications } from "./services.mjs";
 import { purgeExpiredCloudRecycleBin } from "./cloud-recycle-service.mjs";
 import { syncAuthoritativeFeishuUsers } from "./feishu-identity-service.mjs";
@@ -14,7 +14,8 @@ const status = {
   lastFinishedAt: "",
   lastError: "",
   runCount: 0,
-  activeNotifications: 0
+  activeNotifications: 0,
+  suspendedReason: ""
 };
 
 let timer = null;
@@ -56,6 +57,15 @@ export async function startSystemScheduler() {
   const db = await readDb().catch(() => ({ settings: {} }));
   const settings = db.settings || {};
   status.intervalMs = configuredInterval(settings);
+  if (dbMode() === "postgres") {
+    // The legacy scan mutates a full in-memory snapshot. Keep it completely
+    // disabled on PostgreSQL until every scan output has targeted row writers.
+    status.enabled = false;
+    status.suspendedReason = "PostgreSQL 行级巡检改造中，已暂停自动写入";
+    status.lastError = "";
+    return getSchedulerStatus();
+  }
+  status.suspendedReason = "";
   status.enabled = !schedulerDisabled(settings);
   if (!status.enabled || timer) return getSchedulerStatus();
   timer = setInterval(runScheduledScan, status.intervalMs);
