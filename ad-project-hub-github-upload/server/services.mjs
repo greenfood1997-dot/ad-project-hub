@@ -6603,7 +6603,7 @@ function buildParserSkill(file, row, category, cells, columnMap, name) {
   };
 }
 
-function extractVerificationItems(files = []) {
+export function extractVerificationItems(files = []) {
   const items = [];
   const rows = parseTableLines(files);
   const summary = extractVerificationSummary(rows);
@@ -6634,6 +6634,8 @@ function extractVerificationItems(files = []) {
 function extractVerificationSummary(rows = []) {
   const breakdown = [];
   let totalAmount = 0;
+  const pptSummary = extractPptVerificationSummary(rows);
+  if (pptSummary.totalAmount) return pptSummary;
   for (const row of rows) {
     const cells = row.cells || [];
     for (let index = 0; index < cells.length - 1; index += 1) {
@@ -6657,6 +6659,23 @@ function extractVerificationSummary(rows = []) {
     totalAmount,
     breakdown
   };
+}
+
+function extractPptVerificationSummary(rows = []) {
+  const summaryRow = rows.find((row) => /运营结算金额汇总/.test((row.cells || []).join("\n")) && /内容制作/.test((row.cells || []).join("\n")) && /合计/.test((row.cells || []).join("\n")));
+  if (!summaryRow) return { totalAmount: 0, breakdown: [] };
+  const text = (summaryRow.cells || []).join("\n").replace(/￥\s*/g, "￥");
+  const labels = [
+    ["内容制作", /内容制作\s*￥?\s*([\d,.]+)/],
+    ["账户运营维护", /账户运营维护\s*￥?\s*([\d,.]+)/],
+    ["投放充值", /投放充值\s*￥?\s*([\d,.]+)/]
+  ];
+  const breakdown = labels.map(([type, pattern]) => {
+    const match = text.match(pattern);
+    return match ? { type, amount: parseMoney(match[1]), sourceFile: summaryRow.file, rawText: match[0] } : null;
+  }).filter(Boolean);
+  const totalMatch = text.match(/合计\s*[（(]?含税[）)]?\s*￥?\s*([\d,.]+)/);
+  return { totalAmount: totalMatch ? parseMoney(totalMatch[1]) : 0, breakdown };
 }
 
 function looksLikeVerificationHeader(cells = []) {
@@ -6900,7 +6919,20 @@ function importantTerms(text = "") {
 }
 
 function inferVerificationMonth(files = []) {
-  const months = inferCoveredMonths(files.map((file) => `${file.name || ""} ${file.text || ""}`).join("\n"));
+  const source = files.map((file) => `${file.name || ""} ${file.text || ""}`).join("\n");
+  const normalized = source
+    .replace(/(?<=\d)\s+(?=[\d.年月/~～至—-])/g, "")
+    .replace(/(?<=[.年月/~～至—-])\s+(?=\d)/g, "")
+    .replace(/(20\d)\s*[\n ]+(\d)\s*[.年]/g, "$1$2年")
+    .replace(/(20\d{2})\s*[.年]\s*[\n ]*(\d{1,2})/g, "$1年$2月");
+  const range = normalized.match(/(20\d{2})\s*[年.\/-]\s*(\d{1,2})\s*月?(?:\s*[.\/-]\s*\d{1,2}\s*日?)?\s*[~～至—-]+\s*(20\d{2})\s*[年.\/-]\s*(\d{1,2})\s*月?/);
+  if (range) {
+    const start = `${range[1]}-${String(Number(range[2])).padStart(2, "0")}`;
+    const end = `${range[3]}-${String(Number(range[4])).padStart(2, "0")}`;
+    return start === end ? start : `${start} 至 ${end}`;
+  }
+  const months = inferCoveredMonths(normalized);
+  if (months.length > 1) return `${months[0]} 至 ${months[months.length - 1]}`;
   return months[0] || "";
 }
 
