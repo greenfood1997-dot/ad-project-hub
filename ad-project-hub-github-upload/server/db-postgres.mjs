@@ -23,6 +23,7 @@ export async function migratePostgres() {
       const sql = await readFile(sqlPath, "utf8");
       const db = await getPool();
       await db.query(sql);
+      await db.query(`update projects set receivable = greatest(contract - coalesce((extracted_fields->'revenueRecognition'->>'recognizedRevenue')::numeric, 0) - paid, 0) where extracted_fields ? 'revenueRecognition'`);
     })().catch((error) => {
       // A failed startup/recovery attempt must remain retryable.
       migrationPromise = undefined;
@@ -168,13 +169,19 @@ export async function readPostgresDb(client = null) {
   });
   const fileUploads = groupProjectFileUploads(files.rows);
 
+  const normalizedProjects = projects.rows.map((project) => {
+    const recognizedRevenue = Number(project.extractedFields?.revenueRecognition?.recognizedRevenue || 0);
+    const calculatedReceivable = Math.max(Number(project.contract || 0) - recognizedRevenue - Number(project.paid || 0), 0);
+    return {
+      ...project,
+      receivable: calculatedReceivable,
+      files: files.rows.filter((file) => file.projectId === project.id)
+    };
+  });
   return {
     users: users.rows,
     settings,
-    projects: projects.rows.map((project) => ({
-      ...project,
-      files: files.rows.filter((file) => file.projectId === project.id)
-    })),
+    projects: normalizedProjects,
     clientProfiles: clientProfiles.rows,
     suppliers: suppliers.rows,
     supplierProfiles: supplierProfiles.rows,
