@@ -2511,6 +2511,7 @@ function ProjectDashboard({ session, view, setView, onLogout }) {
                 setActiveSubView("客户偏好");
                 setNotice(`已打开客户档案：${name}。`);
               }}
+              onOpenUpload={openUpload}
               onDone={() => loadState()}
               onNotice={setNotice}
             /></React.Suspense>}

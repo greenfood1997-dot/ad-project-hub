@@ -11,7 +11,6 @@ import { actionItemKey, canArchiveComment, parseJobTone } from "./utils/projectD
 import ModuleFallback from "./ModuleFallback.jsx";
 import "./project-detail.css";
 
-const UploadDialog = React.lazy(() => import("./UploadDialog.jsx"));
 const ProjectActivityPanel = React.lazy(() => import("./ProjectActivityPanel.jsx"));
 const ProjectSupplierPanel = React.lazy(() => import("./ProjectSupplierPanel.jsx"));
 const ProjectApprovalPanel = React.lazy(() => import("./ProjectApprovalPanel.jsx"));
@@ -40,7 +39,7 @@ function ProjectDetailSection({ id, title, description, openSection, setOpenSect
   </section>;
 }
 
-export default function ProjectDetail({ project, isManagement, session, files, parseJobs, approvals, suppliers = [], clients = [], payments = [], collectionScripts = [], feishuPendingFiles = [], comments, alertUpdates = [], auditLogs, focusTarget = "", onFocusConsumed, onOpenApproval, onOpenSupplier, onOpenClient, onDone, onNotice }) {
+export default function ProjectDetail({ project, isManagement, session, files, parseJobs, approvals, suppliers = [], clients = [], payments = [], collectionScripts = [], feishuPendingFiles = [], comments, alertUpdates = [], auditLogs, focusTarget = "", onFocusConsumed, onOpenApproval, onOpenSupplier, onOpenClient, onOpenUpload, onDone, onNotice }) {
   const usedRate = project.costBudget ? Math.round((project.costUsed / project.costBudget) * 100) : 0;
   const health = projectHealth(project);
   const pettyCashLeft = Math.max(Number(project.pettyCashBudget || 0) - Number(project.pettyCashUsed || 0), 0);
@@ -82,8 +81,6 @@ export default function ProjectDetail({ project, isManagement, session, files, p
   const [copyingActivityKey, setCopyingActivityKey] = useState("");
   const [archivingActivityKey, setArchivingActivityKey] = useState("");
   const [exportingActivityLedger, setExportingActivityLedger] = useState(false);
-  const [quickUploadType, setQuickUploadType] = useState("");
-  const [quickUploadMinimized, setQuickUploadMinimized] = useState(false);
   const [localFocusTarget, setLocalFocusTarget] = useState("");
   const [approvalForm, setApprovalForm] = useState({ type: "reimbursement", amount: "", payee: "", reason: "" });
   const [submittingApproval, setSubmittingApproval] = useState(false);
@@ -220,7 +217,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
       goProjectSection("files", `${item.label}已归档，已打开文件与 AI 解析区查看。`);
       return;
     }
-    setQuickUploadType(item.uploadType);
+    onOpenUpload(item.uploadType, project);
     onNotice(`已为「${project.name}」准备上传${uploadTypeNames[item.uploadType] || item.label}，会先 AI 预览，确认后才写入项目。`);
   }
 
@@ -812,7 +809,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
 
   function prepareCostAction(type = "cost-sheet") {
     if (type === "cost-sheet") {
-      setQuickUploadType("cost-sheet");
+      onOpenUpload("cost-sheet", project);
       setLocalFocusTarget("files");
       onNotice(`已为「${project.name}」打开成本表上传，AI 预览确认后才会写入成本构成。`);
       return;
@@ -926,7 +923,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           canHandleProjectAlert={canHandleProjectAlert}
           icons={{ UploadCloud, FileSpreadsheet, CheckCircle2, MessageSquareText }}
           actionItemKey={actionItemKey}
-          onUploadType={setQuickUploadType}
+          onUploadType={(type) => onOpenUpload(type, project)}
           onRecordDynamic={() => setCommentText((current) => current || "客户已确认：")}
           onOpenMaterialUpload={openMaterialUpload}
           onHandleActionItem={handleActionItem}
@@ -992,7 +989,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           onParsedMaterialNotice={(item) => onNotice(`${item.label}已解析：${item.files[0]?.name || item.jobs[0]?.status || "项目数据已入库"}`)}
           onCopyFileInfo={copyFileInfo}
           onArchiveProjectFile={archiveProjectFile}
-          onUploadType={setQuickUploadType}
+          onUploadType={(type) => onOpenUpload(type, project)}
           onPrepareActivityTemplate={prepareActivityTemplate}
           onRefreshParseJob={refreshParseJob}
           onDownloadProjectFile={downloadProjectFile}
@@ -1052,7 +1049,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           onUpdatePaymentForm={updatePaymentForm}
           onVoidPayment={voidPayment}
           onPreparePaymentEntry={preparePaymentEntry}
-          onUploadVerification={() => setQuickUploadType("verification-sheet")}
+          onUploadVerification={() => onOpenUpload("verification-sheet", project)}
         />
       </Suspense>
       </ProjectDetailSection>
@@ -1065,7 +1062,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           money={money}
           onOpenSupplier={onOpenSupplier}
           onPrepareSupplierPaymentApproval={prepareSupplierPaymentApproval}
-          onUploadCostSheet={() => setQuickUploadType("cost-sheet")}
+          onUploadCostSheet={() => onOpenUpload("cost-sheet", project)}
         />
       </Suspense>
       </ProjectDetailSection>
@@ -1104,28 +1101,6 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           <strong>{project.paymentDue}</strong>
         </div>
       </div>
-      {quickUploadType && <Suspense fallback={<ModuleFallback title="上传窗口加载中" variant="detail" />}>
-        <UploadDialog
-          session={session}
-          projects={[project]}
-          selected={project}
-          initialType={quickUploadType}
-          minimized={quickUploadMinimized}
-          onMinimize={() => setQuickUploadMinimized(true)}
-          onExpand={() => setQuickUploadMinimized(false)}
-          onClose={() => {
-            setQuickUploadType("");
-            setQuickUploadMinimized(false);
-          }}
-          onDone={async () => {
-            await onDone();
-            setLocalFocusTarget("files");
-            onNotice("文件已处理，已回到文件与 AI 解析区。");
-            setQuickUploadType("");
-            setQuickUploadMinimized(false);
-          }}
-        />
-      </Suspense>}
     </div>
   );
 }
