@@ -164,6 +164,7 @@ export async function processClaimedUploadFile(claim) {
     shouldUseOcrForPdf(text = "") {
       const normalized = String(text).trim();
       if (!normalized) return true;
+      if (claim.file.category === "verification-sheet" && /结算材料|核销材料|结算佐证/.test(claim.file.name || "")) return true;
       return !/\d[\d,.]*\s*(?:元|万元|人民币)/.test(normalized) && !/\d{4}[年\-/]\d{1,2}/.test(normalized);
     }
   });

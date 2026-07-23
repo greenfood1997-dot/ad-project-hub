@@ -6657,11 +6657,12 @@ function extractVerificationSummary(rows = []) {
   }
   if (!totalAmount) {
     const text = rows.map((row) => (row.cells || []).join("\n")).join("\n");
-    const amountAfterLabel = (pattern) => {
-      const match = text.match(new RegExp(`${pattern}[^\\d]{0,80}([\\d,]+(?:\\.\\d{1,2})?)`));
-      return match ? parseMoney(match[1].replace(/,/g, "")) : 0;
-    };
-    const fallbackTotal = amountAfterLabel("(?:合计|总计|结算金额|申报金额|应核销金额|运营结算金额)");
+    const pattern = /(?:合计(?:含税)?|总计|结算金额|申报金额|应核销金额|运营结算金额)[^\d]{0,80}([\d,]+(?:\.\d{1,2})?)/g;
+    const candidates = Array.from(text.matchAll(pattern))
+      .filter((match) => !/KPI|播放量|涨粉|粉丝|互动|点赞|评论|转发/.test(text.slice(Math.max(0, match.index - 60), match.index + match[0].length + 20)))
+      .map((match) => parseMoney(match[1].replace(/,/g, "")))
+      .filter((amount) => amount > 0);
+    const fallbackTotal = candidates.length ? Math.max(...candidates) : 0;
     if (fallbackTotal) totalAmount = fallbackTotal;
   }
   return {
