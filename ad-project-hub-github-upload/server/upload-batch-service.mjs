@@ -7,6 +7,7 @@ import { downloadStoredObject } from "./upload-storage-service.mjs";
 
 const LEASE_MS = 5 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
+const STORAGE_READ_ATTEMPTS = 4;
 
 function batchId() {
   return `UB-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -120,13 +121,39 @@ export async function hydrateStoredFile(file = {}) {
   if (/^https?:\/\//i.test(file.storageUrl || "")) {
     const settings = resolveStorageSettings({});
     if (file.storagePath && file.storageProvider !== "local") {
-      return { ...file, buffer: await downloadStoredObject(file, settings) };
+      return { ...file, buffer: await downloadStoredObjectWithRetry(file, settings) };
     }
-    const response = await fetch(file.storageUrl);
-    if (!response.ok) throw new Error(`对象存储读取失败：${response.status}`);
-    return { ...file, buffer: Buffer.from(await response.arrayBuffer()) };
+    return { ...file, buffer: await fetchStoredFileWithRetry(file.storageUrl) };
   }
   throw new Error("文件没有可恢复的存储地址");
+}
+
+async function downloadStoredObjectWithRetry(file, settings) {
+  let lastError;
+  for (let attempt = 1; attempt <= STORAGE_READ_ATTEMPTS; attempt += 1) {
+    try {
+      return await downloadStoredObject(file, settings);
+    } catch (error) {
+      lastError = error;
+      if (attempt < STORAGE_READ_ATTEMPTS) await new Promise((resolve) => setTimeout(resolve, attempt * 750));
+    }
+  }
+  throw lastError;
+}
+
+async function fetchStoredFileWithRetry(url) {
+  let lastError;
+  for (let attempt = 1; attempt <= STORAGE_READ_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`对象存储读取失败：${response.status}`);
+      return Buffer.from(await response.arrayBuffer());
+    } catch (error) {
+      lastError = error;
+      if (attempt < STORAGE_READ_ATTEMPTS) await new Promise((resolve) => setTimeout(resolve, attempt * 750));
+    }
+  }
+  throw lastError;
 }
 
 export async function processClaimedUploadFile(claim) {

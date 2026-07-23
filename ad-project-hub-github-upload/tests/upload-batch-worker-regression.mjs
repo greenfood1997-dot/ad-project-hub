@@ -21,7 +21,13 @@ assert.equal(ready.status, "ready");
 assert.equal(ready.progress, 90);
 assert.equal(ready.files.every((file) => file.taskStatus === "completed"), true);
 
+let fetchAttempts = 0;
 const server = createServer((req, res) => {
+  fetchAttempts += 1;
+  if (fetchAttempts === 1) {
+    res.destroy();
+    return;
+  }
   res.writeHead(200, { "content-type": "application/pdf" });
   res.end("durable-object");
 });
@@ -30,6 +36,7 @@ const port = server.address().port;
 const hydrated = await hydrateStoredFile({ localStoragePath: "uploads/missing.pdf", storageUrl: `http://127.0.0.1:${port}/file.pdf` });
 assert.equal(hydrated.buffer.toString(), "durable-object");
 assert.equal(hydrated.base64, undefined, "background hydration should not create another large base64 copy");
+assert.equal(fetchAttempts, 2, "transient object storage fetch failures should be retried");
 server.close();
 
 console.log("upload batch worker regression passed");
