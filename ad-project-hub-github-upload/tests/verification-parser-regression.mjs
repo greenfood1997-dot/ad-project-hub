@@ -217,4 +217,13 @@ await assert.rejects(
   /这组核销材料已于/
 );
 
+const textPdfDb = createDb();
+const textPdfResult = await uploadProjectVerificationSheet(textPdfDb, { id: "P-1", files: [{
+  name: "雇者-9-11月纵横结算材料(2).pdf",
+  type: "application/pdf",
+  size: 13100000,
+  text: "2025年9月-2025年11月\n运营结算金额汇总\n申报金额\n人民币 198765.43 元"
+}] }, user);
+assert.equal(textPdfResult.record.amount, 198765.43, "text PDFs should recognize totals separated from their labels");
+
 console.log("verification parser regression passed");

@@ -6655,6 +6655,15 @@ function extractVerificationSummary(rows = []) {
       }
     }
   }
+  if (!totalAmount) {
+    const text = rows.map((row) => (row.cells || []).join("\n")).join("\n");
+    const amountAfterLabel = (pattern) => {
+      const match = text.match(new RegExp(`${pattern}[^\\d]{0,80}([\\d,]+(?:\\.\\d{1,2})?)`));
+      return match ? parseMoney(match[1].replace(/,/g, "")) : 0;
+    };
+    const fallbackTotal = amountAfterLabel("(?:合计|总计|结算金额|申报金额|应核销金额|运营结算金额)");
+    if (fallbackTotal) totalAmount = fallbackTotal;
+  }
   return {
     totalAmount,
     breakdown
