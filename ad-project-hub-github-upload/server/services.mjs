@@ -6632,6 +6632,23 @@ export function extractVerificationItems(files = []) {
 }
 
 function extractVerificationSummary(rows = []) {
+  const rowsByFile = new Map();
+  for (const row of rows) {
+    const key = row.file || "未命名文件";
+    if (!rowsByFile.has(key)) rowsByFile.set(key, []);
+    rowsByFile.get(key).push(row);
+  }
+  if (rowsByFile.size > 1) {
+    const summaries = Array.from(rowsByFile.values()).map(extractSingleFileVerificationSummary);
+    return {
+      totalAmount: Math.round(summaries.reduce((sum, item) => sum + Number(item.totalAmount || 0), 0) * 100) / 100,
+      breakdown: mergeVerificationBreakdown(summaries.flatMap((item) => item.breakdown || []))
+    };
+  }
+  return extractSingleFileVerificationSummary(rows);
+}
+
+function extractSingleFileVerificationSummary(rows = []) {
   const breakdown = [];
   let totalAmount = 0;
   const pptSummary = extractPptVerificationSummary(rows);
@@ -6671,10 +6688,26 @@ function extractVerificationSummary(rows = []) {
   };
 }
 
+function mergeVerificationBreakdown(items = []) {
+  const merged = new Map();
+  for (const item of items) {
+    const type = item.type || "其他";
+    const current = merged.get(type) || { ...item, amount: 0, sourceFiles: [] };
+    current.amount = Math.round((Number(current.amount || 0) + Number(item.amount || 0)) * 100) / 100;
+    current.sourceFiles = [...new Set([...current.sourceFiles, item.sourceFile].filter(Boolean))];
+    current.sourceFile = current.sourceFiles.join("、");
+    merged.set(type, current);
+  }
+  return Array.from(merged.values());
+}
+
 function extractPptVerificationSummary(rows = []) {
   const summaryRow = rows.find((row) => /运营结算金额汇总/.test((row.cells || []).join("\n")) && /内容制作/.test((row.cells || []).join("\n")) && /合计/.test((row.cells || []).join("\n")));
   if (!summaryRow) return { totalAmount: 0, breakdown: [] };
-  const text = (summaryRow.cells || []).join("\n").replace(/￥\s*/g, "￥");
+  const text = (summaryRow.cells || []).join("\n")
+    .replace(/￥\s*/g, "￥")
+    .replace(/(?<=\d)\s*[,]\s*(?=\d)/g, ",")
+    .replace(/(?<=\d)\s*[.]\s*(?=\d)/g, ".");
   const labels = [
     ["内容制作", /内容制作\s*￥?\s*([\d,.]+)/],
     ["账户运营维护", /账户运营维护\s*￥?\s*([\d,.]+)/],
@@ -6929,6 +6962,12 @@ function importantTerms(text = "") {
 }
 
 function inferVerificationMonth(files = []) {
+  if (files.length > 1) {
+    const periods = files.map((file) => inferVerificationMonth([file])).filter(Boolean);
+    const months = periods.flatMap((period) => period.match(/20\d{2}-\d{2}/g) || []).sort();
+    if (months.length > 1) return `${months[0]} 至 ${months[months.length - 1]}`;
+    if (months.length === 1) return months[0];
+  }
   const source = files.map((file) => `${file.name || ""} ${file.text || ""}`).join("\n");
   const normalized = source
     .replace(/(?<=\d)\s+(?=[\d.年月/~～至—-])/g, "")

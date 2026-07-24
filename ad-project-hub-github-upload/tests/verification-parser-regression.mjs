@@ -228,4 +228,29 @@ const textPdfResult = await uploadProjectVerificationSheet(textPdfDb, { id: "P-1
 }] }, user);
 assert.equal(textPdfResult.record.amount, 198765.43, "text PDFs should recognize totals separated from their labels");
 
+const combinedDb = createDb();
+const combinedResult = await uploadProjectVerificationSheet(combinedDb, { id: "P-1", files: [{
+  name: "雇者-12-2月纵横结算材料(1).pdf",
+  type: "application/pdf",
+  text: "2025.12-2026.02 代运营项目结算材料",
+  tableRows: [
+    { sheetName: "OCR第25页", cells: ["内容制作", "173160"] },
+    { sheetName: "OCR第25页", cells: ["账户运营维护", "11700"] },
+    { sheetName: "OCR第25页", cells: ["投放充值", "35349.52"] },
+    { sheetName: "OCR第25页", cells: ["合计（含税）", "220209.52"] }
+  ]
+}, {
+  name: "雇者-纵横结算材料10.9 1.pptx",
+  type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  text: "2025.03-2025.05 代运营总结材料",
+  tableRows: [{ sheetName: "PPT第11页", cells: [`运营结算金额汇总\n内容制作\n￥\n520\n,\n260\n.00\n账户运营维护\n￥ 66\n,\n300\n.00\n投放充值\n￥\n54127.02\n合计（含税）\n￥\n640687.02`] }]
+}] }, user);
+assert.equal(combinedResult.record.amount, 860896.54, "multiple settlement files should add their independent totals");
+assert.equal(combinedResult.record.month, "2025-03 至 2026-02", "multiple settlement periods should show the full chronological coverage");
+assert.deepEqual(
+  combinedResult.record.summary.breakdown.map((item) => [item.type, item.amount]),
+  [["内容制作", 693420], ["账户运营维护", 78000], ["投放充值", 89476.54]],
+  "split PPT thousands and matching categories should merge across files"
+);
+
 console.log("verification parser regression passed");
