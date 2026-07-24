@@ -1710,7 +1710,8 @@ function applyParsedFields(db, project, job, parsed) {
   const costBudget = configuredBudget || (hasCostSheet ? profitBreakdown.executionBudget : 0) || parseMoney(project.costBudget);
   const previousCostUsed = parseMoney(project.costUsed);
   const currentUploadCost = hasCostSheet ? profitBreakdown.totalDeduction : 0;
-  const costUsed = hasCostSheet ? previousCostUsed + currentUploadCost : previousCostUsed;
+  const replacesExistingCost = hasCostSheet && parsed.costAggregationMode === "snapshot";
+  const costUsed = hasCostSheet ? (replacesExistingCost ? currentUploadCost : previousCostUsed + currentUploadCost) : previousCostUsed;
   if (hasCostSheet) {
     profitBreakdown.executionBudget = costBudget;
     profitBreakdown.totalDeduction = costUsed;
@@ -6059,6 +6060,7 @@ function inferFieldsFromText(values, text, files, interestRateSettings) {
     overhead,
     additionalCost,
     costTableAuthoritative: Boolean(tableMetrics.costs?.length),
+    costAggregationMode: tableMetrics.aggregationMode || "incremental",
     hasCostSheet,
     partyA: parties.partyA,
     partyB: parties.partyB,
@@ -7109,6 +7111,8 @@ function extractCostTableMetrics(text) {
   totals.costClassifications = Object.entries(totals._labels || {}).filter(([, item]) => item.amount > 0).map(([name, item]) => ({
     name, amount: item.amount, category: item.category, reason: costCategoryReason(name, item.category), confidence: "high"
   }));
+  const quarterSections = new Set(Array.from(String(text || "").matchAll(/第?([一二三四1-4])季度/g)).map((match) => match[1]));
+  totals.aggregationMode = quarterSections.size >= 2 ? "snapshot" : "incremental";
 
   return totals;
 }

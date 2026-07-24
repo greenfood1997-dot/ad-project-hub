@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { previewProjectUpload } from "../server/services.mjs";
+import { previewProjectUpload, uploadProjectCostSheet } from "../server/services.mjs";
 
 const project = {
   id: "p-dynamic-cost",
@@ -57,5 +57,20 @@ assert.equal(preview.fields["垫款利息"], 0, "表格明确贷款利息为 0 �
 assert.equal(preview.sections.some((item) => item.title === "供应商支出"), false, "账号名和收入不得进入供应商库");
 assert.equal(preview.fields["总成本影响"], 1808832.76, "利润必须扣除所有动态成本科目且不得重复计算");
 assert.equal(Number((project.contract - preview.fields["总成本影响"]).toFixed(2)), 261167.24);
+
+const uploaded = await uploadProjectCostSheet(db, {
+  id: project.id,
+  idempotencyKey: "annual-cost-snapshot-1",
+  files: [{ name: "工作簿1212.csv", type: "text/csv", text: csv, size: csv.length }]
+}, user);
+assert.equal(uploaded.project.extractedFields.profitBreakdown.executionCost, 526316.96, "quarterly snapshot should keep the workbook's daily expense total");
+assert.equal(uploaded.project.extractedFields.profitBreakdown.internalLabor, 754553.29, "quarterly snapshot should keep the workbook's labor total");
+const replacement = await uploadProjectCostSheet(db, {
+  id: project.id,
+  idempotencyKey: "annual-cost-snapshot-2",
+  files: [{ name: "工作簿1212-修正版.csv", type: "text/csv", text: csv, size: csv.length }]
+}, user);
+assert.equal(replacement.project.extractedFields.profitBreakdown.executionCost, 526316.96, "a corrected annual snapshot must replace rather than accumulate daily expense");
+assert.equal(replacement.project.extractedFields.profitBreakdown.internalLabor, 754553.29, "a corrected annual snapshot must replace rather than accumulate labor");
 
 console.log("dynamic cost classification regression passed");
