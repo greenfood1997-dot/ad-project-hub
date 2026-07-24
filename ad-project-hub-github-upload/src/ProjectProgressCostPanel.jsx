@@ -1,5 +1,5 @@
 import React from "react";
-import { FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet, Trash2 } from "lucide-react";
 import "./project-progress.css";
 
 export default function ProjectProgressCostPanel({
@@ -28,6 +28,9 @@ export default function ProjectProgressCostPanel({
   onArchiveTask,
   onPrepareTaskTemplate,
   onPrepareCostAction,
+  canClearProjectCosts = false,
+  clearingProjectCosts = false,
+  onClearProjectCosts,
 }) {
   return (
     <div className="split" ref={progressRef} id="project-progress-section">
@@ -80,7 +83,7 @@ export default function ProjectProgressCostPanel({
         )}
       </div>
       <div>
-        <div className="section-head compact"><h3>{executionOnly ? "我的本月执行支出" : isManagement ? "成本与利润" : "成本构成"}</h3>{executionOnly && <button type="button" className="ghost tiny" onClick={onExportExecutionCosts}><FileSpreadsheet size={14} />导出月报</button>}</div>
+        <div className="section-head compact"><h3>{executionOnly ? "我的本月执行支出" : isManagement ? "成本与利润" : "成本构成"}</h3><div className="button-row compact">{executionOnly && <button type="button" className="ghost tiny" onClick={onExportExecutionCosts}><FileSpreadsheet size={14} />导出月报</button>}{!executionOnly && canClearProjectCosts && <button type="button" className="danger tiny" disabled={clearingProjectCosts} onClick={onClearProjectCosts}><Trash2 size={14} />{clearingProjectCosts ? "清除中" : "清除全部成本"}</button>}</div></div>
         {executionOnly && <p className="execution-cost-note">仅统计你本月已审批完成的报销，不展示项目整体成本和利润。</p>}
         {costRows.length ? costRows.map(({ name, value, percent, count }) => (
           <div className="cost-row" key={name}>

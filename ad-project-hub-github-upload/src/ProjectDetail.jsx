@@ -48,6 +48,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
   const canUseCollection = canUseCollectionRole(session);
   const canHandleFeishuPending = canHandleFeishuPendingRole(session);
   const canHandleProjectAlert = canHandleProjectAlertRole(session);
+  const canClearProjectCosts = ["shareholder", "admin"].includes(session?.role);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [baseInfoFresh, setBaseInfoFresh] = useState(false);
@@ -70,6 +71,7 @@ export default function ProjectDetail({ project, isManagement, session, files, p
   const [archivingTaskId, setArchivingTaskId] = useState("");
   const [focusedTaskId, setFocusedTaskId] = useState("");
   const [exportingTaskLedger, setExportingTaskLedger] = useState(false);
+  const [clearingProjectCosts, setClearingProjectCosts] = useState(false);
   const [focusedPaymentId, setFocusedPaymentId] = useState("");
   const [reparsingProject, setReparsingProject] = useState(false);
   const [focusedParseJobId, setFocusedParseJobId] = useState("");
@@ -821,6 +823,24 @@ export default function ProjectDetail({ project, isManagement, session, files, p
     prepareSupplierPaymentApproval();
   }
 
+  async function clearAllProjectCosts() {
+    if (!canClearProjectCosts || clearingProjectCosts) return;
+    if (!window.confirm(`确认清除「${project.name}」的全部成本？\n\n将清零成本总额和成本科目，并删除成本解析快照，合同、回款、核销和原始文件不会删除。此操作不可撤销。`)) return;
+    setClearingProjectCosts(true);
+    try {
+      const result = await apiRequest("/api/projects/clear-costs", session, {
+        method: "POST",
+        body: JSON.stringify({ id: project.id })
+      });
+      await onDone();
+      onNotice(`已清除「${project.name}」全部成本：${money(result.clearedCost || 0)}，删除 ${result.removedParseJobs || 0} 条成本解析快照。`);
+    } catch (error) {
+      onNotice(error.message || "清除项目成本失败");
+    } finally {
+      setClearingProjectCosts(false);
+    }
+  }
+
   function prepareActivityTemplate(text) {
     setCommentText((current) => current || text);
     setLocalFocusTarget("activity");
@@ -959,6 +979,9 @@ export default function ProjectDetail({ project, isManagement, session, files, p
           onArchiveTask={archiveTask}
           onPrepareTaskTemplate={prepareTaskTemplate}
           onPrepareCostAction={prepareCostAction}
+          canClearProjectCosts={canClearProjectCosts}
+          clearingProjectCosts={clearingProjectCosts}
+          onClearProjectCosts={clearAllProjectCosts}
         />
       </Suspense>
       </ProjectDetailSection>

@@ -1172,6 +1172,45 @@ export function deleteProject(db, body, user) {
   return { id: project.id, name: project.name, retainedDays: 30 };
 }
 
+export function clearProjectCosts(db, body, user) {
+  const project = (db.projects || []).find((item) => item.id === body?.id);
+  if (!project) throw new Error("项目不存在");
+  const previous = {
+    costUsed: Number(project.costUsed || 0),
+    costs: Array.isArray(project.costs) ? project.costs : [],
+    profitBreakdown: project.extractedFields?.profitBreakdown || null
+  };
+  const isProjectCostJob = (job = {}) => {
+    if (job.projectId !== project.id && job.projectName !== project.name) return false;
+    const fields = job.extractedFields || {};
+    const source = `${job.kind || ""} ${job.sourceValues?.["文件类型"] || ""} ${(job.files || []).map((file) => file.name || "").join(" ")}`;
+    return Boolean(fields.hasCostSheet || fields.profitBreakdown || /cost|成本|利润测算|执行支出/i.test(source));
+  };
+  const removedJobs = (db.parseJobs || []).filter(isProjectCostJob);
+
+  project.costUsed = 0;
+  project.costs = [];
+  project.margin = profitMargin(project.contract, Number(project.contract || 0));
+  project.risk = inferRisk({ ...project, costUsed: 0 });
+  project.extractedFields = { ...(project.extractedFields || {}) };
+  for (const key of ["profitBreakdown", "profit", "costUsed", "costBudget", "advancePayment", "advanceInterest", "executionCost", "executionBudget", "internalLabor", "overhead", "additionalCost", "costs", "costClassifications", "costAggregationMode", "costSnapshotRepairVersion"]) {
+    delete project.extractedFields[key];
+  }
+  project.extractedFields.profit = Number(project.contract || 0);
+  project.alerts = projectRiskAlerts(project);
+  db.parseJobs = (db.parseJobs || []).filter((job) => !isProjectCostJob(job));
+  const at = new Date().toISOString();
+  db.auditLogs.unshift({
+    type: "project-cost",
+    target: project.name,
+    action: "clear-all-costs",
+    user: user.name,
+    meta: { previousCostUsed: previous.costUsed, previousCosts: previous.costs, removedParseJobs: removedJobs.length },
+    at
+  });
+  return { project, clearedCost: previous.costUsed, clearedRows: previous.costs.length, removedParseJobs: removedJobs.length };
+}
+
 function syncProjectProfit(project, executionBudget = 0) {
   const current = project.extractedFields?.profitBreakdown || {};
   const parsed = {

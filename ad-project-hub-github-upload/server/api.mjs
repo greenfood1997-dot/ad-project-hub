@@ -23,6 +23,7 @@ import {
   archiveProjectTask,
   clientLibrary,
   collectionLibrary,
+  clearProjectCosts,
   deleteProject,
   deleteMistakenSupplier,
   exportBackupSnapshot,
@@ -1531,6 +1532,18 @@ export async function handleApi(req, res) {
       return;
     }
     const data = await mutateDb((db) => deleteProject(db, body, user));
+    sendJson(res, 200, { ok: true, data });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/projects/clear-costs") {
+    if (!requireRole(user, ADMIN_ROLES, res)) return;
+    const body = await readBody(req);
+    if (!canAccessProject(snapshot, user, body.id)) {
+      sendJson(res, 403, { ok: false, error: "无权限清除该项目成本" });
+      return;
+    }
+    const data = await mutateDb((db) => clearProjectCosts(db, body, user));
     sendJson(res, 200, { ok: true, data });
     return;
   }
