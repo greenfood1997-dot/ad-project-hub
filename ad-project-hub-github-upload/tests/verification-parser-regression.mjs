@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { uploadProjectQuoteSheet, uploadProjectVerificationSheet } from "../server/services.mjs";
+import { extractVerificationItems, uploadProjectQuoteSheet, uploadProjectVerificationSheet } from "../server/services.mjs";
 
 const user = { id: "u-pm", name: "项目PM", role: "pm" };
 
@@ -218,6 +218,18 @@ await assert.rejects(
   uploadProjectVerificationSheet(materialDb, { id: "P-1", files: materialFiles }, user),
   /这组核销材料已于/
 );
+
+const incompleteOcrTotal = extractVerificationItems([{
+  name: "雇者-12-2月纵横结算材料(1).pdf",
+  tableRows: [
+    { sheetName: "OCR第25页", cells: ["内容制作", "173160"] },
+    { sheetName: "OCR第25页", cells: ["账户运营维护", "11700"] },
+    { sheetName: "OCR第25页", cells: ["投放充值", "35349.52"] }
+  ],
+  text: "运营结算金额汇总\n投放充值 35349.52"
+}]).summary;
+assert.equal(incompleteOcrTotal.totalAmount, 220209.52, "a complete three-part breakdown should repair a missing or partial OCR total");
+assert.equal(incompleteOcrTotal.breakdown.reduce((sum, item) => sum + item.amount, 0), 220209.52);
 
 const textPdfDb = createDb();
 const textPdfResult = await uploadProjectVerificationSheet(textPdfDb, { id: "P-1", files: [{

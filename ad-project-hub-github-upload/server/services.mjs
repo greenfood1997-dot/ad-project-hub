@@ -6682,16 +6682,29 @@ function extractSingleFileVerificationSummary(rows = []) {
     const fallbackTotal = candidates.length ? Math.max(...candidates) : 0;
     if (fallbackTotal) totalAmount = fallbackTotal;
   }
+  const breakdownTotal = Math.round(breakdown.reduce((sum, item) => sum + Number(item.amount || 0), 0) * 100) / 100;
+  const standardTypes = new Set(breakdown.map((item) => normalizeVerificationBreakdownType(item.type)));
+  const hasCompleteSettlementBreakdown = ["内容制作", "账户运营维护", "投放充值"].every((type) => standardTypes.has(type));
+  if (hasCompleteSettlementBreakdown && breakdownTotal > totalAmount) {
+    totalAmount = breakdownTotal;
+  }
   return {
     totalAmount,
     breakdown
   };
 }
 
+function normalizeVerificationBreakdownType(type = "") {
+  if (/^(视频|视频收入|内容制作|视频制作)$/.test(type)) return "内容制作";
+  if (/^(账户运营维护|运营维护)$/.test(type)) return "账户运营维护";
+  if (/^(投放充值|投流|投放|垫款|垫款应收)$/.test(type)) return "投放充值";
+  return type;
+}
+
 function mergeVerificationBreakdown(items = []) {
   const merged = new Map();
   for (const item of items) {
-    const type = item.type || "其他";
+    const type = normalizeVerificationBreakdownType(item.type || "其他");
     const current = merged.get(type) || { ...item, amount: 0, sourceFiles: [] };
     current.amount = Math.round((Number(current.amount || 0) + Number(item.amount || 0)) * 100) / 100;
     current.sourceFiles = [...new Set([...current.sourceFiles, item.sourceFile].filter(Boolean))];
