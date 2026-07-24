@@ -27,7 +27,16 @@ export function fileDate(value) {
 export function fileOpenMode(file = {}) {
   const name = String(file.name || "").toLowerCase();
   if (/\.(pdf|png|jpe?g|webp|gif|bmp)$/.test(name) || /^(application\/pdf|image\/)/.test(String(file.type || ""))) return "preview";
+  if (/\.(docx?|xlsx?|xlsm|pptx?)$/.test(name) || /(wordprocessingml|spreadsheet|presentationml|msword|ms-excel|ms-powerpoint)/.test(String(file.type || ""))) return "office-preview";
   return "download";
+}
+
+export function filePreviewUrl(file = {}) {
+  const storageUrl = String(file.storageUrl || "");
+  if (!/^https?:\/\//i.test(storageUrl)) return "";
+  return fileOpenMode(file) === "office-preview"
+    ? `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(storageUrl)}`
+    : storageUrl;
 }
 
 export function csvCell(value) {

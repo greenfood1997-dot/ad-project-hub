@@ -1,5 +1,5 @@
 import React from "react";
-import { fileDate, fileOpenMode } from "./utils/format.js";
+import { fileDate, fileOpenMode, filePreviewUrl } from "./utils/format.js";
 
 export default function ProjectFilesPanel({
   filesRef,
@@ -88,9 +88,10 @@ export default function ProjectFilesPanel({
             <strong>{file.name}</strong>
             <span>{file.source || file.category || "文件"} · {fileSize(file.size)} · {file.storageStatus || (file.storageUrl ? "已持久化" : "仅记录")} · {file.uploadedByName || file.uploadedBy || "未知上传人"} · {fileDate(file.uploadedAt)}</span>
             {file.storageUrl && !String(file.storageUrl).startsWith("/uploads/")
-              ? fileOpenMode(file) === "preview"
-                ? <a className="ghost tiny file-link" href={file.storageUrl} target="_blank" rel="noreferrer">预览文件</a>
-                : <button type="button" className="ghost tiny file-link" onClick={() => onDownloadProjectFile(file)}>下载文件</button>
+              ? <>
+                  {fileOpenMode(file) !== "download" && <a className="ghost tiny file-link" href={filePreviewUrl(file)} target="_blank" rel="noreferrer">预览文件</a>}
+                  <button type="button" className="ghost tiny file-link" onClick={() => onDownloadProjectFile(file)}>下载文件</button>
+                </>
               : file.storageProvider === "local" && <span className="muted">本地暂存不可公开访问，需配置对象存储</span>}
             {!file.storageUrl && <span className="muted">历史文件仅保留记录，需重新上传原文件后才能查看</span>}
             <button type="button" className="ghost tiny" disabled={copyingFileKey === uploadedFileKey(file)} onClick={() => onCopyFileInfo(file)}>
