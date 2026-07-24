@@ -33,8 +33,11 @@ export async function extractFileContent(file, options = {}) {
             ...file,
             text: ocr.text,
             tableRows: ocr.tableRows || [],
+            ocrPageErrors: ocr.pageErrors || [],
             pageCount: parsed.numpages,
-            extractionStatus: ocr.text.trim() ? `${reason}，已使用腾讯云 OCR 识别` : "腾讯云 OCR 未识别到文本"
+            extractionStatus: ocr.text.trim()
+              ? `${reason}，已使用腾讯云 OCR 识别${ocr.pageErrors?.length ? `（${ocr.pageErrors.length} 页失败，已继续识别其余页面）` : ""}`
+              : "腾讯云 OCR 未识别到文本"
           };
         } catch (error) {
           console.error(`[OCR] ${name}: Tencent OCR failed: ${error.message}`);

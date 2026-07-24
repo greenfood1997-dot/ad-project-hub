@@ -178,6 +178,23 @@ export default function UploadDialog({ session, projects, selected, initialType 
     }
   }
 
+  async function requestParsedPreview(parsedFiles) {
+    let temporaryFailures = 0;
+    for (;;) {
+      try {
+        return await apiRequest("/api/projects/upload-preview", session, {
+          method: "POST",
+          body: JSON.stringify(uploadBody(parsedFiles)),
+        });
+      } catch (error) {
+        if (!/数据库正在恢复|服务正在重启|暂时不可用|Failed to fetch|network|连接|502|503|504/i.test(String(error?.message || error)) || temporaryFailures >= 5) throw error;
+        temporaryFailures += 1;
+        setProgress({ step: "preview", percent: 68, text: `文件解析结果已保留，数据库短暂恢复中，正在第 ${temporaryFailures} 次重试预览` });
+        await new Promise((resolve) => window.setTimeout(resolve, Math.min(temporaryFailures * 1500, 5000)));
+      }
+    }
+  }
+
   async function requestPreview() {
     if (previewRequestRef.current) return;
     if (type === "create-project" && !canUseCreateProject) {
@@ -215,10 +232,7 @@ export default function UploadDialog({ session, projects, selected, initialType 
         setStagedFiles(Object.fromEntries(files.map((file, index) => [uploadedFileKey(file), parsedFiles[index]])));
       }
       setProgress({ step: "preview", percent: 62, text: `已上传 ${uploadedFiles.length} 个文件，正在联合 AI/OCR 识别` });
-      const data = await apiRequest("/api/projects/upload-preview", session, {
-        method: "POST",
-        body: JSON.stringify(uploadBody(parsedFiles)),
-      });
+      const data = await requestParsedPreview(parsedFiles);
       if (data.type && data.type !== type) setType(data.type);
       setPreview(data);
       setConfirmed(false);

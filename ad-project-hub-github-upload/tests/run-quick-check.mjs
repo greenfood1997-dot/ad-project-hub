@@ -30,6 +30,8 @@ const checks = [
   ["抽屉互斥", "tests/frontend-overlay-exclusivity-regression.mjs"],
   ["上传进度入口", "tests/frontend-upload-progress-entry.mjs"],
   ["OCR 重复请求复用", "tests/ocr-deduplication-regression.mjs"],
+  ["OCR 单页失败继续", "tests/ocr-page-continuation-regression.mjs"],
+  ["上传预览恢复重试", "tests/frontend-upload-preview-retry-regression.mjs"],
   ["图片发票识别", "tests/invoice-image-parser-regression.mjs"],
   ["报销表上传预览", "tests/reimbursement-upload-preview-regression.mjs"],
   ["审批工作台入口", "tests/frontend-approval-workbench-entry.mjs"],

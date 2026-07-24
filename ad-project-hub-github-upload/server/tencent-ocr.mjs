@@ -69,12 +69,13 @@ async function recognizeFileUncached(file, { isPdf, pageCount }) {
       tableRows.push(...result.tableRows.map((row) => ({ ...row, sheetName: `OCR第${page}页` })));
     } catch (error) {
       errors.push(`第${page}页：${error.message}`);
-      if (page === 1) throw error;
-      break;
+      // A single damaged or throttled page must not hide later settlement summaries.
+      console.warn(`[OCR] ${file.name || "file"}: page ${page} failed; continuing with remaining pages: ${error.message}`);
+      continue;
     }
   }
 
-  if (texts.length) return { text: texts.join("\n\n"), tableRows };
+  if (texts.length) return { text: texts.join("\n\n"), tableRows, pageErrors: errors };
   throw new Error(errors.join("；") || "OCR 未识别到文本");
 }
 
