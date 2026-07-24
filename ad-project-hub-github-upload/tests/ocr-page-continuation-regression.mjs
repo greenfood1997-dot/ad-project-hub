@@ -10,5 +10,7 @@ assert(catchStart >= 0 && catchBlock.includes("continue;"), "failed OCR pages sh
 assert(!catchBlock.includes("break;"), "one failed OCR page must not stop the remaining document");
 assert(!catchBlock.includes("if (page === 1) throw"), "a failed cover page must not hide later settlement summaries");
 assert(source.includes("pageErrors: errors"), "partial OCR failures should remain observable");
+assert(source.includes("splitPdfIntoSinglePageBase64"), "PDF OCR should split the document before sending page requests");
+assert(source.includes("pdfPages[page - 1]"), "each OCR request should contain only its single PDF page");
 
 console.log("OCR page continuation regression passed");

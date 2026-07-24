@@ -57,13 +57,14 @@ async function recognizeFileUncached(file, { isPdf, pageCount }) {
     return await recognizePage(base64, { isPdf: false });
   }
 
+  const pdfPages = await splitPdfIntoSinglePageBase64(base64, pageCount);
   const texts = [];
   const tableRows = [];
   const errors = [];
   for (let page = 1; page <= pageCount; page += 1) {
     try {
       console.log(`[OCR] ${file.name || "file"}: recognizing PDF page ${page}/${pageCount}`);
-      const result = await recognizePage(base64, { isPdf: true, page });
+      const result = await recognizePage(pdfPages[page - 1], { isPdf: true, page: 1 });
       console.log(`[OCR] ${file.name || "file"}: page ${page} returned ${result.text.length} characters`);
       if (result.text.trim()) texts.push(`第${page}页\n${result.text}`);
       tableRows.push(...result.tableRows.map((row) => ({ ...row, sheetName: `OCR第${page}页` })));
@@ -77,6 +78,24 @@ async function recognizeFileUncached(file, { isPdf, pageCount }) {
 
   if (texts.length) return { text: texts.join("\n\n"), tableRows, pageErrors: errors };
   throw new Error(errors.join("；") || "OCR 未识别到文本");
+}
+
+export async function splitPdfIntoSinglePageBase64(base64, expectedPageCount = 0) {
+  const { PDFDocument } = await import("pdf-lib");
+  const source = await PDFDocument.load(Buffer.from(base64, "base64"), { updateMetadata: false });
+  const actualPageCount = source.getPageCount();
+  const pageCount = expectedPageCount > 0 ? Math.min(expectedPageCount, actualPageCount) : actualPageCount;
+  const pages = [];
+
+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+    const output = await PDFDocument.create();
+    const [page] = await output.copyPages(source, [pageIndex]);
+    output.addPage(page);
+    const bytes = await output.save({ useObjectStreams: true, addDefaultPage: false });
+    pages.push(Buffer.from(bytes).toString("base64"));
+  }
+
+  return pages;
 }
 
 function isPdfFile(file) {
