@@ -31,9 +31,9 @@ export async function migratePostgres() {
             extracted_fields,
             coalesce((extracted_fields->'profitBreakdown'->>'totalDeduction')::numeric, (extracted_fields->>'costUsed')::numeric, 0) as snapshot_total
           from parse_jobs
-          where coalesce((extracted_fields->>'hasCostSheet')::boolean, false)
-            and files::text ~ '(第一季度|第二季度|第三季度|第四季度)'
-            and files::text ~ '(第二季度|第三季度|第四季度)'
+          where extracted_fields ? 'profitBreakdown'
+            and extracted_fields->'costs' @> '[["日常支出"]]'::jsonb
+            and extracted_fields->'costs' @> '[["人力"]]'::jsonb
           order by project_id, coalesce(updated_at, created_at) desc
         )
         update projects p set
@@ -45,13 +45,13 @@ export async function migratePostgres() {
               jsonb_set(p.extracted_fields, '{profitBreakdown}', coalesce(s.extracted_fields->'profitBreakdown', '{}'::jsonb), true),
               '{profit}', to_jsonb(p.contract - s.snapshot_total), true
             ),
-            '{costSnapshotRepairVersion}', '"2026-07-24-v1"'::jsonb, true
+            '{costSnapshotRepairVersion}', '"2026-07-24-v2"'::jsonb, true
           )
         from latest_cost_snapshot s
         where p.id = s.project_id
           and s.snapshot_total > 0
           and p.cost_used > s.snapshot_total
-          and coalesce(p.extracted_fields->>'costSnapshotRepairVersion', '') <> '2026-07-24-v1'
+          and coalesce(p.extracted_fields->>'costSnapshotRepairVersion', '') <> '2026-07-24-v2'
       `);
     })().catch((error) => {
       // A failed startup/recovery attempt must remain retryable.
