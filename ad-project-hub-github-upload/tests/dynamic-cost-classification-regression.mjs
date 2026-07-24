@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { previewProjectUpload, uploadProjectCostSheet } from "../server/services.mjs";
 
 const project = {
@@ -72,5 +73,23 @@ const replacement = await uploadProjectCostSheet(db, {
 }, user);
 assert.equal(replacement.project.extractedFields.profitBreakdown.executionCost, 526316.96, "a corrected annual snapshot must replace rather than accumulate daily expense");
 assert.equal(replacement.project.extractedFields.profitBreakdown.internalLabor, 754553.29, "a corrected annual snapshot must replace rather than accumulate labor");
+
+const realWorkbook = await readFile("/Users/greenfood/Desktop/工作簿1212.xlsx").catch(() => null);
+if (realWorkbook) {
+  const realPreview = await previewProjectUpload(db, {
+    type: "cost-sheet",
+    id: project.id,
+    files: [{
+      name: "工作簿1212.xlsx",
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      size: realWorkbook.length,
+      base64: realWorkbook.toString("base64")
+    }]
+  }, user);
+  const realRows = new Map(realPreview.sections.find((item) => item.title === "成本归集").rows.map((item) => [item.name, item.amount]));
+  assert.equal(realRows.get("日常支出"), 526316.96, "the real annual workbook daily expense must remain authoritative");
+  assert.equal(realRows.get("人力"), 754553.29, "the real annual workbook labor must remain authoritative");
+  assert.equal(realPreview.fields["总成本影响"], 1835632.76, "the real annual workbook must reconcile every cost category once");
+}
 
 console.log("dynamic cost classification regression passed");
