@@ -227,6 +227,42 @@
 **Accepted Invariants:** Financial Event Journal authoritative；Projection derived/rebuildable materialized state；relationship-complete input validation precedes scope extraction；company/project/currency isolation；canonical deterministic watermark；invalid history fail-closed；no direct projection financial mutation。  
 **Non-Authorizing Boundary:** 不授权 Projection Slice P2、PostgreSQL Projection Repository、`financial_projections` table、SQL persistence、migration、reconciliation persistence、Atomic Write Orchestrator、JSON/payment/approval/supplier/payroll/bank integration、shadow/dual write、frontend read switch、Source of Truth switch 或 production deployment。
 
+## Phase 1B Projection Slice P2 PostgreSQL Projection Repository Gate Design
+
+**Decision:** PostgreSQL Projection Repository Gate Design V1  
+**Status:** DESIGN ONLY / READY FOR OWNER REVIEW  
+**Date:** 2026-09-05  
+**Scope:** Future `financial_projections` identity/schema, scope constraints, BIGINT/currency boundary, watermark/version persistence, whole-state replacement, stale-write protection, status/error/read/transaction contracts.  
+**Recommendation:** AUTHORIZE_P2_IMPLEMENTATION_GATE  
+**Non-Authorizing Boundary:** 不授权 repository/adapter、table/schema、SQL、migration、production DB、reconciliation persistence、atomic orchestrator、JSON adapter、integration、Source of Truth switch 或 deployment。
+
+## P2 Gate Documentation Closure v0.1
+
+**Status:** DOCUMENTATION_CLOSURE_PENDING_OWNER_REVIEW  
+**Date:** 2026-09-05  
+**Findings Closed by Design:** P2-DOC-001 Company NULL uniqueness；P2-DOC-002 exact watermark CAS/stale-write semantics；P2-DOC-003 INVALID_HISTORY persistence policy。  
+**Scope:** Documentation closure only  
+**Non-Authorizing Boundary:** 不授权 implementation、SQL、table、migration、PostgreSQL connection、repository activation、reconciliation persistence、production integration、commit 或 push。
+
+## P2 Gate Documentation Closure v0.2
+
+**Status:** DOCUMENTATION_CLOSURE_V0_2_COMPLETE_PENDING_OWNER_ACCEPTANCE  
+**Date:** 2026-09-05  
+**Scope:** CAS-capable Repository Interface + Deterministic First-Insert Conflict Semantics + Stable Projection Technical Identity  
+**Findings:** P2-DOC-001 CLOSED；P2-DOC-002 CLOSED；P2-DOC-003 CLOSED；P2-DOC-004 CLOSED；P2-DOC-005 CLOSED；P2-DOC-006 CLOSED。  
+**Non-Authorizing Boundary:** 不授权 implementation、SQL、table、migration、真实 PostgreSQL、reconciliation persistence、production integration、P2-A、commit 或 push。
+
+## Phase 1B Projection Slice P2 PostgreSQL Repository Gate Owner Acceptance
+
+**Decision:** Phase 1B Projection Slice P2 PostgreSQL Repository Gate Owner Acceptance  
+**Status:** OWNER_ACCEPTED  
+**Date:** 2026-09-05  
+**Scope:** Projection Repository Architecture / Schema / CAS Contract Only  
+**Accepted Findings:** P2-DOC-001 CLOSED；P2-DOC-002 CLOSED；P2-DOC-003 CLOSED；P2-DOC-004 CLOSED；P2-DOC-005 CLOSED；P2-DOC-006 CLOSED。  
+**Classification:** NON-IMPLEMENTING / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING  
+**Accepted Invariants:** Event Journal authoritative；Projection derived/rebuildable；partial unique identity constraints；stable `projection_id`；complete watermark CAS；whole-state replacement；`INVALID_HISTORY` not persistable；shared transaction boundary；JSON deferred。  
+**Non-Authorizing Boundary:** 不授权 P2-A/P2-B implementation、repository、`financial_projections` table、SQL、migration、真实 PostgreSQL、reconciliation persistence、Atomic Write Orchestrator、JSON adapter、business integration、shadow/dual write、Source of Truth switch 或 deployment。
+
 ## Projection Slice P1 Remediation v0.2
 
 **Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION  

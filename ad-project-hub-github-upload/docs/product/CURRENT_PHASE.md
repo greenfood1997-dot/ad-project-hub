@@ -84,6 +84,40 @@
 **Next Gate:** Phase 1B Projection Slice P1 — Machine-readable Projection Contract + Pure Materialized Builder + Deterministic Rebuild  
 Projection Slice P1 必须单独 Owner Authorization。
 
+**Current Gate:** Phase 1B Projection Slice P2 — PostgreSQL Projection Repository Gate Design  
+**Status:** DESIGN ONLY  
+**Projection P1:** OWNER ACCEPTED  
+**Projection Repository Implementation:** NOT AUTHORIZED  
+**Migration:** NOT AUTHORIZED  
+**Production Integration:** NOT AUTHORIZED  
+**Source of Truth Switch:** NOT AUTHORIZED  
+**JSON Adapter:** DEFERRED
+
+**Phase 1B Projection Slice P2 Gate:** DOCUMENTATION_CLOSURE_V0_2_COMPLETE_PENDING_OWNER_ACCEPTANCE  
+**P2 Implementation:** NOT AUTHORIZED  
+**P2-A:** NOT STARTED  
+**P2-B:** NOT STARTED  
+**Migration:** NOT AUTHORIZED  
+**Production Integration:** NOT AUTHORIZED
+
+**Phase 1B Projection Slice P2 Gate:** OWNER ACCEPTED  
+**P2 Gate Design:** ACCEPTED  
+**P2 Documentation Closure v0.1:** ACCEPTED  
+**P2 Documentation Closure v0.2:** ACCEPTED  
+**Projection Storage Slice P2-A:** NOT STARTED  
+**Projection Storage Slice P2-B:** NOT STARTED  
+**Projection Repository:** NOT IMPLEMENTED  
+**Reconciliation Persistence:** NOT STARTED  
+**Migration:** NOT AUTHORIZED  
+**Production Integration:** NOT AUTHORIZED  
+**Source of Truth Switch:** NOT AUTHORIZED  
+**Next Gate:** Phase 1B Projection Storage Slice P2-A；仍需单独 Owner Authorization。
+
+**Phase 1B Projection Slice P2 Gate:** DOCUMENTATION_CLOSURE_PENDING_OWNER_REVIEW  
+**Implementation:** NOT AUTHORIZED  
+**Migration:** NOT AUTHORIZED  
+**Production Integration:** NOT AUTHORIZED
+
 Slice 1 已在授权范围内完成隔离实现，等待独立验证与 Owner 后续确认；未接入生产写路径。
 
 Owner Decisions for company identity, cash confirmation, revenue boundary, payroll boundary, JSON/PostgreSQL semantic consistency, supplier identity, exact reconciliation and event retention are accepted as Phase 1B design constraints only.
