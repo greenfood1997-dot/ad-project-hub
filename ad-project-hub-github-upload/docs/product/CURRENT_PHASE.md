@@ -48,6 +48,18 @@
 **Migration:** NOT AUTHORIZED  
 **Source of Truth Switch:** NOT AUTHORIZED
 
+**Phase 1B Projection Persistence & Rebuild Gate:** OWNER ACCEPTED  
+**Projection Gate Design:** ACCEPTED  
+**Projection Implementation:** NOT STARTED  
+**Projection Slice P1:** NOT STARTED  
+**Reconciliation Persistence:** NOT STARTED  
+**JSON Adapter:** DEFERRED  
+**Migration:** NOT AUTHORIZED  
+**Production Integration:** NOT AUTHORIZED  
+**Source of Truth Switch:** NOT AUTHORIZED  
+**Next Gate:** Phase 1B Projection Slice P1 — Machine-readable Projection Contract + Pure Materialized Builder + Deterministic Rebuild  
+Projection Slice P1 必须单独 Owner Authorization。
+
 Slice 1 已在授权范围内完成隔离实现，等待独立验证与 Owner 后续确认；未接入生产写路径。
 
 Owner Decisions for company identity, cash confirmation, revenue boundary, payroll boundary, JSON/PostgreSQL semantic consistency, supplier identity, exact reconciliation and event retention are accepted as Phase 1B design constraints only.
@@ -118,5 +130,13 @@ Not Allowed：UI/backend refactor、DB migration、new APIs、new AI automation�
 **Production Integration:** NOT AUTHORIZED  
 **Next Phase:** Phase 1B Storage Slice C  
 **Storage Slice C:** NOT STARTED；仍需单独 Owner Authorization，不得自行定义或实施。
+
+**Current Gate: Phase 1B Projection Persistence & Rebuild Gate Design**  
+**Status:** DESIGN ONLY  
+**Projection Implementation:** NOT AUTHORIZED  
+**Migration:** NOT AUTHORIZED  
+**Production Integration:** NOT AUTHORIZED  
+**JSON Adapter:** DEFERRED  
+**Source of Truth Switch:** NOT AUTHORIZED
 
 Phase 1 暂定为 **P0 Reliability & Truth Foundation**：合同/OCR truth、财务事实一致性、通知可靠性、核心 E2E、mock/fallback 与生产隔离。本轮不实施 Phase 1。

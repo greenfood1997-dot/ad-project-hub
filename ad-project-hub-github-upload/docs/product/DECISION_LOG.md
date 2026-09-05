@@ -188,6 +188,25 @@
 **Accepted Invariants:** Adapter 仅负责 raw immutable Financial Event persistence/query；所有读写使用调用方 tx/client；完整 30-field mapping 与 append-only contract；BIGINT codec、timestamptz normalization、JSONB isolation、idempotency canonical comparison、23505 conflict classification、malformed-row fail-closed 与 deep immutability 均已验证。  
 **Non-Authorizing Boundary:** 不授权 schema/migration、真实 financial_events table、production PostgreSQL activation、payment/approval/supplier/payroll/bank integration、projection/reconciliation persistence、JSON adapter、dual/shadow write、frontend read switch、Source of Truth switch、legacy deprecation、deployment 或 Storage Slice C。
 
+## Phase 1B Projection Persistence & Rebuild Gate Design
+
+**Decision:** Projection Persistence & Rebuild Gate Design V1  
+**Status:** DESIGN ONLY / READY FOR OWNER REVIEW  
+**Date:** 2026-09-05  
+**Scope:** Projection authority, identity/currency boundary, materialized state, deterministic rebuild, watermark, invalid-history handling, reconciliation interface and future repository/transaction contracts.  
+**Recommendation:** CONTINUE_WITH_PROJECTION_PERSISTENCE_GATE  
+**Non-Authorizing Boundary:** 不授权 projection repository、table/schema、migration、reconciliation persistence、atomic write orchestration、JSON adapter、production integration 或 Source of Truth switch；本阶段不实施任何代码。
+
+## Phase 1B Projection Persistence & Rebuild Gate Owner Acceptance
+
+**Decision:** Phase 1B Projection Persistence & Rebuild Gate Owner Acceptance  
+**Status:** OWNER_ACCEPTED  
+**Date:** 2026-09-05  
+**Scope:** Projection Persistence / Rebuild Architecture Design Only  
+**Classification:** NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING  
+**Accepted Decisions:** Financial Event Journal authoritative；Projection rebuildable materialized state；PostgreSQL production target；JSON Adapter DEFERRED；PER_CURRENCY_PROJECTION；FULL_REBUILD_FIRST；no direct projection financial mutation；canonical deterministic watermark；company/project scoped projection identity。  
+**Non-Authorizing Boundary:** 不授权 Projection Slice P1 implementation、PostgreSQL projection repository、`financial_projections` table、schema/migration、production PostgreSQL、reconciliation persistence、atomic write orchestrator、JSON/payment/approval/supplier/payroll/bank integration、shadow/dual write、frontend read switch、Source of Truth switch、legacy deprecation、deployment 或进入 Projection Slice P1。
+
 ## Storage Slice B Remediation v0.1.1
 
 **Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION  
