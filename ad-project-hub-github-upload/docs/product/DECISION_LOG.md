@@ -112,3 +112,33 @@
 **High Remaining:** 0  
 **Classification:** NON-PRODUCTION / NON-MIGRATING / NON-ACTIVATING  
 **Non-Authorizing Boundary:** 不授权 JSON production repository、PostgreSQL production repository、DB schema changes、migration、Event Journal production persistence、payment/approval/supplier/payroll production integration、dual write、shadow production write、frontend read switch、Source of Truth switch、legacy field deprecation、bank integration 或 production deployment。Legacy financial fields remain current authoritative production state。
+
+## Phase 1B Storage & Atomicity Gate Design
+
+**Decision:** Financial Truth Storage & Atomicity Gate Design V1  
+**Status:** DESIGN ONLY / READY FOR OWNER REVIEW  
+**Date:** 2026-09-05  
+**Scope:** JSON/PostgreSQL storage assessment, Financial Event persistence contract, atomic event-plus-projection model, idempotency race handling, reconciliation persistence, crash recovery and semantic parity.  
+**Non-Authorizing Boundary:** 不授权任何 storage adapter、DB schema 变更、migration、JSON/PostgreSQL production repository、真实 payment/approval/supplier/payroll 接入、dual/shadow production write、API/frontend 改造、Source of Truth switch、legacy deprecation、测试执行、部署或 push。Legacy financial fields remain authoritative。
+
+## Phase 1B Storage & Atomicity Gate Owner Acceptance
+
+**Decision:** Phase 1B Financial Truth Storage & Atomicity Gate Owner Acceptance  
+**Status:** OWNER_ACCEPTED  
+**Date:** 2026-09-05  
+**Scope:** Storage / Atomicity Architecture Design Only  
+**Classification:** NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING  
+**Accepted Design Decisions:** PostgreSQL Production Financial Truth Storage Target；JSON Local/Dev/Test Compatibility Only；Persistent Rebuildable Projection Rule；Historical Reconciliation Mismatch Requires Manual Review；BIGINT / Safe Integer Boundary；Stable Payable Identity Rule。  
+**Storage Invariants:** Financial Event Journal is authoritative history; Projection is rebuildable materialized state and never the reverse authority; no projection without an event; synchronous Event + required Projection + applicable Reconciliation should share one transaction with rollback on failure; same idempotency key resolves by canonical payload comparison; PostgreSQL uses database uniqueness for races; JSON uses one serialized mutation critical section; BIGINT conversion must pass `Number.isSafeInteger`; payable requires stable `payableId`; MISMATCH/UNKNOWN are never auto-smoothed; rebuild is deterministic, canonical, relationship-validated, fail-closed and auditable; legacy financial fields remain authoritative until migration/reconciliation/source-switch gates pass.  
+**Non-Authorizing Boundary:** 不授权创建或应用 `financial_events` schema/migration、实现 production adapters/repositories、Event Journal/Projection/Reconciliation production persistence、payment/approval/supplier/payroll/bank integration、dual/shadow write、frontend read switch、Source of Truth switch、legacy deprecation、production deployment 或进入 Storage Slice A。  
+**Open Questions:** Storage design questions are resolved. Bank evidence, finance review SLA, multi-payable allocation, detailed mismatch SLA, operational rebuild tooling and archive operations block later integration only; Revenue Recognition, Payroll and statutory retention/archive remain deferred policy.
+
+### Storage Gate Design Decisions
+
+| Date | Decision | Status |
+|---|---|---|
+| 2026-09-05 | PostgreSQL is the target production Financial Truth storage; JSON remains Local/Dev/Test compatibility with limitations | ACCEPTED_AS_STORAGE_GATE_DESIGN |
+| 2026-09-05 | Financial Event Journal is authoritative; Projection is persistent rebuildable cache/materialized state | ACCEPTED_AS_STORAGE_GATE_DESIGN |
+| 2026-09-05 | Historical reconciliation `MISMATCH` / `UNKNOWN` requires recorded manual review and must not be auto-smoothed | ACCEPTED_AS_STORAGE_GATE_DESIGN |
+
+**Design-only boundary:** 上述决定不代表 schema 已创建、migration 已应用、adapter/repository 已实现或 production 已激活。

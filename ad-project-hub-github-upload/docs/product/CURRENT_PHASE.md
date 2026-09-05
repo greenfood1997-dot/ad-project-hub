@@ -62,8 +62,23 @@ Not Allowed：UI/backend refactor、DB migration、new APIs、new AI automation�
 
 **Next Gate: Phase 1B Implementation Gate Design**：定义最小安全实施范围，明确第一批允许新增的模块、测试、存储结构和禁止修改范围；不是直接全面实施 Financial Truth。
 
-**Next Gate: Phase 1B Storage & Atomicity Gate Design**  
-**Status: NOT STARTED**  
-不得自行开始下一 Gate。
+**Current Gate: Phase 1B Storage & Atomicity Gate Design**
+**Status: DESIGN ONLY**
+**Storage Implementation: NOT AUTHORIZED**
+**Production Integration: NOT AUTHORIZED**
+**Migration: NOT AUTHORIZED**
+**Source of Truth Switch: NOT AUTHORIZED**
+
+本 Gate 仅定义存储、原子性、恢复、对账持久化与未来实施切片；不得自行开始 adapter、schema 或生产接入实施。
+
+**Phase 1B Storage & Atomicity Gate: OWNER ACCEPTED**
+**Storage Gate Design: ACCEPTED**
+**Storage Implementation: NOT STARTED**
+**Production Integration: NOT AUTHORIZED**
+**Migration: NOT AUTHORIZED**
+**Source of Truth Switch: NOT AUTHORIZED**
+
+**Next Phase:** Phase 1B Storage Slice A — Storage Contract & PostgreSQL Schema Contract Design/Tests
+**Storage Slice A:** NOT STARTED；仍需单独 Owner Authorization。
 
 Phase 1 暂定为 **P0 Reliability & Truth Foundation**：合同/OCR truth、财务事实一致性、通知可靠性、核心 E2E、mock/fallback 与生产隔离。本轮不实施 Phase 1。
