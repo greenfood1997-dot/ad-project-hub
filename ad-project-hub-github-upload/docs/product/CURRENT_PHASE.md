@@ -48,6 +48,30 @@
 **Migration:** NOT AUTHORIZED  
 **Source of Truth Switch:** NOT AUTHORIZED
 
+**Phase 1B Projection Slice P1:** IMPLEMENTED_PENDING_VALIDATION  
+**Scope:** Pure Projection Contract + Materialized Builder + Deterministic Watermark + Company/Project Rebuild + Isolated Tests  
+**Projection Repository:** NOT IMPLEMENTED  
+**Migration:** NOT AUTHORIZED  
+**Production Integration:** NOT AUTHORIZED
+
+**Projection Slice P1 Remediation v0.1:** IMPLEMENTED_PENDING_REVALIDATION
+
+**Projection Slice P1 Remediation v0.2:** IMPLEMENTED_PENDING_FINAL_REVALIDATION
+
+**Phase 1B Projection Slice P1:** OWNER ACCEPTED  
+**Implementation:** IMPLEMENTED  
+**Final Revalidation:** PASS  
+**Pure Projection Contract:** ACCEPTED  
+**Deterministic Rebuild:** ACCEPTED  
+**Relationship Integrity Boundary:** ACCEPTED  
+**Projection Repository:** NOT IMPLEMENTED  
+**Projection Slice P2:** NOT STARTED  
+**Reconciliation Persistence:** NOT STARTED  
+**Migration:** NOT AUTHORIZED  
+**Production Integration:** NOT AUTHORIZED  
+**Source of Truth Switch:** NOT AUTHORIZED  
+**Next Candidate Phase:** Phase 1B Projection Slice P2 — PostgreSQL Projection Repository Adapter；仍需单独 Owner Authorization。
+
 **Phase 1B Projection Persistence & Rebuild Gate:** OWNER ACCEPTED  
 **Projection Gate Design:** ACCEPTED  
 **Projection Implementation:** NOT STARTED  

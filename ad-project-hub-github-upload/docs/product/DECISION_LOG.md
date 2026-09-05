@@ -207,6 +207,40 @@
 **Accepted Decisions:** Financial Event Journal authoritative；Projection rebuildable materialized state；PostgreSQL production target；JSON Adapter DEFERRED；PER_CURRENCY_PROJECTION；FULL_REBUILD_FIRST；no direct projection financial mutation；canonical deterministic watermark；company/project scoped projection identity。  
 **Non-Authorizing Boundary:** 不授权 Projection Slice P1 implementation、PostgreSQL projection repository、`financial_projections` table、schema/migration、production PostgreSQL、reconciliation persistence、atomic write orchestrator、JSON/payment/approval/supplier/payroll/bank integration、shadow/dual write、frontend read switch、Source of Truth switch、legacy deprecation、deployment 或进入 Projection Slice P1。
 
+## Projection Slice P1 Implementation
+
+**Status:** IMPLEMENTED_PENDING_VALIDATION  
+**Date:** 2026-09-05  
+**Scope:** Pure Projection Contract / Materialized Builder / Deterministic Watermark / Company-Project Rebuild / Isolated Tests  
+**Classification:** NON-STORAGE / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING
+
+## Phase 1B Projection Slice P1 Owner Acceptance
+
+**Decision:** Phase 1B Projection Slice P1 Owner Acceptance  
+**Status:** OWNER_ACCEPTED  
+**Date:** 2026-09-05  
+**Scope:** Pure Materialized Projection + Deterministic Rebuild + Relationship Integrity Boundary  
+**Validation:** PASS  
+**Remaining Critical:** 0  
+**Remaining High:** 0  
+**Classification:** NON-STORAGE-PERSISTING / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING  
+**Accepted Invariants:** Financial Event Journal authoritative；Projection derived/rebuildable materialized state；relationship-complete input validation precedes scope extraction；company/project/currency isolation；canonical deterministic watermark；invalid history fail-closed；no direct projection financial mutation。  
+**Non-Authorizing Boundary:** 不授权 Projection Slice P2、PostgreSQL Projection Repository、`financial_projections` table、SQL persistence、migration、reconciliation persistence、Atomic Write Orchestrator、JSON/payment/approval/supplier/payroll/bank integration、shadow/dual write、frontend read switch、Source of Truth switch 或 production deployment。
+
+## Projection Slice P1 Remediation v0.2
+
+**Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION  
+**Date:** 2026-09-05  
+**Scope:** Cross-Company Relationship Integrity Closure + Relationship-Complete Input Contract  
+**Classification:** NON-STORAGE / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING
+
+## Projection Slice P1 Remediation v0.1
+
+**Status:** IMPLEMENTED_PENDING_REVALIDATION  
+**Date:** 2026-09-05  
+**Scope:** Relationship Integrity Before Scope Projection + Cross-Scope Adversarial Test Closure  
+**Classification:** NON-STORAGE / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING
+
 ## Storage Slice B Remediation v0.1.1
 
 **Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION  

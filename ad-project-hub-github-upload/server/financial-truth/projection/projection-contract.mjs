@@ -1,0 +1,4 @@
+const fields=(scope)=>scope==="COMPANY"?["scopeType","companyId","currency","cashMinor","receivableMinor","payableMinor","recognizedRevenueMinor","status","watermark","rebuiltAt"]:["scopeType","companyId","projectId","currency","paidMinor","receivableMinor","costMinor","payableMinor","recognizedRevenueMinor","status","watermark","rebuiltAt"];
+export const PROJECTION_SCOPES=Object.freeze(["COMPANY","PROJECT"]);
+export const PROJECTION_STATUSES=Object.freeze(["CURRENT","REBUILD_REQUIRED","RECONCILIATION_REQUIRED","INVALID_HISTORY"]);
+export function projectionContract(scope){return Object.freeze(fields(scope).map(name=>Object.freeze({name,scope,required:true,nullable:name==="projectId",semanticRole:name.endsWith("Minor")?"derived minor-unit amount":"projection identity/state",valueType:name.endsWith("Minor")?"safe-integer":"string"})));}
