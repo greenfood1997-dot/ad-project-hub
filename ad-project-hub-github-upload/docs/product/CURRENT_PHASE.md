@@ -53,6 +53,8 @@
 **Projection Repository:** NOT IMPLEMENTED  
 **Migration:** NOT AUTHORIZED  
 **Production Integration:** NOT AUTHORIZED
+**Projection Storage Slice P2-B Gate:** DOCUMENTATION_CLOSURE_V0_1_COMPLETE_PENDING_OWNER_REVIEW
+**P2-B Implementation:** NOT AUTHORIZED
 
 **Projection Slice P1 Remediation v0.1:** IMPLEMENTED_PENDING_REVALIDATION
 
@@ -219,3 +221,17 @@ Phase 1 暂定为 **P0 Reliability & Truth Foundation**：合同/OCR truth、财
 **Production Integration:** NOT AUTHORIZED  
 **Source of Truth Switch:** NOT AUTHORIZED  
 **Next Candidate:** Phase 1B Projection Storage Slice P2-B — Isolated PostgreSQL Projection Repository Adapter (NOT STARTED; requires separate Owner Authorization)
+
+**Current Gate:** Projection Storage Slice P2-B Implementation Authorization Gate  
+**Status:** DESIGN / AUTHORIZATION ONLY  
+**P2-A:** OWNER ACCEPTED  
+**P2-B Implementation:** NOT AUTHORIZED  
+**Migration:** NOT AUTHORIZED  
+**Production Integration:** NOT AUTHORIZED
+**Projection Storage Slice P2-B Implementation Gate:** OWNER ACCEPTED  
+**P2B-DOC-001:** CLOSED  
+**P2B-DOC-002:** CLOSED  
+**P2-B Implementation:** AUTHORIZED_NOT_STARTED  
+**Projection Repository Adapter:** NOT IMPLEMENTED  
+**Source of Truth Switch:** NOT AUTHORIZED  
+**Next Phase:** Projection Storage Slice P2-B Implementation (AUTHORIZED_NOT_STARTED)
