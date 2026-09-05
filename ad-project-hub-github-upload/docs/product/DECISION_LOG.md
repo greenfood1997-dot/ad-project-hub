@@ -69,3 +69,46 @@
 **Scope:** Pure Domain Foundation Only（Financial Event contract/validation、business idempotency、correction/reversal、confirmation authority、pure projections/reconciliation、storage-neutral journal interface、in-memory test repository、isolated deterministic tests）。  
 **Non-Authorizing Boundary:** 不授权修改现有 payment/approval/supplier/petty-cash/parse/compensation/frontend/API 写路径；不授权 DB schema、JSON/PostgreSQL production repository、真实 financial write integration、dual/shadow write、migration、Source of Truth switch、legacy deprecation、production deployment 或 push。Legacy financial fields remain authoritative。  
 **Implementation State:** SLICE 1 IMPLEMENTATION NOT STARTED。
+
+## Slice 1 Implementation Record
+
+**Decision:** Phase 1B Financial Truth Slice 1 Implementation  
+**Status:** IMPLEMENTED_PENDING_VALIDATION  
+**Date:** 2026-09-05  
+**Scope:** Isolated Financial Truth domain modules, pure projections/reconciliation, storage-neutral journal interface, in-memory repository and deterministic tests only.  
+**Boundary:** 未修改现有 payment/approval/supplier/payroll/project financial paths、API、frontend、DB、data 或 package；未接入生产写入、migration、dual write、shadow write 或 Source of Truth switch。
+
+## Slice 1 Validation Remediation v0.1
+
+**Status:** IMPLEMENTED_PENDING_REVALIDATION  
+**Date:** 2026-09-05  
+**Decision:** 强化 minor-unit precision、deep immutability、幂等冲突、时间戳、reversal/correction、canonical projection 与 reconciliation domain rules；明确 `COST_INCURRED` 与 `PAYABLE_CREATED` 各自承担单一财务效果。  
+**Boundary:** 仅限 Slice 1 pure domain、in-memory journal 与 isolated deterministic test；不代表 VALIDATED、OWNER ACCEPTED、PRODUCTION READY、ACTIVATED 或 MIGRATED。
+
+## Slice 1 Remediation v0.2
+
+**Decision:** Financial History Integrity Rule；Canonical Projection Replay Rule  
+**Status:** ACCEPTED_AS_SLICE_1_REMEDIATION_DESIGN  
+**Date:** 2026-09-05  
+**Scope:** History-aware reversal/correction validation, canonical event history, effective event resolution and final deep immutable journal API.  
+**Boundary:** 仅为 Slice 1 domain remediation 设计与实现状态记录；不代表 VALIDATED、OWNER ACCEPTED、PRODUCTION READY、MIGRATED 或 ACTIVATED。
+
+## Slice 1 Remediation v0.3
+
+**Decision:** Financial Relationship Graph Integrity Rule；Effective Event Replacement Rule  
+**Status:** ACCEPTED_AS_SLICE_1_REMEDIATION_DESIGN  
+**Date:** 2026-09-05  
+**Scope:** Unified relationship graph validation, history fail-closed semantics and corrected-event replacement in effective projections.  
+**Boundary:** 不代表 VALIDATED、OWNER ACCEPTED、PRODUCTION READY、MIGRATED 或 ACTIVATED；不涉及 production integration、migration、API/frontend 或 Slice 2。
+
+## Phase 1B Slice 1 Owner Acceptance
+
+**Decision:** Phase 1B Financial Truth Slice 1 Owner Acceptance  
+**Status:** OWNER_ACCEPTED  
+**Date:** 2026-09-05  
+**Scope:** Pure Financial Truth Domain Foundation Only  
+**Validation:** PASS  
+**Critical Remaining:** 0  
+**High Remaining:** 0  
+**Classification:** NON-PRODUCTION / NON-MIGRATING / NON-ACTIVATING  
+**Non-Authorizing Boundary:** 不授权 JSON production repository、PostgreSQL production repository、DB schema changes、migration、Event Journal production persistence、payment/approval/supplier/payroll production integration、dual write、shadow production write、frontend read switch、Source of Truth switch、legacy field deprecation、bank integration 或 production deployment。Legacy financial fields remain current authoritative production state。

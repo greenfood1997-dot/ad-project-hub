@@ -199,6 +199,8 @@ Business confirmation and cash confirmation are separate. PM supplier delivery c
 
 ## 17. Open Questions
 
+> **Remediation v0.1 note:** overpayment（例如 Receivable 100000、Payment 120000）仍为 `OPEN_POLICY / NOT_PRODUCTION_AUTHORIZED`；任何负应收结果不得解释为正式会计政策。
+
 ### RESOLVED_BY_OWNER
 
 - `companyId` required with default company identity.

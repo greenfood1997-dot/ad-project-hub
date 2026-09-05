@@ -16,12 +16,39 @@
 
 **Slice 1: AUTHORIZED**
 
+**Slice 1 Implementation: IMPLEMENTED_PENDING_VALIDATION**
+
+**Slice 1 Remediation v0.1: IMPLEMENTED_PENDING_REVALIDATION**
+
+**Independent Validation: FAILED — REMEDIATION APPLIED, REVALIDATION REQUIRED**
+
+**Slice 1 Remediation v0.2: IMPLEMENTED_PENDING_REVALIDATION**
+
+**Slice 1 Remediation v0.3: IMPLEMENTED_PENDING_FINAL_REVALIDATION**
+
+**Phase 1B Slice 1: OWNER ACCEPTED**
+
+**Implementation: IMPLEMENTED**
+
+**Independent Validation: PASS**
+
+**Final Closure Validation: PASS**
+
+**Production Integration: NOT AUTHORIZED**  
+**Storage Integration: NOT AUTHORIZED**  
+**Migration: NOT AUTHORIZED**  
+**Source of Truth Switch: NOT AUTHORIZED**
+
+**Final Revalidation: FAILED — RELATIONSHIP GRAPH / EFFECTIVE EVENT REMEDIATION APPLIED**
+
+**Independent Revalidation: FAILED — SECOND REMEDIATION APPLIED**
+
 **Authorized Scope:** Domain / Pure Logic / In-memory Test Repository / Deterministic Tests Only  
 **Real Financial Write Integration:** NOT AUTHORIZED  
 **Migration:** NOT AUTHORIZED  
 **Source of Truth Switch:** NOT AUTHORIZED
 
-本 Gate 已获 Owner 接受，但 Slice 1 实施尚未开始；授权严格限于上述纯领域与测试范围。
+Slice 1 已在授权范围内完成隔离实现，等待独立验证与 Owner 后续确认；未接入生产写路径。
 
 Owner Decisions for company identity, cash confirmation, revenue boundary, payroll boundary, JSON/PostgreSQL semantic consistency, supplier identity, exact reconciliation and event retention are accepted as Phase 1B design constraints only.
 
@@ -34,5 +61,9 @@ Allowed：documentation、read-only architecture mapping、product baseline、de
 Not Allowed：UI/backend refactor、DB migration、new APIs、new AI automation、production deployment、financial schema changes、notification refactor、role permission changes。
 
 **Next Gate: Phase 1B Implementation Gate Design**：定义最小安全实施范围，明确第一批允许新增的模块、测试、存储结构和禁止修改范围；不是直接全面实施 Financial Truth。
+
+**Next Gate: Phase 1B Storage & Atomicity Gate Design**  
+**Status: NOT STARTED**  
+不得自行开始下一 Gate。
 
 Phase 1 暂定为 **P0 Reliability & Truth Foundation**：合同/OCR truth、财务事实一致性、通知可靠性、核心 E2E、mock/fallback 与生产隔离。本轮不实施 Phase 1。
