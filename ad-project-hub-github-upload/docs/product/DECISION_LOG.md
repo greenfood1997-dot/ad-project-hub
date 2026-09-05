@@ -329,6 +329,28 @@
 **Accepted Closure:** P2B-DOC-001 CLOSED; P2B-DOC-002 CLOSED  
 **Boundary:** NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
 
+## Financial Truth Rebuild Orchestration Gate Documentation Closure v0.1
+
+**Status:** DOCUMENTATION_CLOSURE_V0_1_COMPLETE_PENDING_OWNER_REVIEW  
+**Date:** 2026-09-06  
+**Findings:** RO-DOC-001 Expected Watermark Capture Ordering / Old-History Projection Regression Risk — CLOSED; RO-DOC-002 Relationship Completeness Evidence Boundary — CLOSED  
+**Boundary:** NON-IMPLEMENTING / NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-ACTIVATING
+
+## Financial Truth Rebuild Orchestration Capability Gate Owner Acceptance
+
+**Status:** OWNER_ACCEPTED  
+**Date:** 2026-09-06  
+**Accepted Findings Closure:** RO-DOC-001 CLOSED; RO-DOC-002 CLOSED  
+**Scope:** Isolated Rebuild Input Provider + Validated Relationship-Complete Bundle + P1/P2-B Coordination + Frozen Expected Watermark + Deterministic Result Mapping  
+**Boundary:** NON-RECONCILING / NON-ATOMIC-WRITE / NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-ACTIVATING
+
+## Financial Truth Rebuild Orchestration Capability Gate v0.1
+
+**Status:** DESIGN_PENDING_OWNER_REVIEW  
+**Date:** 2026-09-06  
+**Motivation:** Close the missing ownership gap between Financial Event Journal, relationship-complete history, P1 deterministic rebuild, and P2-B Projection Repository.  
+**Boundary:** NON-MIGRATING / NON-REAL-DB / NON-ATOMIC-WRITE / NON-RECONCILING / NON-PRODUCTION / NON-ACTIVATING
+
 ## Phase 1B Projection Storage Slice P2-B Implementation Completion v0.1
 
 **Status:** IMPLEMENTED_PENDING_VALIDATION  
