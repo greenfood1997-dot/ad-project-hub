@@ -3,3 +3,7 @@ export * from "./postgres-idempotency.mjs";
 export * from "./transaction-context.mjs";
 export * from "./postgres-journal-contract.mjs";
 export * from "./postgres-schema-contract.mjs";
+export * from "./postgres-row-mapper.mjs";
+export * from "./postgres-sql.mjs";
+export * from "./postgres-journal-adapter.mjs";
+export * from "./postgres-error-classifier.mjs";

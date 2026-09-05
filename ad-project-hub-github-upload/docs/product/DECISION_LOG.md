@@ -161,6 +161,40 @@
 **Schema Version:** No `event_schema_version` in Slice A; replay compatibility remains governed by accepted FinancialEvent contract/version policy; SUFFICIENT_FOR_SLICE_A.  
 **Non-Authorizing Boundary:** 不授权 db schema 修改、migration、真实 PostgreSQL table/adapter、complete production row mapper、Event Journal/Projection/Reconciliation persistence、JSON/payment/approval/supplier/payroll/bank integration、dual/shadow write、frontend read switch、Source of Truth switch、legacy deprecation、deployment 或 Storage Slice B。
 
+## Phase 1B Storage Slice B Implementation
+
+**Status:** IMPLEMENTED_PENDING_VALIDATION  
+**Date:** 2026-09-05  
+**Scope:** Isolated PostgreSQL Journal Adapter Only  
+**Non-Authorizing:** YES；Migration NOT APPLIED；Production Storage NOT ACTIVATED；Production Integration NOT AUTHORIZED；不得进入 Storage Slice C。
+
+## Storage Slice B Remediation v0.1
+
+**Status:** IMPLEMENTED_PENDING_REVALIDATION  
+**Date:** 2026-09-05  
+**Scope:** PostgreSQL conflict classification、timestamp contract tests、malformed read / immutability tests  
+**Boundary:** NON-PRODUCTION / NON-MIGRATING / NON-INTEGRATING；不授权 Storage Slice C。
+
+## Phase 1B Financial Truth Storage Slice B Owner Acceptance
+
+**Decision:** Phase 1B Financial Truth Storage Slice B Owner Acceptance  
+**Status:** OWNER_ACCEPTED  
+**Date:** 2026-09-05  
+**Scope:** Isolated PostgreSQL Journal Adapter Only  
+**Validation:** PASS  
+**Remaining Critical:** 0  
+**Remaining High:** 0  
+**Classification:** NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING  
+**Accepted Invariants:** Adapter 仅负责 raw immutable Financial Event persistence/query；所有读写使用调用方 tx/client；完整 30-field mapping 与 append-only contract；BIGINT codec、timestamptz normalization、JSONB isolation、idempotency canonical comparison、23505 conflict classification、malformed-row fail-closed 与 deep immutability 均已验证。  
+**Non-Authorizing Boundary:** 不授权 schema/migration、真实 financial_events table、production PostgreSQL activation、payment/approval/supplier/payroll/bank integration、projection/reconciliation persistence、JSON adapter、dual/shadow write、frontend read switch、Source of Truth switch、legacy deprecation、deployment 或 Storage Slice C。
+
+## Storage Slice B Remediation v0.1.1
+
+**Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION  
+**Date:** 2026-09-05  
+**Scope:** Malformed Read Fail-Closed + Return Immutability Test Closure  
+**Boundary:** NON-PRODUCTION / NON-MIGRATING / NON-INTEGRATING；不授权 Storage Slice C。
+
 ### Storage Gate Design Decisions
 
 | Date | Decision | Status |

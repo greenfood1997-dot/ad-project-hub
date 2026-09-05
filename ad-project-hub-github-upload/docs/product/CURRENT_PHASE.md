@@ -87,6 +87,10 @@ Not Allowed：UI/backend refactor、DB migration、new APIs、new AI automation�
 **Production Storage:** NOT ACTIVATED  
 **Production Integration:** NOT AUTHORIZED
 
+**Storage Slice B Remediation v0.1:** IMPLEMENTED_PENDING_REVALIDATION
+
+**Storage Slice B Remediation v0.1.1:** IMPLEMENTED_PENDING_FINAL_REVALIDATION
+
 **Storage Slice A Remediation v0.1:** IMPLEMENTED_PENDING_REVALIDATION
 
 **Phase 1B Storage Slice A:** OWNER ACCEPTED  
@@ -98,5 +102,21 @@ Not Allowed：UI/backend refactor、DB migration、new APIs、new AI automation�
 **Production Integration:** NOT AUTHORIZED  
 **Next Phase:** Phase 1B Storage Slice B — PostgreSQL Journal Adapter Isolated Implementation  
 **Storage Slice B:** NOT STARTED；仍需单独 Owner Authorization。
+
+**Phase 1B Storage Slice B:** IMPLEMENTED_PENDING_VALIDATION  
+**Scope:** Isolated PostgreSQL Journal Adapter Only  
+**Migration:** NOT APPLIED  
+**Production Storage:** NOT ACTIVATED  
+**Production Integration:** NOT AUTHORIZED
+
+**Phase 1B Storage Slice B:** OWNER ACCEPTED  
+**Implementation:** IMPLEMENTED  
+**Final Revalidation:** PASS  
+**PostgreSQL Journal Adapter:** ACCEPTED  
+**Migration:** NOT APPLIED  
+**Production Storage:** NOT ACTIVATED  
+**Production Integration:** NOT AUTHORIZED  
+**Next Phase:** Phase 1B Storage Slice C  
+**Storage Slice C:** NOT STARTED；仍需单独 Owner Authorization，不得自行定义或实施。
 
 Phase 1 暂定为 **P0 Reliability & Truth Foundation**：合同/OCR truth、财务事实一致性、通知可靠性、核心 E2E、mock/fallback 与生产隔离。本轮不实施 Phase 1。
