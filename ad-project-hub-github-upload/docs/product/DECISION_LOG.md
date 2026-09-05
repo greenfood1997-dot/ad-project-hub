@@ -263,6 +263,13 @@
 **Accepted Invariants:** Event Journal authoritative；Projection derived/rebuildable；partial unique identity constraints；stable `projection_id`；complete watermark CAS；whole-state replacement；`INVALID_HISTORY` not persistable；shared transaction boundary；JSON deferred。  
 **Non-Authorizing Boundary:** 不授权 P2-A/P2-B implementation、repository、`financial_projections` table、SQL、migration、真实 PostgreSQL、reconciliation persistence、Atomic Write Orchestrator、JSON adapter、business integration、shadow/dual write、Source of Truth switch 或 deployment。
 
+## Projection Storage Slice P2-A Implementation
+
+**Status:** IMPLEMENTED_PENDING_VALIDATION  
+**Date:** 2026-09-05  
+**Scope:** Machine-readable Projection Storage Contract / Scope-Status-Identity Contract / Row Mapping / Watermark-CAS Contract / Repository Interface Contract / Deterministic Tests  
+**Classification:** NON-SQL / NON-REPOSITORY / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING
+
 ## Projection Slice P1 Remediation v0.2
 
 **Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION  
@@ -293,3 +300,13 @@
 | 2026-09-05 | Historical reconciliation `MISMATCH` / `UNKNOWN` requires recorded manual review and must not be auto-smoothed | ACCEPTED_AS_STORAGE_GATE_DESIGN |
 
 **Design-only boundary:** 上述决定不代表 schema 已创建、migration 已应用、adapter/repository 已实现或 production 已激活。
+
+## Phase 1B Projection Storage Slice P2-A Owner Acceptance
+
+**Status:** OWNER_ACCEPTED  
+**Date:** 2026-09-05  
+**Scope:** Machine-Readable Projection Storage Contract + Row Mapping + CAS Semantic Contract + Repository Interface Contract  
+**Validation:** PASS  
+**Remaining Critical:** 0  
+**Remaining High:** 0  
+**Boundary:** NON-SQL / NON-REPOSITORY / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING

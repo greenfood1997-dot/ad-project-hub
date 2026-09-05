@@ -65,7 +65,14 @@
 **Deterministic Rebuild:** ACCEPTED  
 **Relationship Integrity Boundary:** ACCEPTED  
 **Projection Repository:** NOT IMPLEMENTED  
-**Projection Slice P2:** NOT STARTED  
+**Projection Slice P2:** NOT STARTED
+
+**Phase 1B Projection Storage Slice P2-A:** IMPLEMENTED_PENDING_VALIDATION  
+**Scope:** Machine-readable Projection Storage Contract + Scope/Status/Identity Contract + Row Mapping + Watermark/CAS Contract + Repository Interface Contract + Deterministic Tests  
+**Projection Repository Adapter:** NOT IMPLEMENTED  
+**P2-B:** NOT STARTED  
+**Migration:** NOT AUTHORIZED  
+**Production Integration:** NOT AUTHORIZED
 **Reconciliation Persistence:** NOT STARTED  
 **Migration:** NOT AUTHORIZED  
 **Production Integration:** NOT AUTHORIZED  
@@ -198,3 +205,17 @@ Not Allowed：UI/backend refactor、DB migration、new APIs、new AI automation�
 **Source of Truth Switch:** NOT AUTHORIZED
 
 Phase 1 暂定为 **P0 Reliability & Truth Foundation**：合同/OCR truth、财务事实一致性、通知可靠性、核心 E2E、mock/fallback 与生产隔离。本轮不实施 Phase 1。
+
+**Phase 1B Projection Storage Slice P2-A:** OWNER ACCEPTED  
+**Implementation:** IMPLEMENTED  
+**Final Revalidation:** PASS  
+**Projection Storage Machine Contract:** ACCEPTED  
+**Row Mapping Contract:** ACCEPTED  
+**CAS Semantic Contract:** ACCEPTED  
+**Repository Interface Contract:** ACCEPTED  
+**Projection Storage Slice P2-B:** NOT STARTED  
+**PostgreSQL Projection Repository Adapter:** NOT IMPLEMENTED  
+**Migration:** NOT AUTHORIZED  
+**Production Integration:** NOT AUTHORIZED  
+**Source of Truth Switch:** NOT AUTHORIZED  
+**Next Candidate:** Phase 1B Projection Storage Slice P2-B — Isolated PostgreSQL Projection Repository Adapter (NOT STARTED; requires separate Owner Authorization)
