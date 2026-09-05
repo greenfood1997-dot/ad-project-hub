@@ -133,6 +133,34 @@
 **Non-Authorizing Boundary:** 不授权创建或应用 `financial_events` schema/migration、实现 production adapters/repositories、Event Journal/Projection/Reconciliation production persistence、payment/approval/supplier/payroll/bank integration、dual/shadow write、frontend read switch、Source of Truth switch、legacy deprecation、production deployment 或进入 Storage Slice A。  
 **Open Questions:** Storage design questions are resolved. Bank evidence, finance review SLA, multi-payable allocation, detailed mismatch SLA, operational rebuild tooling and archive operations block later integration only; Revenue Recognition, Payroll and statutory retention/archive remain deferred policy.
 
+## Phase 1B Storage Slice A Implementation
+
+**Status:** IMPLEMENTED_PENDING_VALIDATION  
+**Date:** 2026-09-05  
+**Scope:** PostgreSQL schema contract, adapter/transaction contracts, safe BIGINT codec, idempotency classification and isolated deterministic tests only.  
+**Boundary:** Migration NOT APPLIED；Production Storage NOT ACTIVATED；Production Integration NOT AUTHORIZED；不得视为 VALIDATED、OWNER_ACCEPTED、MIGRATED 或 PRODUCTION_READY。
+
+## Storage Slice A Remediation v0.1
+
+**Status:** IMPLEMENTED_PENDING_REVALIDATION  
+**Date:** 2026-09-05  
+**Scope:** Schema/Test Contract Closure Only  
+**Non-Authorizing:** YES；不授权 migration、DB connection、production adapter、projection/reconciliation tables、JSON adapter、integration、Source of Truth switch、Storage Slice B、commit 或 push。
+
+## Phase 1B Financial Truth Storage Slice A Owner Acceptance
+
+**Decision:** Phase 1B Financial Truth Storage Slice A Owner Acceptance  
+**Status:** OWNER_ACCEPTED  
+**Date:** 2026-09-05  
+**Scope:** PostgreSQL Schema Contract / Adapter Contract / Isolated Tests Only  
+**Validation:** PASS  
+**Remaining Critical:** 0  
+**Remaining High:** 0  
+**Classification:** NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING  
+**Accepted Invariants:** Financial Event remains authoritative future history; Schema Contract is not Applied Schema; schema draft is DRAFT / NOT APPLIED / NON-ACTIVATING; amount uses PostgreSQL BIGINT and domain safe-integer Number with fail-closed decode; idempotency is database-unique and classifies duplicate versus conflict; persistence is append-only and correction/reversal append new events; transaction ownership belongs to upper orchestration; structural constraints do not replace Slice 1 relationship-graph validation; current idempotency SQL is contract foundation only, not complete production row persistence.  
+**Schema Version:** No `event_schema_version` in Slice A; replay compatibility remains governed by accepted FinancialEvent contract/version policy; SUFFICIENT_FOR_SLICE_A.  
+**Non-Authorizing Boundary:** 不授权 db schema 修改、migration、真实 PostgreSQL table/adapter、complete production row mapper、Event Journal/Projection/Reconciliation persistence、JSON/payment/approval/supplier/payroll/bank integration、dual/shadow write、frontend read switch、Source of Truth switch、legacy deprecation、deployment 或 Storage Slice B。
+
 ### Storage Gate Design Decisions
 
 | Date | Decision | Status |

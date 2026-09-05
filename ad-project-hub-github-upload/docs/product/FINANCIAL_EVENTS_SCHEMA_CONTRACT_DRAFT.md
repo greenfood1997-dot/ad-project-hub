@@ -1,0 +1,5 @@
+# Financial Events PostgreSQL Schema Contract (DRAFT / NOT APPLIED)
+
+The future `financial_events` table is represented by the machine-readable `POSTGRES_FINANCIAL_EVENTS_SCHEMA_CONTRACT` in `server/financial-truth/storage/postgres-schema-contract.mjs`. It uses `event_id` as primary key, unique `idempotency_key`, `amount_minor BIGINT`, `timestamptz` timestamps, and JSONB `source_evidence`/`metadata`. `project_id`, `supplier_id`, and `employee_id` are nullable. Structural constraints do not replace Slice 1 relationship-graph validation. `reversal_of` and `correction_of` are persisted references; foreign keys may be deferred or omitted if import/order requirements require it. Event type is text with application vocabulary. Projection/reconciliation tables are explicitly out of Slice A. All SQL must be parameterized; this artifact is documentation only: DRAFT / NOT APPLIED / NON-ACTIVATING and is not discovered by migration runners.
+
+**Schema version decision:** Slice A does not add `event_schema_version`; replay compatibility remains governed by the accepted FinancialEvent contract/version policy, without changing Slice 1 economic semantics.

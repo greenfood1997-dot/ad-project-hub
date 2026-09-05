@@ -81,4 +81,22 @@ Not Allowed：UI/backend refactor、DB migration、new APIs、new AI automation�
 **Next Phase:** Phase 1B Storage Slice A — Storage Contract & PostgreSQL Schema Contract Design/Tests
 **Storage Slice A:** NOT STARTED；仍需单独 Owner Authorization。
 
+**Phase 1B Storage Slice A:** IMPLEMENTED_PENDING_VALIDATION  
+**Scope:** PostgreSQL Schema Contract / Adapter Contract / Isolated Tests Only  
+**Migration:** NOT APPLIED  
+**Production Storage:** NOT ACTIVATED  
+**Production Integration:** NOT AUTHORIZED
+
+**Storage Slice A Remediation v0.1:** IMPLEMENTED_PENDING_REVALIDATION
+
+**Phase 1B Storage Slice A:** OWNER ACCEPTED  
+**Implementation:** IMPLEMENTED  
+**Final Revalidation:** PASS  
+**Schema Contract:** ACCEPTED  
+**Migration:** NOT APPLIED  
+**Production Storage:** NOT ACTIVATED  
+**Production Integration:** NOT AUTHORIZED  
+**Next Phase:** Phase 1B Storage Slice B — PostgreSQL Journal Adapter Isolated Implementation  
+**Storage Slice B:** NOT STARTED；仍需单独 Owner Authorization。
+
 Phase 1 暂定为 **P0 Reliability & Truth Foundation**：合同/OCR truth、财务事实一致性、通知可靠性、核心 E2E、mock/fallback 与生产隔离。本轮不实施 Phase 1。
