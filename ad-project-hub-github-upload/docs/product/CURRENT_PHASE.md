@@ -1,6 +1,6 @@
 # Current Phase
 
-**Current Phase: Phase 1B — Financial Truth Foundation Design**
+**Current Phase: Phase 1B — Financial Truth Implementation Gate Design**
 
 **Status: DESIGN ONLY**
 
@@ -9,6 +9,19 @@
 **Implementation Status: NOT AUTHORIZED**
 
 **IMPLEMENTATION NOT AUTHORIZED**
+
+**Current Gate: Phase 1B Implementation Gate Design**
+
+**Phase 1B Implementation Gate: OWNER ACCEPTED**
+
+**Slice 1: AUTHORIZED**
+
+**Authorized Scope:** Domain / Pure Logic / In-memory Test Repository / Deterministic Tests Only  
+**Real Financial Write Integration:** NOT AUTHORIZED  
+**Migration:** NOT AUTHORIZED  
+**Source of Truth Switch:** NOT AUTHORIZED
+
+本 Gate 已获 Owner 接受，但 Slice 1 实施尚未开始；授权严格限于上述纯领域与测试范围。
 
 Owner Decisions for company identity, cash confirmation, revenue boundary, payroll boundary, JSON/PostgreSQL semantic consistency, supplier identity, exact reconciliation and event retention are accepted as Phase 1B design constraints only.
 

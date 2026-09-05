@@ -52,3 +52,20 @@
 **Date:** 2026-09-05  
 **Scope:** Design Only  
 **Non-Authorizing Boundary:** 不代表 Financial Event、Ledger、数据迁移、Source of Truth 切换、Legacy 字段废弃、Cash/Receivable/Payable/Payroll Ledger 或 Bank Integration 已实现或上线；不授权 DB schema、migration、API、frontend、production activation 或任何 implementation。Deferred Policy 与 implementation-detail 问题须在对应实施 Gate 前关闭。
+
+## Implementation Gate Design Record
+
+**Decision:** Phase 1B Implementation Gate Design  
+**Status:** DESIGN_ONLY  
+**Date:** 2026-09-05  
+**Scope:** Additive domain foundation, isolated deterministic tests, in-memory test repository, projection/reconciliation design and protected write-path register only.  
+**Boundary:** 不授权真实 payment/approval/supplier/payroll integration、JSON/PostgreSQL production adapters、migration、Source of Truth 切换、API/frontend 改造或任何生产金额行为变化。
+
+## Phase 1B Slice 1 Implementation Authorization
+
+**Decision:** Phase 1B Financial Truth Slice 1 Implementation Authorization  
+**Status:** OWNER_AUTHORIZED  
+**Date:** 2026-09-05  
+**Scope:** Pure Domain Foundation Only（Financial Event contract/validation、business idempotency、correction/reversal、confirmation authority、pure projections/reconciliation、storage-neutral journal interface、in-memory test repository、isolated deterministic tests）。  
+**Non-Authorizing Boundary:** 不授权修改现有 payment/approval/supplier/petty-cash/parse/compensation/frontend/API 写路径；不授权 DB schema、JSON/PostgreSQL production repository、真实 financial write integration、dual/shadow write、migration、Source of Truth switch、legacy deprecation、production deployment 或 push。Legacy financial fields remain authoritative。  
+**Implementation State:** SLICE 1 IMPLEMENTATION NOT STARTED。
