@@ -509,3 +509,17 @@
 **Findings:** P2B-DOC-001 Canonical Row Shape vs Mutable Replacement Field Set; P2B-DOC-002 Deterministic Logical Identity Unique Conflict Classification
 **Status:** DOCUMENTATION_CLOSURE_V0_1_COMPLETE_PENDING_OWNER_REVIEW
 **Scope:** Documentation only; no implementation, SQL source, tests, DB, migration, or production integration.
+
+## Advance Accounting v2 Owner Acceptance + Commit Boundary Consolidation v0.1
+
+**Date:** 2026-09-06
+**Decision:** Owner formally accepts Financial Truth Advance Accounting v2 and its necessary supporting Financial Truth contract changes.
+**Status:** OWNER_ACCEPTED / IMPLEMENTED / INDEPENDENTLY_VALIDATED / ISOLATED / NON-PRODUCTION
+
+Independent Revalidation V4 passed with 18/18 non-Atomic Financial Truth regression/probe files, 76 malformed temporal cases, the public v2 chain, shared-state contract probes and the ATOMIC-IMP-005 closure probe. Advance findings are Critical0 / High0 / Medium0 / Low0.
+
+Accepted scope: Advance Accounting Model; Advance Event / Projection / Lot Contract; isolated Advance v2 implementation; public v1/v2 routing; Projection v2; Reconciliation v2; lot/application/refund/attribution semantics; canonical point-in-time and temporal ordering; and required, covered Financial Truth supporting contracts.
+
+ATOMIC-IMP-005 is CLOSED. ATOMIC-IMP-003 and ATOMIC-IMP-004 remain OPEN. Atomic-specific source, tests, harness and design gate remain outside the Advance accepted commit boundary.
+
+**Boundary:** No Atomic Write completion or independent validation, migration, real DB validation, production activation, Legacy mapping, Source of Truth switch, capital/money movement automation, commit or push. This decision does not claim PRODUCTION_READY, REAL_DB_VALIDATED, MIGRATION_READY, SOURCE_OF_TRUTH or ATOMIC_COMPLETE.

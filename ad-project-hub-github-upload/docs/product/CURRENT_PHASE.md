@@ -376,3 +376,22 @@ Phase 1 暂定为 **P0 Reliability & Truth Foundation**：合同/OCR truth、财
 **Migration:** NOT AUTHORIZED
 **Real DB:** NOT AUTHORIZED
 **Production Integration:** NOT AUTHORIZED
+
+## Advance Accounting v2 Owner Acceptance and Commit Boundary v0.1
+
+Date: 2026-09-06.
+
+**ADVANCE_ACCOUNTING_V2:** OWNER_ACCEPTED
+**ADVANCE_ACCOUNTING_IMPLEMENTATION:** OWNER_ACCEPTED
+**ADVANCE_ACCOUNTING_VALIDATION:** PASS
+**ADVANCE_ACCOUNTING_REVALIDATION_V4:** PASS
+**ADVANCE_VALIDATION_FINDINGS:** 0
+No unresolved Critical / High / Medium / Low Advance finding. Independent Revalidation V4 passed 18/18 non-Atomic Financial Truth regression/probe files, 76 malformed temporal cases, the public v2 chain, shared-state contract probes and the ATOMIC-IMP-005 closure probe.
+
+The accepted scope is the Advance Accounting Model, Advance Event / Projection / Lot Contract, isolated Advance v2 implementation, public v1/v2 routing, Projection v2, Reconciliation v2, advance lot/application/refund/attribution semantics, canonical point-in-time/temporal ordering, and the Financial Truth supporting contract changes required by and covered through that public chain.
+
+**ATOMIC-IMP-005:** CLOSED
+**ATOMIC-IMP-003:** OPEN
+**ATOMIC-IMP-004:** OPEN
+
+Status semantics are OWNER_ACCEPTED / IMPLEMENTED / INDEPENDENTLY_VALIDATED / ISOLATED / NON-PRODUCTION. Atomic Write completion/validation, migration, real DB validation, production activation, Legacy mapping, Source of Truth switch and capital/money movement automation remain unauthorized. This is not PRODUCTION_READY, REAL_DB_VALIDATED, MIGRATION_READY, SOURCE_OF_TRUTH or ATOMIC_COMPLETE.

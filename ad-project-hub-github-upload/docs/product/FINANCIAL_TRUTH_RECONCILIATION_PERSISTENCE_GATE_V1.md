@@ -1,5 +1,67 @@
 # Financial Truth Reconciliation Persistence Capability Gate V0.1
 
+## Projection–Reconciliation Snapshot Boundary v0.1
+
+TYPE A accepts canonical ReconciliationProjectionSnapshot, not raw Projection. The sole public conversion is createReconciliationProjectionSnapshot(projection, {source: 'P1_REBUILD' | 'PERSISTED_PROJECTION'}).
+
+P1 domain/output intentionally has no persistence version. Storage adds numeric SUPPORTED_PROJECTION_CONTRACT_VERSION (currently 1), including canonical persisted objects and database rows. Snapshot evidence uses the explicit current mapping 1 -> '1'. The exported snapshot version constant belongs to this boundary. P1 source mode attaches that mapped version; persisted source mode requires exactly the numeric supported version. No arbitrary coercion, guessed source mode or future-version conversion is allowed. Future versions need an explicit compatibility rule.
+
+No accepted authority is overridden: these are distinct layer representations, not interchangeable objects. P1, comparator and Projection Repository semantics remain unchanged. Future Atomic Write must import this public converter, never hand-normalize version or import private row mappers.
+
+Snapshot fields: scopeType/companyId/projectId/currency; COMPANY cashMinor/receivableMinor/payableMinor/recognizedRevenueMinor; PROJECT paidMinor/receivableMinor/costMinor/payableMinor/recognizedRevenueMinor; status, rebuiltAt, watermark and string projectionContractVersion. COMPANY projectId is canonical null. Inapplicable persisted amount columns must be null and are excluded from snapshot. All relevant monetary fields are safe integers. Currency, identity, timestamp and watermark are validated; invalid source is rejected, never repaired.
+
+The full watermark tuple is preserved: eventCount, latestCanonicalEventId, canonicalDigest. Zero events requires null latest identity; nonempty history requires an identity. Observation top-level watermarks mirror snapshot watermarks. No digest or money is recalculated at the boundary.
+
+projectionId/updatedAt/storage metadata are excluded. rebuiltAt and status remain snapshot metadata but do not participate in TYPE A financial equality under the existing comparator. Conversion deep-clones/freezes evidence and does not mutate input or consult a clock.
+
+ATOMIC-IMP-002: CLOSED by public P1/self, PG/self, mixed-source and missing-observed persistence probes for COMPANY and PROJECT. REC-PROJ-CONTRACT-001 (HIGH): discovered and CLOSED in this remediation; reconciliation storage rejected canonical empty-history null latest identity, now accepts the explicit zero/nonzero watermark rule. No remaining blocker in this reviewed boundary.
+
+## Evidence Presence Semantic Clarification v0.1 (2026-09-06)
+
+This clarification preserves comparator evidence; it adds no business capability, authority, TYPE B/C/D execution or resolution workflow.
+
+| Status / reason | expectedSnapshot | observedSnapshot | expectedWatermark | observedWatermark | differences | projectionContractVersion |
+|---|---|---|---|---|---|---|
+| MATCH | REQUIRED | REQUIRED | REQUIRED | REQUIRED | EMPTY | REQUIRED |
+| MISMATCH | REQUIRED | REQUIRED | REQUIRED | REQUIRED | REQUIRED nonempty | REQUIRED |
+| INDETERMINATE / STALE_REBUILD | MUST_BE_NULL | MUST_BE_NULL | MUST_BE_NULL | MUST_BE_NULL | EMPTY | MUST_BE_NULL |
+| INDETERMINATE / INVALID_HISTORY | MUST_BE_NULL | MUST_BE_NULL | MUST_BE_NULL | MUST_BE_NULL | EMPTY | MUST_BE_NULL |
+| INDETERMINATE / INSUFFICIENT_EVIDENCE | MUST_BE_NULL | MUST_BE_NULL | MUST_BE_NULL | MUST_BE_NULL | EMPTY | MUST_BE_NULL |
+| INDETERMINATE / UNSUPPORTED_COMPARISON | MUST_BE_NULL | MUST_BE_NULL | MUST_BE_NULL | MUST_BE_NULL | EMPTY | MUST_BE_NULL |
+| INDETERMINATE / OBSERVED_STATE_MISSING (TYPE A comparator) | REQUIRED | MUST_BE_NULL | REQUIRED | MUST_BE_NULL | EMPTY | REQUIRED |
+| INDETERMINATE / OBSERVED_STATE_MISSING (generic evidence-free factory) | MUST_BE_NULL | MUST_BE_NULL | MUST_BE_NULL | MUST_BE_NULL | EMPTY | MUST_BE_NULL |
+| INVALID_INPUT (transient comparator diagnostic, NEVER persistable) | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | NOT_APPLICABLE | EMPTY | NOT_APPLICABLE |
+
+Missing-observed TYPE A retains the validated rebuilt expected snapshot and its matching watermark. No fake observed zero state is created. The existing generic factory's evidence-free variant remains accepted; half-present expected evidence is invalid. Expected evidence is checked for scope/identity, safe-integer financial fields, version and matching watermark.
+
+ATOMIC-IMP-001: CLOSED by missing-observed public append/read round-trip, cross-repository replay and negative probes.
+
+REC-CONTRACT-001: HIGH / CLOSED by INVALID_INPUT Persistence Policy Clarification v0.1 below.
+
+## INVALID_INPUT Persistence Policy Clarification v0.1
+
+Unique policy: TRANSIENT_COMPARATOR_DIAGNOSTIC_ONLY. All INVALID_INPUT results are transient, including those carrying apparently valid scope. There is no scoped/unscoped persistence split. A failed comparison attempt is diagnostically useful, but does not establish reliably attributable reconciliation evidence. Scoped repositories are not generic error logs; no scope is inferred or supplemented. Future diagnostic logging requires a separate decision and is not implemented here.
+
+The comparator and immutable factory may produce the existing diagnostic shape. Immutability is not persistence eligibility. The public pure helper reconciliationPersistenceEligibility explicitly returns TRANSIENT_COMPARATOR_DIAGNOSTIC_ONLY for INVALID_INPUT, EVIDENCE_SUBJECT_TO_RECORD_VALIDATION for MATCH/MISMATCH/INDETERMINATE, and INVALID_RESULT otherwise. This helper is a policy classification, not a complete evidence validator.
+
+| INVALID_INPUT diagnostic field | Presence policy |
+|---|---|
+| scopeType / companyId / projectId / currency | OPTIONAL diagnostic context; never inferred, never persistence authority |
+| expectedSnapshot / observedSnapshot | NOT_APPLICABLE |
+| expectedWatermark / observedWatermark | NOT_APPLICABLE |
+| differences | REQUIRED empty array |
+| projectionContractVersion | NOT_APPLICABLE |
+| sourceContext | OPTIONAL immutable diagnostic context |
+| reasonCode | MUST_BE_NULL; no new reason vocabulary |
+
+NOT_APPLICABLE means no validated evidence is asserted and comparator may omit the field; it is not an optional persistence slot. Repository rejection applies regardless of extra diagnostic fields.
+
+Both append APIs reject INVALID_INPUT before any mutation/query with NON_PERSISTABLE_RECONCILIATION_DIAGNOSTIC. Persisted-row corruption remains MALFORMED_PERSISTED_ROW; the mapper is not weakened to admit diagnostics. Existing evidence duplicate semantics are unchanged.
+
+Future Atomic Write must not append a transient diagnostic as required evidence; it must return an orchestration diagnostic/failure, with actual mapping deferred to its separately authorized implementation. No ALLOW/DENY/approval or truth mutation is introduced.
+
+Validation: all requested regressions and post-regression public policy probes PASS; ATOMIC-IMP-001 remains CLOSED; no new findings in this remediation. Atomic Write remains not implemented and is not resumed in this turn.
+
 ## Purpose and Authority
 Reconciliation persists immutable expected-vs-observed consistency evidence. It is not Financial Truth authority, does not mutate Events, Projections, Legacy values, or Source of Truth, and never auto-corrects or auto-smooths.
 
