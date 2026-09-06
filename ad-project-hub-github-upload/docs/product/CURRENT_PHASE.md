@@ -104,6 +104,36 @@
 **Projection Repository:** NOT IMPLEMENTED  
 **Migration:** NOT AUTHORIZED  
 **Production Integration:** NOT AUTHORIZED
+
+**Reconciliation Persistence First Slice Remediation v0.1:** IMPLEMENTED_PENDING_REVALIDATION
+**REC-VAL-001:** CLOSED
+**REC-VAL-002:** CLOSED
+**REC-VAL-003:** CLOSED
+**REC-VAL-004:** CLOSED
+**REC-VAL-005:** CLOSED
+**Independent Validation:** FAIL_REMEDIATED_PENDING_REVALIDATION
+
+**Financial Truth Reconciliation Test Evidence Closure v0.1:** IMPLEMENTED_PENDING_FINAL_REVALIDATION
+**Validation Findings:** ALL CLOSED
+
+**REC-TEST-001:** CLOSED
+**REC-FINAL-001:** CLOSED
+**REC-FINAL-002:** CLOSED
+**REC-VAL-004:** CLOSED
+**REC-VAL-005:** CLOSED
+**Financial Truth Reconciliation First Slice:** IMPLEMENTED_PENDING_FINAL_REVALIDATION
+
+**REC-REM-001:** CLOSED
+**Financial Truth Reconciliation First Slice:** IMPLEMENTED_PENDING_OWNER_ACCEPTANCE
+
+**Financial Truth Reconciliation Persistence First Implementation Slice v0.1:** OWNER_ACCEPTED / IMPLEMENTED / VALIDATED / NON-AUTHORIZING
+**POSTGRESQL_RECONCILIATION_PERSISTENCE:** NOT AUTHORIZED
+**LEGACY_RECONCILIATION_EXECUTION:** EXECUTION BLOCKED
+**MIGRATION:** NOT AUTHORIZED
+**REAL DB:** NOT AUTHORIZED
+**ATOMIC WRITE ORCHESTRATOR:** NOT AUTHORIZED
+**PRODUCTION INTEGRATION:** NOT AUTHORIZED
+**SOURCE OF TRUTH SWITCH:** NOT AUTHORIZED
 **Projection Storage Slice P2-B:** IMPLEMENTED_PENDING_VALIDATION  
 **Projection Repository Adapter:** IMPLEMENTED_ISOLATED  
 **P2-B Mock Transaction Regression:** PASS  
@@ -308,3 +338,16 @@ Phase 1 暂定为 **P0 Reliability & Truth Foundation**：合同/OCR truth、财
 **Independent Validation:** PASS_WITH_NON_BLOCKING_FINDING_CLOSED  
 **Critical/High/Medium/Low Remaining:** 0/0/0/0  
 **Current State:** IMPLEMENTED_PENDING_OWNER_ACCEPTANCE
+
+**Financial Truth Reconciliation Persistence First Slice:** IMPLEMENTED_PENDING_VALIDATION
+**TYPE A Projection Reconciliation:** IMPLEMENTED_ISOLATED
+**Immutable Reconciliation Observation:** IMPLEMENTED_ISOLATED
+**Append-only In-Memory Repository:** IMPLEMENTED_ISOLATED
+**TYPE B:** CONTRACT_ONLY
+**TYPE C:** EXECUTION_BLOCKED
+**TYPE D:** EXECUTION_BLOCKED
+**PostgreSQL Reconciliation Persistence:** NOT AUTHORIZED
+**Resolution Workflow:** NOT AUTHORIZED
+**Migration:** NOT AUTHORIZED
+**Real DB:** NOT AUTHORIZED
+**Production Integration:** NOT AUTHORIZED

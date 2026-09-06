@@ -3,6 +3,49 @@
 | Date | Decision | Reason | Status |
 |---|---|---|---|
 | 2026-09-05 | AI-first；Human by Exception；Minimum Human Touch | 减少重复录入，让人专注判断 | Accepted for Phase 0 |
+
+## Financial Truth Reconciliation Persistence First Implementation Slice v0.1
+
+**Status:** IMPLEMENTED_PENDING_VALIDATION  
+**Date:** 2026-09-06  
+**Scope:** Immutable Observation, TYPE A pure financial-state comparator, difference evidence, status/reason vocabularies, append-only in-memory repository, isolated deterministic regression.  
+**Boundary:** NON-AUTHORITATIVE / NON-CORRECTING / NON-POSTGRESQL / NON-LEGACY-EXECUTING / NON-MIGRATING / NON-ATOMIC-WRITE / NON-PRODUCTION / NON-ACTIVATING.
+
+## Financial Truth Reconciliation Persistence First Slice Validation Remediation v0.1
+
+**Status:** IMPLEMENTED_PENDING_REVALIDATION  
+**Date:** 2026-09-06  
+**Findings:** REC-VAL-001 CLOSED; REC-VAL-002 CLOSED; REC-VAL-003 CLOSED; REC-VAL-004 CLOSED; REC-VAL-005 CLOSED.  
+**Boundary:** NON-AUTHORITATIVE / NON-CORRECTING / NON-POSTGRESQL / NON-LEGACY-EXECUTING / NON-MIGRATING / NON-PRODUCTION / NON-ACTIVATING.
+
+## Financial Truth Reconciliation Test Evidence Closure v0.1
+
+**Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION  
+**Date:** 2026-09-06  
+**Findings:** REC-VAL-004 CLOSED; REC-VAL-005 CLOSED.  
+**Boundary:** TEST-EVIDENCE-ONLY / NON-AUTHORITATIVE / NON-CORRECTING / NON-POSTGRESQL / NON-MIGRATING / NON-PRODUCTION.
+
+## REC-TEST-001 SourceContext Remediation v0.1
+
+**Status:** COMPLETE  
+**Date:** 2026-09-06  
+**Finding:** SourceContext propagation and immutable evidence coverage verified by regression.  
+**Boundary:** NON-AUTHORITATIVE / NON-CORRECTING / NON-POSTGRESQL / NON-MIGRATING / NON-PRODUCTION.
+
+## REC-REM-001 Company List Isolation Remediation v0.1
+
+**Status:** COMPLETE  
+**Date:** 2026-09-06  
+**Root Cause:** Company list filtering lacked `scopeType === "COMPANY"`; project observations could leak into company queries.  
+**Boundary:** NON-AUTHORITATIVE / NON-CORRECTING / NON-POSTGRESQL / NON-MIGRATING / NON-PRODUCTION.
+
+## Financial Truth Reconciliation Persistence First Implementation Slice v0.1 Owner Acceptance
+
+**Status:** OWNER_ACCEPTED / IMPLEMENTED / VALIDATED / NON-AUTHORIZING  
+**Date:** 2026-09-06  
+**Accepted Scope:** Immutable Reconciliation Observation; TYPE A `REBUILT_VS_PERSISTED_PROJECTION`; MATCH/MISMATCH/INDETERMINATE/INVALID_INPUT; difference evidence; INDETERMINATE reason vocabulary; optional immutable `sourceContext` audit evidence; append-only repository interface; in-memory repository; company/project isolation; duplicate-ID semantics; deterministic ordering; automated regression coverage.  
+**Validation Evidence:** Reconciliation regression PASS; all existing Financial Truth regressions PASS; all mandatory gates PASS; production isolation PASS; REC-VAL-001 through REC-VAL-005, REC-FINAL-001, REC-FINAL-002, REC-TEST-001 and REC-REM-001 CLOSED.  
+**Non-Authorizing Boundary:** PostgreSQL reconciliation persistence, `financial_reconciliations` table, SQL/schema/migration, real DB, TYPE B/C/D execution, legacy reconciliation execution, resolution/supersession workflow execution, Atomic Write Orchestrator, production/frontend integration, shadow/dual write, Source of Truth switch, automatic correction/balancing/amount adjustment/approval remain NOT AUTHORIZED.
 | 2026-09-05 | Facts → Rules → AI；Single Input Multiple Effects | 防止推断污染事实并保持一致性 | Accepted for Phase 0 |
 | 2026-09-05 | Money via Financial Events；confirmed facts 用 correction/reversal | 保证资金可追溯、可审计 | Accepted for Phase 0 |
 | 2026-09-05 | Role + Scope + Responsibility；Exception First；Next Best Action | 同一真相适配不同职责并降低噪声 | Accepted for Phase 0 |
