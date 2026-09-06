@@ -6,46 +6,92 @@
 
 ## Financial Truth Reconciliation Persistence First Implementation Slice v0.1
 
-**Status:** IMPLEMENTED_PENDING_VALIDATION  
-**Date:** 2026-09-06  
-**Scope:** Immutable Observation, TYPE A pure financial-state comparator, difference evidence, status/reason vocabularies, append-only in-memory repository, isolated deterministic regression.  
+**Status:** IMPLEMENTED_PENDING_VALIDATION
+**Date:** 2026-09-06
+**Scope:** Immutable Observation, TYPE A pure financial-state comparator, difference evidence, status/reason vocabularies, append-only in-memory repository, isolated deterministic regression.
 **Boundary:** NON-AUTHORITATIVE / NON-CORRECTING / NON-POSTGRESQL / NON-LEGACY-EXECUTING / NON-MIGRATING / NON-ATOMIC-WRITE / NON-PRODUCTION / NON-ACTIVATING.
 
 ## Financial Truth Reconciliation Persistence First Slice Validation Remediation v0.1
 
-**Status:** IMPLEMENTED_PENDING_REVALIDATION  
-**Date:** 2026-09-06  
-**Findings:** REC-VAL-001 CLOSED; REC-VAL-002 CLOSED; REC-VAL-003 CLOSED; REC-VAL-004 CLOSED; REC-VAL-005 CLOSED.  
+**Status:** IMPLEMENTED_PENDING_REVALIDATION
+**Date:** 2026-09-06
+**Findings:** REC-VAL-001 CLOSED; REC-VAL-002 CLOSED; REC-VAL-003 CLOSED; REC-VAL-004 CLOSED; REC-VAL-005 CLOSED.
 **Boundary:** NON-AUTHORITATIVE / NON-CORRECTING / NON-POSTGRESQL / NON-LEGACY-EXECUTING / NON-MIGRATING / NON-PRODUCTION / NON-ACTIVATING.
 
 ## Financial Truth Reconciliation Test Evidence Closure v0.1
 
-**Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION  
-**Date:** 2026-09-06  
-**Findings:** REC-VAL-004 CLOSED; REC-VAL-005 CLOSED.  
+**Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION
+**Date:** 2026-09-06
+**Findings:** REC-VAL-004 CLOSED; REC-VAL-005 CLOSED.
 **Boundary:** TEST-EVIDENCE-ONLY / NON-AUTHORITATIVE / NON-CORRECTING / NON-POSTGRESQL / NON-MIGRATING / NON-PRODUCTION.
 
 ## REC-TEST-001 SourceContext Remediation v0.1
 
-**Status:** COMPLETE  
-**Date:** 2026-09-06  
-**Finding:** SourceContext propagation and immutable evidence coverage verified by regression.  
+**Status:** COMPLETE
+**Date:** 2026-09-06
+**Finding:** SourceContext propagation and immutable evidence coverage verified by regression.
 **Boundary:** NON-AUTHORITATIVE / NON-CORRECTING / NON-POSTGRESQL / NON-MIGRATING / NON-PRODUCTION.
 
 ## REC-REM-001 Company List Isolation Remediation v0.1
 
-**Status:** COMPLETE  
-**Date:** 2026-09-06  
-**Root Cause:** Company list filtering lacked `scopeType === "COMPANY"`; project observations could leak into company queries.  
+**Status:** COMPLETE
+**Date:** 2026-09-06
+**Root Cause:** Company list filtering lacked `scopeType === "COMPANY"`; project observations could leak into company queries.
 **Boundary:** NON-AUTHORITATIVE / NON-CORRECTING / NON-POSTGRESQL / NON-MIGRATING / NON-PRODUCTION.
 
 ## Financial Truth Reconciliation Persistence First Implementation Slice v0.1 Owner Acceptance
 
+**Status:** OWNER_ACCEPTED / IMPLEMENTED / VALIDATED / NON-AUTHORIZING
+**Date:** 2026-09-06
+**Accepted Scope:** Immutable Reconciliation Observation; TYPE A `REBUILT_VS_PERSISTED_PROJECTION`; MATCH/MISMATCH/INDETERMINATE/INVALID_INPUT; difference evidence; INDETERMINATE reason vocabulary; optional immutable `sourceContext` audit evidence; append-only repository interface; in-memory repository; company/project isolation; duplicate-ID semantics; deterministic ordering; automated regression coverage.
+**Validation Evidence:** Reconciliation regression PASS; all existing Financial Truth regressions PASS; all mandatory gates PASS; production isolation PASS; REC-VAL-001 through REC-VAL-005, REC-FINAL-001, REC-FINAL-002, REC-TEST-001 and REC-REM-001 CLOSED.
+**Non-Authorizing Boundary:** PostgreSQL reconciliation persistence, `financial_reconciliations` table, SQL/schema/migration, real DB, TYPE B/C/D execution, legacy reconciliation execution, resolution/supersession workflow execution, Atomic Write Orchestrator, production/frontend integration, shadow/dual write, Source of Truth switch, automatic correction/balancing/amount adjustment/approval remain NOT AUTHORIZED.
+
+## Financial Truth PostgreSQL Reconciliation Persistence Design Gate V0.1
+
+**Status:** READY_FOR_OWNER_REVIEW
+**Date:** 2026-09-06
+**Scope:** Logical persistence record, typed identity/status/version/timestamp fields, JSONB immutable evidence, append-only semantics, duplicate handling, scope isolation, deterministic ordering, malformed-row policy, caller-owned transaction boundary, error classification and future test matrix.
+**Boundary:** DESIGN ONLY / NOT IMPLEMENTED / NOT ACTIVATED / NO REAL DB / NO MIGRATION / NO PRODUCTION / NO ATOMIC WRITE / NO LEGACY / NO TYPE B-C-D EXECUTION / NO SOURCE SWITCH.
+
+## PostgreSQL Reconciliation Persistence Design Owner Acceptance and Implementation Gate Preparation
+
+**Status:** OWNER_ACCEPTED / DESIGN_COMPLETE / IMPLEMENTATION_NOT_STARTED / NON_AUTHORIZING
+**Date:** 2026-09-06
+**Accepted Scope:** Immutable PostgreSQL persistence design, typed identity/status/version/timestamp boundary, JSONB evidence, append-only duplicate semantics, strict company/project isolation, deterministic ordering, malformed-row fail-closed policy, caller-owned transaction contract and stable error classification.
+**Implementation Gate:** READY_FOR_OWNER_AUTHORIZATION
+**Non-Authorizing Boundary:** No repository implementation, SQL migration, real DB, DATABASE_URL activation, Pool ownership, transaction control, Atomic Write, Legacy reconciliation, TYPE B/C/D execution, production integration, shadow/dual write or Source of Truth switch.
+
+## PostgreSQL Reconciliation Persistence Implementation Work Package v0.1
+
+**Status:** IMPLEMENTED_PENDING_INDEPENDENT_VALIDATION
+**Date:** 2026-09-06
+**Scope:** Isolated PostgreSQL reconciliation repository, SQL contract constants, deterministic row mapper, stable error classification, caller-owned transaction enforcement, JSONB evidence round-trip, duplicate semantics, company/project isolation, deterministic ordering, malformed-row fail-closed handling and isolated regression tests.
+**Boundary:** NOT MIGRATED / NO REAL DB / NO PRODUCTION / NO ATOMIC WRITE / NO LEGACY / NO TYPE B-C-D EXECUTION / NO SOURCE SWITCH.
+
+## PostgreSQL Reconciliation Persistence Validation Remediation Work Package v0.1
+
+**Status:** IMPLEMENTED_PENDING_REVALIDATION
+**Date:** 2026-09-06
+**Findings:** PGREC-VAL-001 CLOSED; PGREC-VAL-002 CLOSED; PGREC-VAL-003 CLOSED; PGREC-VAL-004 CLOSED.
+**Scope:** Persisted row validation, snapshot/watermark/difference/sourceContext validation, typed status/reason/version validation, duplicate adversarial semantics and stable unknown-error mapping.
+**Boundary:** NO MIGRATION / NO REAL DB / NO PRODUCTION / NO ATOMIC WRITE / NO LEGACY / NO TYPE B-C-D EXECUTION / NO SOURCE SWITCH.
+
+## PostgreSQL Reconciliation Persistence Final Acceptance Blocker Remediation v0.2
+
+**Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION
+**Date:** 2026-09-06
+**Findings:** PGREC-FINAL-001 CLOSED; PGREC-FINAL-002 CLOSED; PGREC-FINAL-003 CLOSED.
+**Evidence:** INDETERMINATE public round-trip, get/list stable `STORAGE_FAILURE`, exact duplicate replay, malformed duplicate row and full regression suite pass.
+**Boundary:** NO MIGRATION / NO REAL DB / NO PRODUCTION / NO ATOMIC WRITE / NO LEGACY / NO TYPE B-C-D EXECUTION / NO SOURCE SWITCH.
+
+## PostgreSQL Reconciliation Persistence Final Owner Acceptance v0.1
+
 **Status:** OWNER_ACCEPTED / IMPLEMENTED / VALIDATED / NON-AUTHORIZING  
 **Date:** 2026-09-06  
-**Accepted Scope:** Immutable Reconciliation Observation; TYPE A `REBUILT_VS_PERSISTED_PROJECTION`; MATCH/MISMATCH/INDETERMINATE/INVALID_INPUT; difference evidence; INDETERMINATE reason vocabulary; optional immutable `sourceContext` audit evidence; append-only repository interface; in-memory repository; company/project isolation; duplicate-ID semantics; deterministic ordering; automated regression coverage.  
-**Validation Evidence:** Reconciliation regression PASS; all existing Financial Truth regressions PASS; all mandatory gates PASS; production isolation PASS; REC-VAL-001 through REC-VAL-005, REC-FINAL-001, REC-FINAL-002, REC-TEST-001 and REC-REM-001 CLOSED.  
-**Non-Authorizing Boundary:** PostgreSQL reconciliation persistence, `financial_reconciliations` table, SQL/schema/migration, real DB, TYPE B/C/D execution, legacy reconciliation execution, resolution/supersession workflow execution, Atomic Write Orchestrator, production/frontend integration, shadow/dual write, Source of Truth switch, automatic correction/balancing/amount adjustment/approval remain NOT AUTHORIZED.
+**Validation:** Targeted Revalidation PASS; Final Revalidation v0.2 PASS; public API probes PASS; all Financial Truth regressions PASS; all mandatory gates PASS.  
+**Findings:** PGREC-VAL-001 CLOSED; PGREC-VAL-002 CLOSED; PGREC-VAL-003 CLOSED; PGREC-VAL-004 CLOSED; PGREC-FINAL-001 CLOSED; PGREC-FINAL-002 CLOSED; PGREC-FINAL-003 CLOSED; New Findings NONE.  
+**Non-Authorizing Boundary:** No migration, CREATE TABLE, ALTER TABLE, real PostgreSQL activation, DATABASE_URL activation, production wiring, Atomic Write, Legacy reconciliation, TYPE B/C/D execution, resolution/supersession workflow, shadow/dual write, Source of Truth switch, automatic repair/balancing/amount adjustment/approval or frontend activation.
 | 2026-09-05 | Facts → Rules → AI；Single Input Multiple Effects | 防止推断污染事实并保持一致性 | Accepted for Phase 0 |
 | 2026-09-05 | Money via Financial Events；confirmed facts 用 correction/reversal | 保证资金可追溯、可审计 | Accepted for Phase 0 |
 | 2026-09-05 | Role + Scope + Responsibility；Exception First；Next Best Action | 同一真相适配不同职责并降低噪声 | Accepted for Phase 0 |
@@ -62,15 +108,15 @@
 | 2026-09-05 | Event Delivery Reliability / No Silent Failure | 事件与通知分离、可重试、可审计，避免渠道失败丢失业务 | ACCEPTED_AS_PHASE_0_DESIGN |
 | 2026-09-05 | Phase 0 Product Constitution & Architecture Baseline Owner Acceptance | Owner 接受文档化产品宪法与架构基线 | OWNER_ACCEPTED |
 
-**Scope:** Documentation / Product Design / Architecture Baseline Only  
+**Scope:** Documentation / Product Design / Architecture Baseline Only
 **Non-Authorizing Boundary:** 不授权 UI 或 Backend 重构、DB schema 变更、Financial Event/AI Brain/Business Memory/Notification 重构实现、自动投资/转账/招聘/裁员/扩张、生产部署或任何 Phase 1 实施；不代表上述能力已实现。
 
 ## Phase 1B Design Record
 
-**Decision:** Financial Truth Foundation Design Started  
-**Status:** DESIGN_IN_PROGRESS  
-**Date:** 2026-09-05  
-**Scope:** Financial Truth taxonomy, Financial Event and Ledger architecture, confirmation authority, effects, idempotency, migration and reconciliation mapping only.  
+**Decision:** Financial Truth Foundation Design Started
+**Status:** DESIGN_IN_PROGRESS
+**Date:** 2026-09-05
+**Scope:** Financial Truth taxonomy, Financial Event and Ledger architecture, confirmation authority, effects, idempotency, migration and reconciliation mapping only.
 **Boundary:** DESIGN ONLY；IMPLEMENTATION NOT AUTHORIZED，不修改业务代码、数据库 schema、API、前端、测试或数据，不执行 migration，不部署，不改变任何金额事实。
 
 ## Owner Decisions Integrated — Phase 1B
@@ -90,248 +136,248 @@
 
 ## Phase 1B Owner Acceptance
 
-**Decision:** Phase 1B Financial Truth Foundation Design Owner Acceptance  
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-05  
-**Scope:** Design Only  
+**Decision:** Phase 1B Financial Truth Foundation Design Owner Acceptance
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-05
+**Scope:** Design Only
 **Non-Authorizing Boundary:** 不代表 Financial Event、Ledger、数据迁移、Source of Truth 切换、Legacy 字段废弃、Cash/Receivable/Payable/Payroll Ledger 或 Bank Integration 已实现或上线；不授权 DB schema、migration、API、frontend、production activation 或任何 implementation。Deferred Policy 与 implementation-detail 问题须在对应实施 Gate 前关闭。
 
 ## Implementation Gate Design Record
 
-**Decision:** Phase 1B Implementation Gate Design  
-**Status:** DESIGN_ONLY  
-**Date:** 2026-09-05  
-**Scope:** Additive domain foundation, isolated deterministic tests, in-memory test repository, projection/reconciliation design and protected write-path register only.  
+**Decision:** Phase 1B Implementation Gate Design
+**Status:** DESIGN_ONLY
+**Date:** 2026-09-05
+**Scope:** Additive domain foundation, isolated deterministic tests, in-memory test repository, projection/reconciliation design and protected write-path register only.
 **Boundary:** 不授权真实 payment/approval/supplier/payroll integration、JSON/PostgreSQL production adapters、migration、Source of Truth 切换、API/frontend 改造或任何生产金额行为变化。
 
 ## Phase 1B Slice 1 Implementation Authorization
 
-**Decision:** Phase 1B Financial Truth Slice 1 Implementation Authorization  
-**Status:** OWNER_AUTHORIZED  
-**Date:** 2026-09-05  
-**Scope:** Pure Domain Foundation Only（Financial Event contract/validation、business idempotency、correction/reversal、confirmation authority、pure projections/reconciliation、storage-neutral journal interface、in-memory test repository、isolated deterministic tests）。  
-**Non-Authorizing Boundary:** 不授权修改现有 payment/approval/supplier/petty-cash/parse/compensation/frontend/API 写路径；不授权 DB schema、JSON/PostgreSQL production repository、真实 financial write integration、dual/shadow write、migration、Source of Truth switch、legacy deprecation、production deployment 或 push。Legacy financial fields remain authoritative。  
+**Decision:** Phase 1B Financial Truth Slice 1 Implementation Authorization
+**Status:** OWNER_AUTHORIZED
+**Date:** 2026-09-05
+**Scope:** Pure Domain Foundation Only（Financial Event contract/validation、business idempotency、correction/reversal、confirmation authority、pure projections/reconciliation、storage-neutral journal interface、in-memory test repository、isolated deterministic tests）。
+**Non-Authorizing Boundary:** 不授权修改现有 payment/approval/supplier/petty-cash/parse/compensation/frontend/API 写路径；不授权 DB schema、JSON/PostgreSQL production repository、真实 financial write integration、dual/shadow write、migration、Source of Truth switch、legacy deprecation、production deployment 或 push。Legacy financial fields remain authoritative。
 **Implementation State:** SLICE 1 IMPLEMENTATION NOT STARTED。
 
 ## Slice 1 Implementation Record
 
-**Decision:** Phase 1B Financial Truth Slice 1 Implementation  
-**Status:** IMPLEMENTED_PENDING_VALIDATION  
-**Date:** 2026-09-05  
-**Scope:** Isolated Financial Truth domain modules, pure projections/reconciliation, storage-neutral journal interface, in-memory repository and deterministic tests only.  
+**Decision:** Phase 1B Financial Truth Slice 1 Implementation
+**Status:** IMPLEMENTED_PENDING_VALIDATION
+**Date:** 2026-09-05
+**Scope:** Isolated Financial Truth domain modules, pure projections/reconciliation, storage-neutral journal interface, in-memory repository and deterministic tests only.
 **Boundary:** 未修改现有 payment/approval/supplier/payroll/project financial paths、API、frontend、DB、data 或 package；未接入生产写入、migration、dual write、shadow write 或 Source of Truth switch。
 
 ## Slice 1 Validation Remediation v0.1
 
-**Status:** IMPLEMENTED_PENDING_REVALIDATION  
-**Date:** 2026-09-05  
-**Decision:** 强化 minor-unit precision、deep immutability、幂等冲突、时间戳、reversal/correction、canonical projection 与 reconciliation domain rules；明确 `COST_INCURRED` 与 `PAYABLE_CREATED` 各自承担单一财务效果。  
+**Status:** IMPLEMENTED_PENDING_REVALIDATION
+**Date:** 2026-09-05
+**Decision:** 强化 minor-unit precision、deep immutability、幂等冲突、时间戳、reversal/correction、canonical projection 与 reconciliation domain rules；明确 `COST_INCURRED` 与 `PAYABLE_CREATED` 各自承担单一财务效果。
 **Boundary:** 仅限 Slice 1 pure domain、in-memory journal 与 isolated deterministic test；不代表 VALIDATED、OWNER ACCEPTED、PRODUCTION READY、ACTIVATED 或 MIGRATED。
 
 ## Slice 1 Remediation v0.2
 
-**Decision:** Financial History Integrity Rule；Canonical Projection Replay Rule  
-**Status:** ACCEPTED_AS_SLICE_1_REMEDIATION_DESIGN  
-**Date:** 2026-09-05  
-**Scope:** History-aware reversal/correction validation, canonical event history, effective event resolution and final deep immutable journal API.  
+**Decision:** Financial History Integrity Rule；Canonical Projection Replay Rule
+**Status:** ACCEPTED_AS_SLICE_1_REMEDIATION_DESIGN
+**Date:** 2026-09-05
+**Scope:** History-aware reversal/correction validation, canonical event history, effective event resolution and final deep immutable journal API.
 **Boundary:** 仅为 Slice 1 domain remediation 设计与实现状态记录；不代表 VALIDATED、OWNER ACCEPTED、PRODUCTION READY、MIGRATED 或 ACTIVATED。
 
 ## Slice 1 Remediation v0.3
 
-**Decision:** Financial Relationship Graph Integrity Rule；Effective Event Replacement Rule  
-**Status:** ACCEPTED_AS_SLICE_1_REMEDIATION_DESIGN  
-**Date:** 2026-09-05  
-**Scope:** Unified relationship graph validation, history fail-closed semantics and corrected-event replacement in effective projections.  
+**Decision:** Financial Relationship Graph Integrity Rule；Effective Event Replacement Rule
+**Status:** ACCEPTED_AS_SLICE_1_REMEDIATION_DESIGN
+**Date:** 2026-09-05
+**Scope:** Unified relationship graph validation, history fail-closed semantics and corrected-event replacement in effective projections.
 **Boundary:** 不代表 VALIDATED、OWNER ACCEPTED、PRODUCTION READY、MIGRATED 或 ACTIVATED；不涉及 production integration、migration、API/frontend 或 Slice 2。
 
 ## Phase 1B Slice 1 Owner Acceptance
 
-**Decision:** Phase 1B Financial Truth Slice 1 Owner Acceptance  
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-05  
-**Scope:** Pure Financial Truth Domain Foundation Only  
-**Validation:** PASS  
-**Critical Remaining:** 0  
-**High Remaining:** 0  
-**Classification:** NON-PRODUCTION / NON-MIGRATING / NON-ACTIVATING  
+**Decision:** Phase 1B Financial Truth Slice 1 Owner Acceptance
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-05
+**Scope:** Pure Financial Truth Domain Foundation Only
+**Validation:** PASS
+**Critical Remaining:** 0
+**High Remaining:** 0
+**Classification:** NON-PRODUCTION / NON-MIGRATING / NON-ACTIVATING
 **Non-Authorizing Boundary:** 不授权 JSON production repository、PostgreSQL production repository、DB schema changes、migration、Event Journal production persistence、payment/approval/supplier/payroll production integration、dual write、shadow production write、frontend read switch、Source of Truth switch、legacy field deprecation、bank integration 或 production deployment。Legacy financial fields remain current authoritative production state。
 
 ## Phase 1B Storage & Atomicity Gate Design
 
-**Decision:** Financial Truth Storage & Atomicity Gate Design V1  
-**Status:** DESIGN ONLY / READY FOR OWNER REVIEW  
-**Date:** 2026-09-05  
-**Scope:** JSON/PostgreSQL storage assessment, Financial Event persistence contract, atomic event-plus-projection model, idempotency race handling, reconciliation persistence, crash recovery and semantic parity.  
+**Decision:** Financial Truth Storage & Atomicity Gate Design V1
+**Status:** DESIGN ONLY / READY FOR OWNER REVIEW
+**Date:** 2026-09-05
+**Scope:** JSON/PostgreSQL storage assessment, Financial Event persistence contract, atomic event-plus-projection model, idempotency race handling, reconciliation persistence, crash recovery and semantic parity.
 **Non-Authorizing Boundary:** 不授权任何 storage adapter、DB schema 变更、migration、JSON/PostgreSQL production repository、真实 payment/approval/supplier/payroll 接入、dual/shadow production write、API/frontend 改造、Source of Truth switch、legacy deprecation、测试执行、部署或 push。Legacy financial fields remain authoritative。
 
 ## Phase 1B Storage & Atomicity Gate Owner Acceptance
 
-**Decision:** Phase 1B Financial Truth Storage & Atomicity Gate Owner Acceptance  
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-05  
-**Scope:** Storage / Atomicity Architecture Design Only  
-**Classification:** NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING  
-**Accepted Design Decisions:** PostgreSQL Production Financial Truth Storage Target；JSON Local/Dev/Test Compatibility Only；Persistent Rebuildable Projection Rule；Historical Reconciliation Mismatch Requires Manual Review；BIGINT / Safe Integer Boundary；Stable Payable Identity Rule。  
-**Storage Invariants:** Financial Event Journal is authoritative history; Projection is rebuildable materialized state and never the reverse authority; no projection without an event; synchronous Event + required Projection + applicable Reconciliation should share one transaction with rollback on failure; same idempotency key resolves by canonical payload comparison; PostgreSQL uses database uniqueness for races; JSON uses one serialized mutation critical section; BIGINT conversion must pass `Number.isSafeInteger`; payable requires stable `payableId`; MISMATCH/UNKNOWN are never auto-smoothed; rebuild is deterministic, canonical, relationship-validated, fail-closed and auditable; legacy financial fields remain authoritative until migration/reconciliation/source-switch gates pass.  
-**Non-Authorizing Boundary:** 不授权创建或应用 `financial_events` schema/migration、实现 production adapters/repositories、Event Journal/Projection/Reconciliation production persistence、payment/approval/supplier/payroll/bank integration、dual/shadow write、frontend read switch、Source of Truth switch、legacy deprecation、production deployment 或进入 Storage Slice A。  
+**Decision:** Phase 1B Financial Truth Storage & Atomicity Gate Owner Acceptance
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-05
+**Scope:** Storage / Atomicity Architecture Design Only
+**Classification:** NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
+**Accepted Design Decisions:** PostgreSQL Production Financial Truth Storage Target；JSON Local/Dev/Test Compatibility Only；Persistent Rebuildable Projection Rule；Historical Reconciliation Mismatch Requires Manual Review；BIGINT / Safe Integer Boundary；Stable Payable Identity Rule。
+**Storage Invariants:** Financial Event Journal is authoritative history; Projection is rebuildable materialized state and never the reverse authority; no projection without an event; synchronous Event + required Projection + applicable Reconciliation should share one transaction with rollback on failure; same idempotency key resolves by canonical payload comparison; PostgreSQL uses database uniqueness for races; JSON uses one serialized mutation critical section; BIGINT conversion must pass `Number.isSafeInteger`; payable requires stable `payableId`; MISMATCH/UNKNOWN are never auto-smoothed; rebuild is deterministic, canonical, relationship-validated, fail-closed and auditable; legacy financial fields remain authoritative until migration/reconciliation/source-switch gates pass.
+**Non-Authorizing Boundary:** 不授权创建或应用 `financial_events` schema/migration、实现 production adapters/repositories、Event Journal/Projection/Reconciliation production persistence、payment/approval/supplier/payroll/bank integration、dual/shadow write、frontend read switch、Source of Truth switch、legacy deprecation、production deployment 或进入 Storage Slice A。
 **Open Questions:** Storage design questions are resolved. Bank evidence, finance review SLA, multi-payable allocation, detailed mismatch SLA, operational rebuild tooling and archive operations block later integration only; Revenue Recognition, Payroll and statutory retention/archive remain deferred policy.
 
 ## Phase 1B Storage Slice A Implementation
 
-**Status:** IMPLEMENTED_PENDING_VALIDATION  
-**Date:** 2026-09-05  
-**Scope:** PostgreSQL schema contract, adapter/transaction contracts, safe BIGINT codec, idempotency classification and isolated deterministic tests only.  
+**Status:** IMPLEMENTED_PENDING_VALIDATION
+**Date:** 2026-09-05
+**Scope:** PostgreSQL schema contract, adapter/transaction contracts, safe BIGINT codec, idempotency classification and isolated deterministic tests only.
 **Boundary:** Migration NOT APPLIED；Production Storage NOT ACTIVATED；Production Integration NOT AUTHORIZED；不得视为 VALIDATED、OWNER_ACCEPTED、MIGRATED 或 PRODUCTION_READY。
 
 ## Storage Slice A Remediation v0.1
 
-**Status:** IMPLEMENTED_PENDING_REVALIDATION  
-**Date:** 2026-09-05  
-**Scope:** Schema/Test Contract Closure Only  
+**Status:** IMPLEMENTED_PENDING_REVALIDATION
+**Date:** 2026-09-05
+**Scope:** Schema/Test Contract Closure Only
 **Non-Authorizing:** YES；不授权 migration、DB connection、production adapter、projection/reconciliation tables、JSON adapter、integration、Source of Truth switch、Storage Slice B、commit 或 push。
 
 ## Phase 1B Financial Truth Storage Slice A Owner Acceptance
 
-**Decision:** Phase 1B Financial Truth Storage Slice A Owner Acceptance  
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-05  
-**Scope:** PostgreSQL Schema Contract / Adapter Contract / Isolated Tests Only  
-**Validation:** PASS  
-**Remaining Critical:** 0  
-**Remaining High:** 0  
-**Classification:** NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING  
-**Accepted Invariants:** Financial Event remains authoritative future history; Schema Contract is not Applied Schema; schema draft is DRAFT / NOT APPLIED / NON-ACTIVATING; amount uses PostgreSQL BIGINT and domain safe-integer Number with fail-closed decode; idempotency is database-unique and classifies duplicate versus conflict; persistence is append-only and correction/reversal append new events; transaction ownership belongs to upper orchestration; structural constraints do not replace Slice 1 relationship-graph validation; current idempotency SQL is contract foundation only, not complete production row persistence.  
-**Schema Version:** No `event_schema_version` in Slice A; replay compatibility remains governed by accepted FinancialEvent contract/version policy; SUFFICIENT_FOR_SLICE_A.  
+**Decision:** Phase 1B Financial Truth Storage Slice A Owner Acceptance
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-05
+**Scope:** PostgreSQL Schema Contract / Adapter Contract / Isolated Tests Only
+**Validation:** PASS
+**Remaining Critical:** 0
+**Remaining High:** 0
+**Classification:** NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
+**Accepted Invariants:** Financial Event remains authoritative future history; Schema Contract is not Applied Schema; schema draft is DRAFT / NOT APPLIED / NON-ACTIVATING; amount uses PostgreSQL BIGINT and domain safe-integer Number with fail-closed decode; idempotency is database-unique and classifies duplicate versus conflict; persistence is append-only and correction/reversal append new events; transaction ownership belongs to upper orchestration; structural constraints do not replace Slice 1 relationship-graph validation; current idempotency SQL is contract foundation only, not complete production row persistence.
+**Schema Version:** No `event_schema_version` in Slice A; replay compatibility remains governed by accepted FinancialEvent contract/version policy; SUFFICIENT_FOR_SLICE_A.
 **Non-Authorizing Boundary:** 不授权 db schema 修改、migration、真实 PostgreSQL table/adapter、complete production row mapper、Event Journal/Projection/Reconciliation persistence、JSON/payment/approval/supplier/payroll/bank integration、dual/shadow write、frontend read switch、Source of Truth switch、legacy deprecation、deployment 或 Storage Slice B。
 
 ## Phase 1B Storage Slice B Implementation
 
-**Status:** IMPLEMENTED_PENDING_VALIDATION  
-**Date:** 2026-09-05  
-**Scope:** Isolated PostgreSQL Journal Adapter Only  
+**Status:** IMPLEMENTED_PENDING_VALIDATION
+**Date:** 2026-09-05
+**Scope:** Isolated PostgreSQL Journal Adapter Only
 **Non-Authorizing:** YES；Migration NOT APPLIED；Production Storage NOT ACTIVATED；Production Integration NOT AUTHORIZED；不得进入 Storage Slice C。
 
 ## Storage Slice B Remediation v0.1
 
-**Status:** IMPLEMENTED_PENDING_REVALIDATION  
-**Date:** 2026-09-05  
-**Scope:** PostgreSQL conflict classification、timestamp contract tests、malformed read / immutability tests  
+**Status:** IMPLEMENTED_PENDING_REVALIDATION
+**Date:** 2026-09-05
+**Scope:** PostgreSQL conflict classification、timestamp contract tests、malformed read / immutability tests
 **Boundary:** NON-PRODUCTION / NON-MIGRATING / NON-INTEGRATING；不授权 Storage Slice C。
 
 ## Phase 1B Financial Truth Storage Slice B Owner Acceptance
 
-**Decision:** Phase 1B Financial Truth Storage Slice B Owner Acceptance  
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-05  
-**Scope:** Isolated PostgreSQL Journal Adapter Only  
-**Validation:** PASS  
-**Remaining Critical:** 0  
-**Remaining High:** 0  
-**Classification:** NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING  
-**Accepted Invariants:** Adapter 仅负责 raw immutable Financial Event persistence/query；所有读写使用调用方 tx/client；完整 30-field mapping 与 append-only contract；BIGINT codec、timestamptz normalization、JSONB isolation、idempotency canonical comparison、23505 conflict classification、malformed-row fail-closed 与 deep immutability 均已验证。  
+**Decision:** Phase 1B Financial Truth Storage Slice B Owner Acceptance
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-05
+**Scope:** Isolated PostgreSQL Journal Adapter Only
+**Validation:** PASS
+**Remaining Critical:** 0
+**Remaining High:** 0
+**Classification:** NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
+**Accepted Invariants:** Adapter 仅负责 raw immutable Financial Event persistence/query；所有读写使用调用方 tx/client；完整 30-field mapping 与 append-only contract；BIGINT codec、timestamptz normalization、JSONB isolation、idempotency canonical comparison、23505 conflict classification、malformed-row fail-closed 与 deep immutability 均已验证。
 **Non-Authorizing Boundary:** 不授权 schema/migration、真实 financial_events table、production PostgreSQL activation、payment/approval/supplier/payroll/bank integration、projection/reconciliation persistence、JSON adapter、dual/shadow write、frontend read switch、Source of Truth switch、legacy deprecation、deployment 或 Storage Slice C。
 
 ## Phase 1B Projection Persistence & Rebuild Gate Design
 
-**Decision:** Projection Persistence & Rebuild Gate Design V1  
-**Status:** DESIGN ONLY / READY FOR OWNER REVIEW  
-**Date:** 2026-09-05  
-**Scope:** Projection authority, identity/currency boundary, materialized state, deterministic rebuild, watermark, invalid-history handling, reconciliation interface and future repository/transaction contracts.  
-**Recommendation:** CONTINUE_WITH_PROJECTION_PERSISTENCE_GATE  
+**Decision:** Projection Persistence & Rebuild Gate Design V1
+**Status:** DESIGN ONLY / READY FOR OWNER REVIEW
+**Date:** 2026-09-05
+**Scope:** Projection authority, identity/currency boundary, materialized state, deterministic rebuild, watermark, invalid-history handling, reconciliation interface and future repository/transaction contracts.
+**Recommendation:** CONTINUE_WITH_PROJECTION_PERSISTENCE_GATE
 **Non-Authorizing Boundary:** 不授权 projection repository、table/schema、migration、reconciliation persistence、atomic write orchestration、JSON adapter、production integration 或 Source of Truth switch；本阶段不实施任何代码。
 
 ## Phase 1B Projection Persistence & Rebuild Gate Owner Acceptance
 
-**Decision:** Phase 1B Projection Persistence & Rebuild Gate Owner Acceptance  
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-05  
-**Scope:** Projection Persistence / Rebuild Architecture Design Only  
-**Classification:** NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING  
-**Accepted Decisions:** Financial Event Journal authoritative；Projection rebuildable materialized state；PostgreSQL production target；JSON Adapter DEFERRED；PER_CURRENCY_PROJECTION；FULL_REBUILD_FIRST；no direct projection financial mutation；canonical deterministic watermark；company/project scoped projection identity。  
+**Decision:** Phase 1B Projection Persistence & Rebuild Gate Owner Acceptance
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-05
+**Scope:** Projection Persistence / Rebuild Architecture Design Only
+**Classification:** NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
+**Accepted Decisions:** Financial Event Journal authoritative；Projection rebuildable materialized state；PostgreSQL production target；JSON Adapter DEFERRED；PER_CURRENCY_PROJECTION；FULL_REBUILD_FIRST；no direct projection financial mutation；canonical deterministic watermark；company/project scoped projection identity。
 **Non-Authorizing Boundary:** 不授权 Projection Slice P1 implementation、PostgreSQL projection repository、`financial_projections` table、schema/migration、production PostgreSQL、reconciliation persistence、atomic write orchestrator、JSON/payment/approval/supplier/payroll/bank integration、shadow/dual write、frontend read switch、Source of Truth switch、legacy deprecation、deployment 或进入 Projection Slice P1。
 
 ## Projection Slice P1 Implementation
 
-**Status:** IMPLEMENTED_PENDING_VALIDATION  
-**Date:** 2026-09-05  
-**Scope:** Pure Projection Contract / Materialized Builder / Deterministic Watermark / Company-Project Rebuild / Isolated Tests  
+**Status:** IMPLEMENTED_PENDING_VALIDATION
+**Date:** 2026-09-05
+**Scope:** Pure Projection Contract / Materialized Builder / Deterministic Watermark / Company-Project Rebuild / Isolated Tests
 **Classification:** NON-STORAGE / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING
 
 ## Phase 1B Projection Slice P1 Owner Acceptance
 
-**Decision:** Phase 1B Projection Slice P1 Owner Acceptance  
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-05  
-**Scope:** Pure Materialized Projection + Deterministic Rebuild + Relationship Integrity Boundary  
-**Validation:** PASS  
-**Remaining Critical:** 0  
-**Remaining High:** 0  
-**Classification:** NON-STORAGE-PERSISTING / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING  
-**Accepted Invariants:** Financial Event Journal authoritative；Projection derived/rebuildable materialized state；relationship-complete input validation precedes scope extraction；company/project/currency isolation；canonical deterministic watermark；invalid history fail-closed；no direct projection financial mutation。  
+**Decision:** Phase 1B Projection Slice P1 Owner Acceptance
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-05
+**Scope:** Pure Materialized Projection + Deterministic Rebuild + Relationship Integrity Boundary
+**Validation:** PASS
+**Remaining Critical:** 0
+**Remaining High:** 0
+**Classification:** NON-STORAGE-PERSISTING / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
+**Accepted Invariants:** Financial Event Journal authoritative；Projection derived/rebuildable materialized state；relationship-complete input validation precedes scope extraction；company/project/currency isolation；canonical deterministic watermark；invalid history fail-closed；no direct projection financial mutation。
 **Non-Authorizing Boundary:** 不授权 Projection Slice P2、PostgreSQL Projection Repository、`financial_projections` table、SQL persistence、migration、reconciliation persistence、Atomic Write Orchestrator、JSON/payment/approval/supplier/payroll/bank integration、shadow/dual write、frontend read switch、Source of Truth switch 或 production deployment。
 
 ## Phase 1B Projection Slice P2 PostgreSQL Projection Repository Gate Design
 
-**Decision:** PostgreSQL Projection Repository Gate Design V1  
-**Status:** DESIGN ONLY / READY FOR OWNER REVIEW  
-**Date:** 2026-09-05  
-**Scope:** Future `financial_projections` identity/schema, scope constraints, BIGINT/currency boundary, watermark/version persistence, whole-state replacement, stale-write protection, status/error/read/transaction contracts.  
-**Recommendation:** AUTHORIZE_P2_IMPLEMENTATION_GATE  
+**Decision:** PostgreSQL Projection Repository Gate Design V1
+**Status:** DESIGN ONLY / READY FOR OWNER REVIEW
+**Date:** 2026-09-05
+**Scope:** Future `financial_projections` identity/schema, scope constraints, BIGINT/currency boundary, watermark/version persistence, whole-state replacement, stale-write protection, status/error/read/transaction contracts.
+**Recommendation:** AUTHORIZE_P2_IMPLEMENTATION_GATE
 **Non-Authorizing Boundary:** 不授权 repository/adapter、table/schema、SQL、migration、production DB、reconciliation persistence、atomic orchestrator、JSON adapter、integration、Source of Truth switch 或 deployment。
 
 ## P2 Gate Documentation Closure v0.1
 
-**Status:** DOCUMENTATION_CLOSURE_PENDING_OWNER_REVIEW  
-**Date:** 2026-09-05  
-**Findings Closed by Design:** P2-DOC-001 Company NULL uniqueness；P2-DOC-002 exact watermark CAS/stale-write semantics；P2-DOC-003 INVALID_HISTORY persistence policy。  
-**Scope:** Documentation closure only  
+**Status:** DOCUMENTATION_CLOSURE_PENDING_OWNER_REVIEW
+**Date:** 2026-09-05
+**Findings Closed by Design:** P2-DOC-001 Company NULL uniqueness；P2-DOC-002 exact watermark CAS/stale-write semantics；P2-DOC-003 INVALID_HISTORY persistence policy。
+**Scope:** Documentation closure only
 **Non-Authorizing Boundary:** 不授权 implementation、SQL、table、migration、PostgreSQL connection、repository activation、reconciliation persistence、production integration、commit 或 push。
 
 ## P2 Gate Documentation Closure v0.2
 
-**Status:** DOCUMENTATION_CLOSURE_V0_2_COMPLETE_PENDING_OWNER_ACCEPTANCE  
-**Date:** 2026-09-05  
-**Scope:** CAS-capable Repository Interface + Deterministic First-Insert Conflict Semantics + Stable Projection Technical Identity  
-**Findings:** P2-DOC-001 CLOSED；P2-DOC-002 CLOSED；P2-DOC-003 CLOSED；P2-DOC-004 CLOSED；P2-DOC-005 CLOSED；P2-DOC-006 CLOSED。  
+**Status:** DOCUMENTATION_CLOSURE_V0_2_COMPLETE_PENDING_OWNER_ACCEPTANCE
+**Date:** 2026-09-05
+**Scope:** CAS-capable Repository Interface + Deterministic First-Insert Conflict Semantics + Stable Projection Technical Identity
+**Findings:** P2-DOC-001 CLOSED；P2-DOC-002 CLOSED；P2-DOC-003 CLOSED；P2-DOC-004 CLOSED；P2-DOC-005 CLOSED；P2-DOC-006 CLOSED。
 **Non-Authorizing Boundary:** 不授权 implementation、SQL、table、migration、真实 PostgreSQL、reconciliation persistence、production integration、P2-A、commit 或 push。
 
 ## Phase 1B Projection Slice P2 PostgreSQL Repository Gate Owner Acceptance
 
-**Decision:** Phase 1B Projection Slice P2 PostgreSQL Repository Gate Owner Acceptance  
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-05  
-**Scope:** Projection Repository Architecture / Schema / CAS Contract Only  
-**Accepted Findings:** P2-DOC-001 CLOSED；P2-DOC-002 CLOSED；P2-DOC-003 CLOSED；P2-DOC-004 CLOSED；P2-DOC-005 CLOSED；P2-DOC-006 CLOSED。  
-**Classification:** NON-IMPLEMENTING / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING  
-**Accepted Invariants:** Event Journal authoritative；Projection derived/rebuildable；partial unique identity constraints；stable `projection_id`；complete watermark CAS；whole-state replacement；`INVALID_HISTORY` not persistable；shared transaction boundary；JSON deferred。  
+**Decision:** Phase 1B Projection Slice P2 PostgreSQL Repository Gate Owner Acceptance
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-05
+**Scope:** Projection Repository Architecture / Schema / CAS Contract Only
+**Accepted Findings:** P2-DOC-001 CLOSED；P2-DOC-002 CLOSED；P2-DOC-003 CLOSED；P2-DOC-004 CLOSED；P2-DOC-005 CLOSED；P2-DOC-006 CLOSED。
+**Classification:** NON-IMPLEMENTING / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
+**Accepted Invariants:** Event Journal authoritative；Projection derived/rebuildable；partial unique identity constraints；stable `projection_id`；complete watermark CAS；whole-state replacement；`INVALID_HISTORY` not persistable；shared transaction boundary；JSON deferred。
 **Non-Authorizing Boundary:** 不授权 P2-A/P2-B implementation、repository、`financial_projections` table、SQL、migration、真实 PostgreSQL、reconciliation persistence、Atomic Write Orchestrator、JSON adapter、business integration、shadow/dual write、Source of Truth switch 或 deployment。
 
 ## Projection Storage Slice P2-A Implementation
 
-**Status:** IMPLEMENTED_PENDING_VALIDATION  
-**Date:** 2026-09-05  
-**Scope:** Machine-readable Projection Storage Contract / Scope-Status-Identity Contract / Row Mapping / Watermark-CAS Contract / Repository Interface Contract / Deterministic Tests  
+**Status:** IMPLEMENTED_PENDING_VALIDATION
+**Date:** 2026-09-05
+**Scope:** Machine-readable Projection Storage Contract / Scope-Status-Identity Contract / Row Mapping / Watermark-CAS Contract / Repository Interface Contract / Deterministic Tests
 **Classification:** NON-SQL / NON-REPOSITORY / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING
 
 ## Projection Slice P1 Remediation v0.2
 
-**Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION  
-**Date:** 2026-09-05  
-**Scope:** Cross-Company Relationship Integrity Closure + Relationship-Complete Input Contract  
+**Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION
+**Date:** 2026-09-05
+**Scope:** Cross-Company Relationship Integrity Closure + Relationship-Complete Input Contract
 **Classification:** NON-STORAGE / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING
 
 ## Projection Slice P1 Remediation v0.1
 
-**Status:** IMPLEMENTED_PENDING_REVALIDATION  
-**Date:** 2026-09-05  
-**Scope:** Relationship Integrity Before Scope Projection + Cross-Scope Adversarial Test Closure  
+**Status:** IMPLEMENTED_PENDING_REVALIDATION
+**Date:** 2026-09-05
+**Scope:** Relationship Integrity Before Scope Projection + Cross-Scope Adversarial Test Closure
 **Classification:** NON-STORAGE / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING
 
 ## Storage Slice B Remediation v0.1.1
 
-**Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION  
-**Date:** 2026-09-05  
-**Scope:** Malformed Read Fail-Closed + Return Immutability Test Closure  
+**Status:** IMPLEMENTED_PENDING_FINAL_REVALIDATION
+**Date:** 2026-09-05
+**Scope:** Malformed Read Fail-Closed + Return Immutability Test Closure
 **Boundary:** NON-PRODUCTION / NON-MIGRATING / NON-INTEGRATING；不授权 Storage Slice C。
 
 ### Storage Gate Design Decisions
@@ -346,120 +392,120 @@
 
 ## Phase 1B Projection Storage Slice P2-A Owner Acceptance
 
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-05  
-**Scope:** Machine-Readable Projection Storage Contract + Row Mapping + CAS Semantic Contract + Repository Interface Contract  
-**Validation:** PASS  
-**Remaining Critical:** 0  
-**Remaining High:** 0  
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-05
+**Scope:** Machine-Readable Projection Storage Contract + Row Mapping + CAS Semantic Contract + Repository Interface Contract
+**Validation:** PASS
+**Remaining Critical:** 0
+**Remaining High:** 0
 **Boundary:** NON-SQL / NON-REPOSITORY / NON-MIGRATING / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
 
 ## Phase 1B Projection Storage Slice P2-B Implementation Authorization Gate
 
-**Status:** DESIGN / AUTHORIZATION ONLY  
-**Date:** 2026-09-05  
-**P2-A:** OWNER ACCEPTED  
-**P2-B Implementation:** NOT AUTHORIZED  
-**Migration:** NOT AUTHORIZED  
-**Production Integration:** NOT AUTHORIZED  
+**Status:** DESIGN / AUTHORIZATION ONLY
+**Date:** 2026-09-05
+**P2-A:** OWNER ACCEPTED
+**P2-B Implementation:** NOT AUTHORIZED
+**Migration:** NOT AUTHORIZED
+**Production Integration:** NOT AUTHORIZED
 **Scope:** Isolated PostgreSQL Projection Repository Adapter design gate only
 
 ## Phase 1B Projection Storage Slice P2-B Implementation Gate Owner Acceptance
 
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-05  
-**Scope:** Isolated PostgreSQL Projection Repository Adapter Implementation Authorization  
-**Accepted Closure:** P2B-DOC-001 CLOSED; P2B-DOC-002 CLOSED  
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-05
+**Scope:** Isolated PostgreSQL Projection Repository Adapter Implementation Authorization
+**Accepted Closure:** P2B-DOC-001 CLOSED; P2B-DOC-002 CLOSED
 **Boundary:** NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
 
 ## Financial Truth Rebuild Orchestration Gate Documentation Closure v0.1
 
-**Status:** DOCUMENTATION_CLOSURE_V0_1_COMPLETE_PENDING_OWNER_REVIEW  
-**Date:** 2026-09-06  
-**Findings:** RO-DOC-001 Expected Watermark Capture Ordering / Old-History Projection Regression Risk — CLOSED; RO-DOC-002 Relationship Completeness Evidence Boundary — CLOSED  
+**Status:** DOCUMENTATION_CLOSURE_V0_1_COMPLETE_PENDING_OWNER_REVIEW
+**Date:** 2026-09-06
+**Findings:** RO-DOC-001 Expected Watermark Capture Ordering / Old-History Projection Regression Risk — CLOSED; RO-DOC-002 Relationship Completeness Evidence Boundary — CLOSED
 **Boundary:** NON-IMPLEMENTING / NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-ACTIVATING
 ## Financial Truth Rebuild Orchestration Implementation
-**Status:** IMPLEMENTED_PENDING_VALIDATION  
-**Date:** 2026-09-06  
-**Scope:** isolated provider contract + validated bundle + P1 coordination + P2-B coordination + frozen expected watermark + deterministic result mapping + mock regressions  
+**Status:** IMPLEMENTED_PENDING_VALIDATION
+**Date:** 2026-09-06
+**Scope:** isolated provider contract + validated bundle + P1 coordination + P2-B coordination + frozen expected watermark + deterministic result mapping + mock regressions
 **Boundary:** NON-RECONCILING / NON-ATOMIC-WRITE / NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-ACTIVATING
 ## Financial Truth Reconciliation Persistence Capability Gate v0.1
-**Status:** DESIGN_PENDING_OWNER_REVIEW  
-**Date:** 2026-09-06  
-**Motivation:** Persist immutable expected-vs-observed consistency evidence without changing Financial Truth authority.  
+**Status:** DESIGN_PENDING_OWNER_REVIEW
+**Date:** 2026-09-06
+**Motivation:** Persist immutable expected-vs-observed consistency evidence without changing Financial Truth authority.
 **Boundary:** NON-AUTHORITATIVE / NON-CORRECTING / NON-MIGRATING / NON-REAL-DB / NON-ATOMIC-WRITE / NON-PRODUCTION / NON-ACTIVATING
 ## Financial Truth Reconciliation Persistence Gate Documentation Closure v0.1
-**Status:** DOCUMENTATION_CLOSURE_V0_1_COMPLETE_PENDING_OWNER_REVIEW  
-**Date:** 2026-09-06  
-**Findings:** REC-DOC-001 CLOSED; REC-DOC-002 CLOSED; REC-DOC-003 CLOSED; REC-DOC-004 CLOSED  
+**Status:** DOCUMENTATION_CLOSURE_V0_1_COMPLETE_PENDING_OWNER_REVIEW
+**Date:** 2026-09-06
+**Findings:** REC-DOC-001 CLOSED; REC-DOC-002 CLOSED; REC-DOC-003 CLOSED; REC-DOC-004 CLOSED
 **Boundary:** NON-IMPLEMENTING / NON-CORRECTING / NON-MIGRATING / NON-REAL-DB / NON-ATOMIC-WRITE / NON-PRODUCTION
 ## Financial Truth Reconciliation Persistence Capability Gate v0.1 Owner Acceptance
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-06  
-**Scope:** Immutable Reconciliation Observation + TYPE A pure financial-state comparison + difference evidence + status/reason vocabularies + append-only repository contract + in-memory/mock repository + isolated tests  
-**Documentation Findings:** REC-DOC-001 CLOSED; REC-DOC-002 CLOSED; REC-DOC-003 CLOSED; REC-DOC-004 CLOSED  
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-06
+**Scope:** Immutable Reconciliation Observation + TYPE A pure financial-state comparison + difference evidence + status/reason vocabularies + append-only repository contract + in-memory/mock repository + isolated tests
+**Documentation Findings:** REC-DOC-001 CLOSED; REC-DOC-002 CLOSED; REC-DOC-003 CLOSED; REC-DOC-004 CLOSED
 **Boundary:** NON-AUTHORITATIVE / NON-CORRECTING / NON-LEGACY-EXECUTING / NON-MIGRATING / NON-REAL-DB / NON-ATOMIC-WRITE / NON-PRODUCTION / NON-ACTIVATING
 ## Financial Truth Rebuild Orchestration Owner Acceptance
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-06  
-**Scope:** Rebuild Input Provider + Validated Relationship-Complete Bundle + Relationship Closure Validation + P1/P2-B Coordination + Frozen Expected Watermark + Old-History Protection + Deterministic Error Layering + Mock Adversarial Validation  
-**Findings:** RO-IMP-001 CLOSED; RO-VAL-001 CLOSED; RO-VAL-002 CLOSED  
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-06
+**Scope:** Rebuild Input Provider + Validated Relationship-Complete Bundle + Relationship Closure Validation + P1/P2-B Coordination + Frozen Expected Watermark + Old-History Protection + Deterministic Error Layering + Mock Adversarial Validation
+**Findings:** RO-IMP-001 CLOSED; RO-VAL-001 CLOSED; RO-VAL-002 CLOSED
 **Boundary:** NON-RECONCILING / NON-ATOMIC-WRITE / NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-ACTIVATING
 
 ## Financial Truth Rebuild Orchestration Capability Gate Owner Acceptance
 
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-06  
-**Accepted Findings Closure:** RO-DOC-001 CLOSED; RO-DOC-002 CLOSED  
-**Scope:** Isolated Rebuild Input Provider + Validated Relationship-Complete Bundle + P1/P2-B Coordination + Frozen Expected Watermark + Deterministic Result Mapping  
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-06
+**Accepted Findings Closure:** RO-DOC-001 CLOSED; RO-DOC-002 CLOSED
+**Scope:** Isolated Rebuild Input Provider + Validated Relationship-Complete Bundle + P1/P2-B Coordination + Frozen Expected Watermark + Deterministic Result Mapping
 **Boundary:** NON-RECONCILING / NON-ATOMIC-WRITE / NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-ACTIVATING
 
 ## Financial Truth Rebuild Orchestration Capability Gate v0.1
 
-**Status:** DESIGN_PENDING_OWNER_REVIEW  
-**Date:** 2026-09-06  
-**Motivation:** Close the missing ownership gap between Financial Event Journal, relationship-complete history, P1 deterministic rebuild, and P2-B Projection Repository.  
+**Status:** DESIGN_PENDING_OWNER_REVIEW
+**Date:** 2026-09-06
+**Motivation:** Close the missing ownership gap between Financial Event Journal, relationship-complete history, P1 deterministic rebuild, and P2-B Projection Repository.
 **Boundary:** NON-MIGRATING / NON-REAL-DB / NON-ATOMIC-WRITE / NON-RECONCILING / NON-PRODUCTION / NON-ACTIVATING
 
 ## Phase 1B Projection Storage Slice P2-B Implementation Completion v0.1
 
-**Status:** IMPLEMENTED_PENDING_VALIDATION  
-**Date:** 2026-09-06  
-**Evidence:** Mock Transaction Repository Regression PASS; Existing Financial Truth Regressions PASS  
+**Status:** IMPLEMENTED_PENDING_VALIDATION
+**Date:** 2026-09-06
+**Evidence:** Mock Transaction Repository Regression PASS; Existing Financial Truth Regressions PASS
 **Boundary:** NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
 
 ## Phase 1B Projection Storage Slice P2-B Owner Acceptance
 
-**Status:** OWNER_ACCEPTED  
-**Date:** 2026-09-06  
-**Scope:** Isolated PostgreSQL Projection Repository Adapter + Parameterized SQL + Atomic CAS + Whole-State Replacement + First-Insert Race Resolution + SAME_STATE + Error Classification + Mock Transaction Validation  
-**Validation:** PASS; P2B-VAL-001 CLOSED  
+**Status:** OWNER_ACCEPTED
+**Date:** 2026-09-06
+**Scope:** Isolated PostgreSQL Projection Repository Adapter + Parameterized SQL + Atomic CAS + Whole-State Replacement + First-Insert Race Resolution + SAME_STATE + Error Classification + Mock Transaction Validation
+**Validation:** PASS; P2B-VAL-001 CLOSED
 **Boundary:** NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
 
 ## Phase 1B Projection Storage Slice P2-B Validation Coverage Closure v0.1
 
-**Status:** PASS_WITH_NON_BLOCKING_FINDING_CLOSED  
-**Date:** 2026-09-06  
-**Finding:** P2B-VAL-001 CLOSED  
-**Evidence:** Project race, winner-missing, empty-watermark, and existing regression coverage PASS  
+**Status:** PASS_WITH_NON_BLOCKING_FINDING_CLOSED
+**Date:** 2026-09-06
+**Finding:** P2B-VAL-001 CLOSED
+**Evidence:** Project race, winner-missing, empty-watermark, and existing regression coverage PASS
 **Boundary:** NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
 
 ## Phase 1B Projection Storage Slice P2-B Implementation Completion v0.1
 
-**Status:** IMPLEMENTED_PENDING_VALIDATION  
-**Date:** 2026-09-05  
-**Evidence:** Mock Transaction Repository Regression PASS; Existing Financial Truth Regressions PASS  
+**Status:** IMPLEMENTED_PENDING_VALIDATION
+**Date:** 2026-09-05
+**Evidence:** Mock Transaction Repository Regression PASS; Existing Financial Truth Regressions PASS
 **Boundary:** NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
 
 ## Phase 1B Projection Storage Slice P2-B Implementation
 
-**Status:** IMPLEMENTED_PENDING_VALIDATION  
-**Date:** 2026-09-05  
-**Scope:** Isolated PostgreSQL Projection Repository Adapter + Parameterized SQL + Atomic CAS + First Insert Race Resolution + SAME_STATE + Error Classification + Mock Transaction Tests  
+**Status:** IMPLEMENTED_PENDING_VALIDATION
+**Date:** 2026-09-05
+**Scope:** Isolated PostgreSQL Projection Repository Adapter + Parameterized SQL + Atomic CAS + First Insert Race Resolution + SAME_STATE + Error Classification + Mock Transaction Tests
 **Boundary:** NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-INTEGRATING / NON-ACTIVATING
 
 ## P2-B Gate Documentation Closure v0.1
 
-**Findings:** P2B-DOC-001 Canonical Row Shape vs Mutable Replacement Field Set; P2B-DOC-002 Deterministic Logical Identity Unique Conflict Classification  
-**Status:** DOCUMENTATION_CLOSURE_V0_1_COMPLETE_PENDING_OWNER_REVIEW  
+**Findings:** P2B-DOC-001 Canonical Row Shape vs Mutable Replacement Field Set; P2B-DOC-002 Deterministic Logical Identity Unique Conflict Classification
+**Status:** DOCUMENTATION_CLOSURE_V0_1_COMPLETE_PENDING_OWNER_REVIEW
 **Scope:** Documentation only; no implementation, SQL source, tests, DB, migration, or production integration.
