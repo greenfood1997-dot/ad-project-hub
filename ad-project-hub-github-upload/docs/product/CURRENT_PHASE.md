@@ -63,6 +63,24 @@
 **Reconciliation Persistence:** NOT IMPLEMENTED  
 **Atomic Write Orchestrator:** NOT IMPLEMENTED
 **Next Candidate:** Financial Truth Reconciliation Persistence Gate (NOT STARTED; separate Owner Authorization required)
+**Financial Truth Reconciliation Persistence Gate:** DESIGN_PENDING_OWNER_REVIEW  
+**Reconciliation Persistence:** NOT IMPLEMENTED  
+**Atomic Write Orchestrator:** NOT IMPLEMENTED  
+**Shadow Integration:** NOT AUTHORIZED
+**Financial Truth Reconciliation Persistence Gate:** OWNER_ACCEPTED  
+**Reconciliation Persistence First Slice:** AUTHORIZED_NOT_STARTED  
+**TYPE A Projection Reconciliation:** AUTHORIZED_NOT_STARTED  
+**TYPE B Watermark Reconciliation:** CONTRACT_ONLY  
+**TYPE C Legacy Reconciliation:** EXECUTION_BLOCKED  
+**TYPE D Migration Baseline Reconciliation:** EXECUTION_BLOCKED  
+**Resolution Workflow:** NOT AUTHORIZED  
+**PostgreSQL Reconciliation Persistence:** NOT AUTHORIZED
+**Financial Truth Reconciliation Persistence Gate:** DOCUMENTATION_CLOSURE_V0_1_COMPLETE_PENDING_OWNER_REVIEW  
+**REC-DOC-001:** CLOSED  
+**REC-DOC-002:** CLOSED  
+**REC-DOC-003:** CLOSED  
+**REC-DOC-004:** CLOSED  
+**Reconciliation Persistence Implementation:** NOT AUTHORIZED
 **Financial Truth Rebuild Orchestration Gate:** DESIGN_PENDING_OWNER_REVIEW  
 **Rebuild Input Provider:** NOT IMPLEMENTED  
 **Rebuild Orchestrator:** NOT IMPLEMENTED  

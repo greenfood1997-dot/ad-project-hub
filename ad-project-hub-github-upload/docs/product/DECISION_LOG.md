@@ -340,6 +340,22 @@
 **Date:** 2026-09-06  
 **Scope:** isolated provider contract + validated bundle + P1 coordination + P2-B coordination + frozen expected watermark + deterministic result mapping + mock regressions  
 **Boundary:** NON-RECONCILING / NON-ATOMIC-WRITE / NON-MIGRATING / NON-REAL-DB / NON-PRODUCTION / NON-ACTIVATING
+## Financial Truth Reconciliation Persistence Capability Gate v0.1
+**Status:** DESIGN_PENDING_OWNER_REVIEW  
+**Date:** 2026-09-06  
+**Motivation:** Persist immutable expected-vs-observed consistency evidence without changing Financial Truth authority.  
+**Boundary:** NON-AUTHORITATIVE / NON-CORRECTING / NON-MIGRATING / NON-REAL-DB / NON-ATOMIC-WRITE / NON-PRODUCTION / NON-ACTIVATING
+## Financial Truth Reconciliation Persistence Gate Documentation Closure v0.1
+**Status:** DOCUMENTATION_CLOSURE_V0_1_COMPLETE_PENDING_OWNER_REVIEW  
+**Date:** 2026-09-06  
+**Findings:** REC-DOC-001 CLOSED; REC-DOC-002 CLOSED; REC-DOC-003 CLOSED; REC-DOC-004 CLOSED  
+**Boundary:** NON-IMPLEMENTING / NON-CORRECTING / NON-MIGRATING / NON-REAL-DB / NON-ATOMIC-WRITE / NON-PRODUCTION
+## Financial Truth Reconciliation Persistence Capability Gate v0.1 Owner Acceptance
+**Status:** OWNER_ACCEPTED  
+**Date:** 2026-09-06  
+**Scope:** Immutable Reconciliation Observation + TYPE A pure financial-state comparison + difference evidence + status/reason vocabularies + append-only repository contract + in-memory/mock repository + isolated tests  
+**Documentation Findings:** REC-DOC-001 CLOSED; REC-DOC-002 CLOSED; REC-DOC-003 CLOSED; REC-DOC-004 CLOSED  
+**Boundary:** NON-AUTHORITATIVE / NON-CORRECTING / NON-LEGACY-EXECUTING / NON-MIGRATING / NON-REAL-DB / NON-ATOMIC-WRITE / NON-PRODUCTION / NON-ACTIVATING
 ## Financial Truth Rebuild Orchestration Owner Acceptance
 **Status:** OWNER_ACCEPTED  
 **Date:** 2026-09-06  
